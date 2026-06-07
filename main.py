@@ -64,18 +64,12 @@ from typing import Any
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-# ---------------------------------------------------------------------------
-# Application identity
-# ---------------------------------------------------------------------------
 
 APP_NAME = "Project Exporter Desktop"
 APP_VERSION = "2.0"
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
 
 
-# ---------------------------------------------------------------------------
-# Default ignored directories (business logic — never replaced, only extended)
-# ---------------------------------------------------------------------------
 
 IGNORED_DIR_NAMES: frozenset[str] = frozenset(
     {
@@ -85,9 +79,6 @@ IGNORED_DIR_NAMES: frozenset[str] = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
-# Text / binary detection sets
-# ---------------------------------------------------------------------------
 
 TEXT_EXTENSIONS: set[str] = {
     "adoc",
@@ -340,15 +331,9 @@ TRY_ENCODINGS: tuple[str, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Secret detection patterns (single source of truth)
-# ---------------------------------------------------------------------------
 
-# Keywords used to redact `KEY = value` style assignments in the text dump.
 _REDACT_KEYWORDS = r"API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASS|PRIVATE[_-]?KEY"
 
-# Extended keyword set used by the security scan report (flagging only,
-# no redaction by itself; pairs with the redact patterns).
 _SCAN_KEYWORDS = (
     _REDACT_KEYWORDS
     + r"|DATABASE[_-]?URL|JWT[_-]?SECRET|ACCESS[_-]?KEY|CLIENT[_-]?SECRET"
@@ -364,9 +349,6 @@ SECRET_KEY_PATTERN = re.compile(rf"(?i)\b({_SCAN_KEYWORDS})\b")
 TODO_PATTERN = re.compile(r"(?i)\b(TODO|FIXME|HACK|XXX|BUG|TEMP|REFACTOR|DEPRECATED)\b")
 
 
-# ---------------------------------------------------------------------------
-# Persistent user configuration
-# ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
@@ -383,7 +365,6 @@ class Config:
         try:
             if SETTINGS_FILE.exists():
                 data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-                # Tolerate older settings files that lack the new fields.
                 known = {f.name for f in cls.__dataclass_fields__.values()}
                 data = {k: v for k, v in data.items() if k in known}
                 return cls(**data)
@@ -406,9 +387,6 @@ class Config:
         return IGNORED_DIR_NAMES | extras
 
 
-# ---------------------------------------------------------------------------
-# Bundle path layout
-# ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
@@ -416,17 +394,17 @@ class ExportPaths:
     desktop: Path
     source_root: Path
     project_name: str
-    bundle_name: str  # "{project}_export_{timestamp}"
-    staging_dir: Path  # ~/Desktop/{bundle_name}
-    final_zip: Path  # ~/Desktop/{bundle_name}.zip
-    project_dir: Path  # {staging_dir}/{project_name}
-    reports_dir: Path  # {staging_dir}/reports
-    insights_dir: Path  # {staging_dir}/reports/insights
-    manifest_file: Path  # {staging_dir}/manifest.json
-    index_file: Path  # {staging_dir}/INDEX.md
-    structure_report: Path  # {reports_dir}/01_structure.txt
-    git_report: Path  # {reports_dir}/02_git.txt
-    text_dump: Path  # {reports_dir}/03_text_dump.txt
+    bundle_name: str
+    staging_dir: Path
+    final_zip: Path
+    project_dir: Path
+    reports_dir: Path
+    insights_dir: Path
+    manifest_file: Path
+    index_file: Path
+    structure_report: Path
+    git_report: Path
+    text_dump: Path
 
 
 @dataclass(slots=True)
@@ -449,9 +427,6 @@ class TextDumpStats:
     skipped_not_text: int = 0
 
 
-# ---------------------------------------------------------------------------
-# Small utilities
-# ---------------------------------------------------------------------------
 
 
 def now_stamp() -> str:
@@ -577,9 +552,6 @@ def ps_date(timestamp: float) -> str:
     return f"{dt.day:02d}-{month}-{dt.year % 100:02d}     {dt.hour:02d}:{dt.minute:02d}"
 
 
-# ---------------------------------------------------------------------------
-# Step 1: project copy
-# ---------------------------------------------------------------------------
 
 
 def copy_project(
@@ -660,9 +632,6 @@ def copy_project(
     return stats
 
 
-# ---------------------------------------------------------------------------
-# Final bundle zip (replaces the per-project zip)
-# ---------------------------------------------------------------------------
 
 
 def build_final_zip(
@@ -702,12 +671,11 @@ def build_final_zip(
                     skipped_project_files += 1
                     continue
                 except ValueError:
-                    pass  # Outside the project subtree — keep it.
+                    pass
 
             try:
                 arcname = resolved.relative_to(staging_resolved)
             except ValueError:
-                # Should not happen, but stay defensive.
                 arcname = Path(file_path.name)
 
             archive.write(file_path, arcname)
@@ -724,9 +692,6 @@ def build_final_zip(
     return file_count
 
 
-# ---------------------------------------------------------------------------
-# Step 2: directory structure report
-# ---------------------------------------------------------------------------
 
 
 def write_structure_report(
@@ -790,9 +755,6 @@ def write_structure_report(
     return groups_written
 
 
-# ---------------------------------------------------------------------------
-# Step 3: Git inspection (read-only)
-# ---------------------------------------------------------------------------
 
 
 def run_git_command(
@@ -888,9 +850,6 @@ def write_git_report(
     log("Git-отчёт готов")
 
 
-# ---------------------------------------------------------------------------
-# Step 4: text-content dump
-# ---------------------------------------------------------------------------
 
 
 def looks_binary(raw: bytes) -> bool:
@@ -1046,8 +1005,6 @@ def write_text_dump(
     return stats
 
 
-# Extended project insight reports
-# ---------------------------------------------------------------------------
 
 LANGUAGE_BY_EXTENSION: dict[str, str] = {
     "py": "Python",
@@ -1212,8 +1169,6 @@ SENSITIVE_SUFFIXES: set[str] = {
     "jks",
 }
 
-# SECRET_KEY_PATTERN and TODO_PATTERN are defined in the head section above
-# as part of the unified secret-detection setup.
 
 
 def format_bytes(size: int) -> str:
@@ -2528,12 +2483,7 @@ def write_project_insight_reports(
     log("Расширенные аналитические отчёты готовы")
 
 
-# ---------------------------------------------------------------------------
-# Bundle metadata: manifest.json + INDEX.md
-# ---------------------------------------------------------------------------
 
-# Human-readable descriptions of every report file. Single source of truth
-# for both the INDEX.md and manifest.json so they never drift apart.
 REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
     (
         "reports/01_structure.txt",
@@ -2711,9 +2661,6 @@ def write_index_md(
         )
 
 
-# ---------------------------------------------------------------------------
-# Orchestrator
-# ---------------------------------------------------------------------------
 
 
 class ProjectExporter:
@@ -2746,7 +2693,6 @@ class ProjectExporter:
                 "Дополнительные исключаемые папки: " + ", ".join(sorted(extra_ignored))
             )
 
-        # --- Step 1/7: copy ---------------------------------------------------
         self.log("Шаг 1/7: копирование проекта")
         paths.staging_dir.mkdir(parents=True, exist_ok=True)
         paths.reports_dir.mkdir(parents=True, exist_ok=True)
@@ -2773,7 +2719,6 @@ class ProjectExporter:
         if self.cancel_event.is_set():
             cancelled = True
         else:
-            # --- Step 2/7: directory structure --------------------------------
             self.log("Шаг 2/7: запись относительной структуры")
             write_structure_report(
                 paths.project_dir,
@@ -2784,14 +2729,12 @@ class ProjectExporter:
             )
 
         if not cancelled and not self.cancel_event.is_set():
-            # --- Step 3/7: basic Git report -----------------------------------
             self.log("Шаг 3/7: выполнение Git-команд")
             write_git_report(
                 paths.source_root, paths.git_report, self.log, self.cancel_event
             )
 
         if not cancelled and not self.cancel_event.is_set():
-            # --- Step 4/7: text dump ------------------------------------------
             self.log("Шаг 4/7: сбор текстового содержимого")
             text_stats = write_text_dump(
                 root=paths.project_dir,
@@ -2811,7 +2754,6 @@ class ProjectExporter:
             )
 
         if not cancelled and not self.cancel_event.is_set():
-            # --- Step 5/7: project insights -----------------------------------
             self.log("Шаг 5/7: расширенная аналитика проекта")
             write_project_insight_reports(
                 copied_root=paths.project_dir,
@@ -2822,8 +2764,6 @@ class ProjectExporter:
                 cancel=self.cancel_event,
             )
 
-        # --- Step 6/7: manifest + INDEX (always written) ----------------------
-        # Even if cancelled, we still record what happened.
         cancelled = cancelled or self.cancel_event.is_set()
         self.log("Шаг 6/7: запись manifest.json и INDEX.md")
         write_manifest(
@@ -2840,7 +2780,6 @@ class ProjectExporter:
             extra_ignored_dirs=ignored_for_walk,
         )
 
-        # --- Step 7/7: final zip + optional cleanup ---------------------------
         self.log("Шаг 7/7: упаковка итогового ZIP")
         build_final_zip(
             paths=paths,
@@ -2866,9 +2805,6 @@ class ProjectExporter:
         return paths
 
 
-# ---------------------------------------------------------------------------
-# Tkinter GUI
-# ---------------------------------------------------------------------------
 
 
 class App:
@@ -2878,13 +2814,12 @@ class App:
         self.log_queue: Queue[str] = Queue()
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
-        self.last_result_path: Path | None = None  # zip or staging dir
+        self.last_result_path: Path | None = None
 
         self._build_ui()
         self._load_config_to_ui()
         self._poll_logs()
 
-    # -- UI construction ----------------------------------------------------
 
     def _build_ui(self) -> None:
         self.master.title(f"{APP_NAME} v{APP_VERSION}")
@@ -2924,7 +2859,6 @@ class App:
         options = ttk.LabelFrame(root, text="Настройки", padding=10)
         options.grid(row=4, column=0, columnspan=3, sticky="we", pady=(14, 10))
 
-        # Row: max text file size
         size_line = ttk.Frame(options)
         size_line.pack(anchor="w", fill="x")
         ttk.Label(size_line, text="Максимальный размер одного текстового файла:").pack(
@@ -2937,7 +2871,6 @@ class App:
         self.entry_max_mb.pack(side="left", padx=(8, 4))
         ttk.Label(size_line, text="МБ").pack(side="left")
 
-        # Row: redact secrets
         self.var_redact = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             options,
@@ -2948,7 +2881,6 @@ class App:
             variable=self.var_redact,
         ).pack(anchor="w", pady=(8, 0))
 
-        # Row: include project in zip
         self.var_include_project = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             options,
@@ -2956,7 +2888,6 @@ class App:
             variable=self.var_include_project,
         ).pack(anchor="w", pady=(4, 0))
 
-        # Row: keep staging
         self.var_keep_staging = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             options,
@@ -2967,7 +2898,6 @@ class App:
             variable=self.var_keep_staging,
         ).pack(anchor="w", pady=(4, 0))
 
-        # Row: extra ignored dirs
         extras_line = ttk.Frame(options)
         extras_line.pack(anchor="w", fill="x", pady=(8, 0))
         ttk.Label(
@@ -2999,7 +2929,6 @@ class App:
         )
         warning.pack(anchor="w", pady=(8, 0))
 
-        # Action buttons
         actions = ttk.Frame(root)
         actions.grid(row=5, column=0, columnspan=3, sticky="we", pady=(8, 10))
 
@@ -3025,7 +2954,6 @@ class App:
             side="right"
         )
 
-        # Progress + status
         progress_line = ttk.Frame(root)
         progress_line.grid(row=6, column=0, columnspan=3, sticky="we", pady=(4, 8))
 
@@ -3035,7 +2963,6 @@ class App:
         self.lbl_status = ttk.Label(progress_line, text="Готов", width=18)
         self.lbl_status.pack(side="left", padx=(10, 0))
 
-        # Log
         self.log = scrolledtext.ScrolledText(
             root, height=22, state="disabled", wrap="word", font=("Consolas", 9)
         )
@@ -3054,7 +2981,6 @@ class App:
         root.columnconfigure(0, weight=1)
         root.rowconfigure(7, weight=1)
 
-    # -- Config sync --------------------------------------------------------
 
     def _load_config_to_ui(self) -> None:
         self.entry_root.delete(0, "end")
@@ -3088,7 +3014,6 @@ class App:
 
         self.config.save()
 
-    # -- Buttons ------------------------------------------------------------
 
     def _browse_root(self) -> None:
         initial = self.entry_root.get().strip() or str(Path.home())
@@ -3134,7 +3059,6 @@ class App:
         def target() -> None:
             try:
                 paths = exporter.run()
-                # Prefer the zip as the "result"; fall back to staging if kept.
                 if paths.final_zip.exists():
                     self.last_result_path = paths.final_zip
                 elif paths.staging_dir.exists():
@@ -3191,15 +3115,10 @@ class App:
     def _open_path(self, path: Path) -> None:
         try:
             if os.name == "nt":
-                # On Windows, startfile opens files in their default app
-                # and folders in Explorer.
-                os.startfile(str(path))  # type: ignore[attr-defined]
+                os.startfile(str(path))
             elif sys.platform == "darwin":
-                # For files: open them; for folders: reveal in Finder.
-                # `open` handles both.
                 subprocess.Popen(["open", str(path)])
             else:
-                # Linux: xdg-open handles both files and directories.
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception as exc:
             messagebox.showerror("Ошибка", f"Не удалось открыть путь:\n{path}\n\n{exc}")
@@ -3209,9 +3128,6 @@ class App:
 
     def _open_last_result(self) -> None:
         if self.last_result_path and self.last_result_path.exists():
-            # Selecting the zip in Explorer is nicer than opening it directly,
-            # but `os.startfile` on a .zip will open it in the archive viewer
-            # which is also fine. We keep behaviour simple and consistent.
             self._open_path(self.last_result_path)
         else:
             messagebox.showwarning("Нет результата", "Итоговый файл пока не создан.")
