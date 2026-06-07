@@ -71,11 +71,13 @@ def write_ai_context_pack(
 
         out.write("\n## Suggested review order\n\n")
         suggestions = [
-            "Read `01_summary.txt` first.",
-            "Review `05_git_deep.txt` for branch, remote, and uncommitted state.",
+            "Read `00_project_profile.json` and `01_summary.txt` first.",
+            "Use `13_runbook.md` to understand setup, run, and test commands.",
+            "Use `15_architecture_report.md` and `16_key_files_report.md` before editing code.",
+            "Use `14_dependency_graph.md` / `.mmd` to understand internal imports.",
             "Review `06_security_scan.txt` before sharing the export.",
-            "Review `07_todo_fixme.txt` to understand technical debt.",
-            "Use `08_code_metrics.txt` to find files that may need decomposition.",
+            "Use `17_code_quality_report.md` and `23_refactoring_opportunities.md` to plan refactors.",
+            "Use the `AI_CONTEXT/` folder for a multi-file ChatGPT/Codex handoff.",
         ]
         for suggestion in suggestions:
             out.write(f"- {suggestion}\n")

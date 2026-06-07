@@ -72,6 +72,7 @@ def build_export_paths(source_root: Path) -> ExportPaths:
         reports_dir=reports_dir,
         insights_dir=insights_dir,
         manifest_file=staging / "manifest.json",
+        project_profile_file=staging / "PROJECT_PROFILE.json",
         index_file=staging / "INDEX.md",
         structure_report=reports_dir / "01_structure.txt",
         git_report=reports_dir / "02_git.txt",

@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .constants import IGNORED_DIR_NAMES, SETTINGS_FILE
+from .constants import DEFAULT_EXPORT_PROFILE, EXPORT_PROFILES, IGNORED_DIR_NAMES, SETTINGS_FILE
 
 @dataclass(slots=True)
 class Config:
@@ -14,6 +14,7 @@ class Config:
     keep_staging_folder: bool = False
     include_project_in_zip: bool = True
     extra_ignored_dirs: list[str] = field(default_factory=list)
+    export_profile: str = DEFAULT_EXPORT_PROFILE
 
     @classmethod
     def load(cls) -> Config:
@@ -41,3 +42,7 @@ class Config:
         """Defaults are always present; user values are additive only."""
         extras = {name.strip() for name in self.extra_ignored_dirs if name.strip()}
         return IGNORED_DIR_NAMES | extras
+
+    def normalized_export_profile(self) -> str:
+        """Return a known export profile; tolerate old or manually edited settings."""
+        return self.export_profile if self.export_profile in EXPORT_PROFILES else DEFAULT_EXPORT_PROFILE

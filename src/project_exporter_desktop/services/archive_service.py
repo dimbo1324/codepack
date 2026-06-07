@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import zipfile
 from collections.abc import Callable
+from pathlib import Path
 
 from ..models import ExportPaths
 

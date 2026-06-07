@@ -30,6 +30,7 @@ def write_manifest(
             "redact_secrets": config.redact_secrets,
             "keep_staging_folder": config.keep_staging_folder,
             "include_project_in_zip": config.include_project_in_zip,
+            "export_profile": config.normalized_export_profile(),
         },
         "ignored_dirs": {
             "defaults": sorted(IGNORED_DIR_NAMES),
@@ -50,6 +51,7 @@ def write_manifest(
         },
         "layout": {
             "project_dir": paths.project_name + "/",
+            "project_profile": "PROJECT_PROFILE.json",
             "reports": [path for path, _desc in REPORT_DESCRIPTIONS],
         },
     }

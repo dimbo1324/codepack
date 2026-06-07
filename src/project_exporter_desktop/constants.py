@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "Project Exporter Desktop"
 
-APP_VERSION = "2.0"
+APP_VERSION = "3.0"
 
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
 
@@ -13,6 +13,22 @@ IGNORED_DIR_NAMES: frozenset[str] = frozenset(
     {
         ".git",
         "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "venv",
+        "env",
+        "dist",
+        "build",
+        "coverage",
+        ".coverage",
+        ".next",
+        ".nuxt",
+        ".turbo",
+        ".parcel-cache",
     }
 )
 
@@ -460,62 +476,45 @@ SENSITIVE_SUFFIXES: set[str] = {
     "jks",
 }
 
+
+DEFAULT_EXPORT_PROFILE = "full"
+
+EXPORT_PROFILES: dict[str, str] = {
+    "quick": "Quick Export — short overview, setup/run info, key files and core project profile.",
+    "full": "Full Export — all generated reports and AI context files.",
+    "ai_review": "AI Review Export — all reports that help ChatGPT/Codex understand and safely modify the project.",
+    "security": "Security Export — configuration, dependency, Git, code-quality, and security-focused reports.",
+    "minimal": "Minimal Source Export — compact overview for lightweight sharing.",
+}
+
 REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
-    (
-        "reports/01_structure.txt",
-        "PowerShell-like directory listing of the copied project.",
-    ),
-    (
-        "reports/02_git.txt",
-        "Read-only Git snapshot from the ORIGINAL project (status, last commits).",
-    ),
-    (
-        "reports/03_text_dump.txt",
-        "Concatenated contents of every text-like file in the copy.",
-    ),
-    (
-        "reports/insights/01_summary.txt",
-        "High-level overview: stack detection, language counts, biggest files.",
-    ),
-    (
-        "reports/insights/02_file_statistics.txt",
-        "File counts by extension, deepest paths, empty / suspicious files.",
-    ),
-    (
-        "reports/insights/03_dependencies.txt",
-        "package.json / requirements.txt / go.mod / Cargo.toml dependencies.",
-    ),
-    (
-        "reports/insights/04_scripts.txt",
-        "npm/pnpm scripts, Makefile targets, Docker convenience commands.",
-    ),
-    (
-        "reports/insights/05_git_deep.txt",
-        "Extended read-only Git inspection (branches, remotes, diffs, ls-files).",
-    ),
-    (
-        "reports/insights/06_security_scan.txt",
-        "Heuristic scan for .env-like files and secret-looking lines (redacted).",
-    ),
-    (
-        "reports/insights/07_todo_fixme.txt",
-        "TODO / FIXME / HACK / XXX / DEPRECATED markers across the codebase.",
-    ),
-    (
-        "reports/insights/08_code_metrics.txt",
-        "LOC, comment ratios, files over 500 / 1000 lines.",
-    ),
-    (
-        "reports/insights/09_config.txt",
-        "Detected configuration files and capability checklist.",
-    ),
+    ("PROJECT_PROFILE.json", "Machine-readable project passport: stack, commands, entrypoints, capabilities, risk level."),
+    ("reports/01_structure.txt", "PowerShell-like directory listing of the copied project."),
+    ("reports/02_git.txt", "Read-only Git snapshot from the ORIGINAL project (status, last commits)."),
+    ("reports/03_text_dump.txt", "Concatenated contents of every text-like file in the copy."),
+    ("reports/insights/00_project_profile.json", "Copy of the machine-readable project profile inside the insights folder."),
+    ("reports/insights/01_summary.txt", "High-level overview: stack detection, language counts, biggest files."),
+    ("reports/insights/02_file_statistics.txt", "File counts by extension, deepest paths, empty / suspicious files."),
+    ("reports/insights/03_dependencies.txt", "package.json / requirements.txt / go.mod / Cargo.toml dependencies."),
+    ("reports/insights/04_scripts.txt", "npm/pnpm scripts, Makefile targets, Docker convenience commands."),
+    ("reports/insights/05_git_deep.txt", "Extended read-only Git inspection (branches, remotes, diffs, ls-files)."),
+    ("reports/insights/06_security_scan.txt", "Heuristic scan for .env-like files, secret-looking lines, and risky code patterns."),
+    ("reports/insights/07_todo_fixme.txt", "TODO / FIXME / HACK / XXX / DEPRECATED markers across the codebase."),
+    ("reports/insights/08_code_metrics.txt", "LOC, comment ratios, files over 500 / 1000 lines."),
+    ("reports/insights/09_config.txt", "Detected configuration files and capability checklist."),
     ("reports/insights/10_docker.txt", "Dockerfile / docker-compose service map."),
-    (
-        "reports/insights/11_routes_and_pages.txt",
-        "Heuristic UI map: routes, pages, components.",
-    ),
-    (
-        "reports/insights/12_ai_context_pack.md",
-        "Drop-in summary for pasting into an LLM along with the project.",
-    ),
+    ("reports/insights/11_routes_and_pages.txt", "Heuristic UI map: routes, pages, components."),
+    ("reports/insights/12_ai_context_pack.md", "Drop-in summary for pasting into an LLM along with the project."),
+    ("reports/insights/13_runbook.md", "Generated setup/run/test/Docker instructions."),
+    ("reports/insights/14_dependency_graph.md", "Internal import/dependency graph in Markdown."),
+    ("reports/insights/14_dependency_graph.mmd", "Mermaid dependency graph for visual architecture review."),
+    ("reports/insights/15_architecture_report.md", "Layered architecture map and extension points."),
+    ("reports/insights/16_key_files_report.md", "Ranked list of the most important project files and reasons."),
+    ("reports/insights/17_code_quality_report.md", "Maintainability review: large files, long functions, duplication, mixed responsibilities."),
+    ("reports/insights/18_api_surface_report.md", "Backend route candidates and frontend HTTP call candidates."),
+    ("reports/insights/19_frontend_report.md", "Frontend-specific map: components, hooks, routes, stores, forms."),
+    ("reports/insights/20_backend_report.md", "Backend-specific map: API, services, models, repositories, migrations, jobs."),
+    ("reports/insights/21_git_timeline_report.md", "Recent commits, contributors, and file churn in Git history."),
+    ("reports/insights/23_refactoring_opportunities.md", "Prioritised refactoring candidates with suggested actions."),
+    ("reports/insights/AI_CONTEXT/", "Multi-file AI context folder for ChatGPT/Codex handoff."),
 )

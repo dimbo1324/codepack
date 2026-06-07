@@ -14,7 +14,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from ..config import Config
-from ..constants import APP_NAME, APP_VERSION, SETTINGS_FILE
+from ..constants import APP_NAME, APP_VERSION, EXPORT_PROFILES, SETTINGS_FILE
 from ..services.exporter import ProjectExporter
 from ..utils.path_utils import desktop_path, validate_source_root
 
@@ -33,10 +33,24 @@ class App:
 
     # -- UI construction ----------------------------------------------------
 
+    def _try_set_window_icon(self) -> None:
+        """Use bundled ICO on Windows when available; ignore all icon failures."""
+        try:
+            icon_path = Path(__file__).resolve().parents[3] / "assets" / "ICO.ico"
+            if icon_path.exists():
+                self.master.iconbitmap(str(icon_path))
+        except Exception:
+            pass
+
+    def _sync_profile_hint(self) -> None:
+        profile = self.var_export_profile.get().strip()
+        self.lbl_profile_hint.config(text=EXPORT_PROFILES.get(profile, ""))
+
     def _build_ui(self) -> None:
         self.master.title(f"{APP_NAME} v{APP_VERSION}")
-        self.master.geometry("960x760")
-        self.master.minsize(880, 640)
+        self.master.geometry("980x820")
+        self.master.minsize(900, 700)
+        self._try_set_window_icon()
 
         root = ttk.Frame(self.master, padding=14)
         root.pack(fill="both", expand=True)
@@ -83,6 +97,23 @@ class App:
         )
         self.entry_max_mb.pack(side="left", padx=(8, 4))
         ttk.Label(size_line, text="МБ").pack(side="left")
+
+        # Row: export profile
+        profile_line = ttk.Frame(options)
+        profile_line.pack(anchor="w", fill="x", pady=(8, 0))
+        ttk.Label(profile_line, text="Профиль экспорта:").pack(side="left")
+        self.var_export_profile = tk.StringVar()
+        self.combo_export_profile = ttk.Combobox(
+            profile_line,
+            textvariable=self.var_export_profile,
+            values=list(EXPORT_PROFILES.keys()),
+            state="readonly",
+            width=18,
+        )
+        self.combo_export_profile.pack(side="left", padx=(8, 10))
+        self.lbl_profile_hint = ttk.Label(profile_line, text="", foreground="gray")
+        self.lbl_profile_hint.pack(side="left", fill="x", expand=True)
+        self.combo_export_profile.bind("<<ComboboxSelected>>", lambda _event: self._sync_profile_hint())
 
         # Row: redact secrets
         self.var_redact = tk.BooleanVar(value=True)
@@ -212,6 +243,8 @@ class App:
         self.var_include_project.set(self.config.include_project_in_zip)
         self.var_keep_staging.set(self.config.keep_staging_folder)
         self.var_extra_ignored.set(", ".join(self.config.extra_ignored_dirs))
+        self.var_export_profile.set(self.config.normalized_export_profile())
+        self._sync_profile_hint()
 
     def _save_config_from_ui(self) -> None:
         self.config.last_root = self.entry_root.get().strip() or str(Path.home())
@@ -224,6 +257,7 @@ class App:
         self.config.redact_secrets = bool(self.var_redact.get())
         self.config.include_project_in_zip = bool(self.var_include_project.get())
         self.config.keep_staging_folder = bool(self.var_keep_staging.get())
+        self.config.export_profile = self.var_export_profile.get().strip()
 
         raw_extras = self.var_extra_ignored.get()
         extras: list[str] = []
@@ -232,6 +266,8 @@ class App:
             if token and token not in extras:
                 extras.append(token)
         self.config.extra_ignored_dirs = extras
+        if self.config.export_profile not in EXPORT_PROFILES:
+            self.config.export_profile = "full"
 
         self.config.save()
 
@@ -269,7 +305,7 @@ class App:
         self.last_result_path = None
         self.btn_open_result.config(state="disabled")
         self._set_running(True)
-        self._log("Запуск экспорта...")
+        self._log(f"Запуск экспорта... профиль={self.config.normalized_export_profile()}")
 
         exporter = ProjectExporter(
             source_root=source_root,

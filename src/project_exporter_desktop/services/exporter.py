@@ -121,6 +121,8 @@ class ProjectExporter:
                 max_bytes_per_file=max_bytes,
                 log=self.log,
                 cancel=self.cancel_event,
+                project_profile_file=paths.project_profile_file,
+                export_profile=self.config.normalized_export_profile(),
             )
 
         # --- Step 6/7: manifest + INDEX (always written) ----------------------

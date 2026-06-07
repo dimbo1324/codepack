@@ -15,6 +15,7 @@ class ExportPaths:
     reports_dir: Path  # {staging_dir}/reports
     insights_dir: Path  # {staging_dir}/reports/insights
     manifest_file: Path  # {staging_dir}/manifest.json
+    project_profile_file: Path  # {staging_dir}/PROJECT_PROFILE.json
     index_file: Path  # {staging_dir}/INDEX.md
     structure_report: Path  # {reports_dir}/01_structure.txt
     git_report: Path  # {reports_dir}/02_git.txt
