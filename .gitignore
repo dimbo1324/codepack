@@ -1,0 +1,33 @@
+
+# Python cache / bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime settings created in the user profile, not in the project folder:
+# ~/.project_exporter_desktop.json
+
+# Generated export bundles, if created inside the project by mistake
+*_export_*.zip
+*_export_*/
