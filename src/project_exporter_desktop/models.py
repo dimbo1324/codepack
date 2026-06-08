@@ -69,7 +69,12 @@ class RiskPreviewReport:
 
     @property
     def has_warnings(self) -> bool:
-        return bool(self.sensitive_files or self.large_files or self.archive_or_dump_files or self.git_warning)
+        return bool(
+            self.sensitive_files
+            or self.large_files
+            or self.archive_or_dump_files
+            or self.git_warning
+        )
 
 
 @dataclass(slots=True)

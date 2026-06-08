@@ -10,6 +10,7 @@ from ..constants import LANGUAGE_BY_EXTENSION
 from .path_utils import should_ignore_dir
 from .text_utils import safe_read_json
 
+
 def iter_project_files(root: Path) -> Iterable[Path]:
     for current_dir, dirnames, filenames in os.walk(
         root, topdown=True, followlinks=False
@@ -26,6 +27,7 @@ def iter_project_files(root: Path) -> Iterable[Path]:
                 continue
             yield path
 
+
 def iter_project_dirs(root: Path) -> Iterable[Path]:
     for current_dir, dirnames, _filenames in os.walk(
         root, topdown=True, followlinks=False
@@ -39,6 +41,7 @@ def iter_project_dirs(root: Path) -> Iterable[Path]:
         for dirname in dirnames:
             yield current / dirname
 
+
 def extension_key(path: Path) -> str:
     name = path.name.lower()
     if name == "dockerfile" or name.startswith("dockerfile."):
@@ -46,14 +49,17 @@ def extension_key(path: Path) -> str:
     suffix = path.suffix.lower().lstrip(".")
     return suffix or "[no extension]"
 
+
 def is_non_ascii(text: str) -> bool:
     return any(ord(ch) > 127 for ch in text)
+
 
 def path_depth(path: Path, root: Path) -> int:
     try:
         return len(path.relative_to(root).parts)
     except Exception:
         return 0
+
 
 def detect_package_managers(root: Path) -> list[str]:
     managers: list[str] = []
@@ -77,6 +83,7 @@ def detect_package_managers(root: Path) -> list[str]:
         managers.append("Cargo")
     return managers
 
+
 def package_json_dependencies(root: Path) -> dict[str, str]:
     package_json = safe_read_json(root / "package.json")
     deps: dict[str, str] = {}
@@ -90,6 +97,7 @@ def package_json_dependencies(root: Path) -> dict[str, str]:
         if isinstance(value, dict):
             deps.update({str(k): str(v) for k, v in value.items()})
     return deps
+
 
 def detect_stack(root: Path) -> dict[str, list[str]]:
     deps = package_json_dependencies(root)
@@ -175,9 +183,11 @@ def detect_stack(root: Path) -> dict[str, list[str]]:
         "package_managers": sorted(detect_package_managers(root)),
     }
 
+
 def write_key_value_lines(out: Any, mapping: dict[str, Any]) -> None:
     for key, value in mapping.items():
         out.write(f"{key:<32}: {value}\n")
+
 
 def collect_basic_inventory(root: Path) -> dict[str, Any]:
     files = list(iter_project_files(root))

@@ -45,7 +45,9 @@ class Config:
             if SETTINGS_FILE.exists():
                 data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
                 known = {f.name for f in cls.__dataclass_fields__.values()}
-                data = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
+                data = _migrate_legacy_settings(
+                    {k: v for k, v in data.items() if k in known}
+                )
                 return cls(**data)
         except Exception:
             return cls()
@@ -62,18 +64,32 @@ class Config:
 
     def effective_ignored_dirs(self) -> frozenset[str]:
         """Defaults are always present; user values are additive only."""
-        extras = {name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()}
+        extras = {
+            name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()
+        }
         defaults = {name.casefold() for name in IGNORED_DIR_NAMES}
         return frozenset(defaults | extras)
 
     def normalized_export_profile(self) -> str:
-        return self.export_profile if self.export_profile in EXPORT_PROFILES else DEFAULT_EXPORT_PROFILE
+        return (
+            self.export_profile
+            if self.export_profile in EXPORT_PROFILES
+            else DEFAULT_EXPORT_PROFILE
+        )
 
     def normalized_safe_export_mode(self) -> str:
-        return self.safe_export_mode if self.safe_export_mode in SAFE_EXPORT_MODES else "safe"
+        return (
+            self.safe_export_mode
+            if self.safe_export_mode in SAFE_EXPORT_MODES
+            else "safe"
+        )
 
     def normalized_diff_export_mode(self) -> str:
-        return self.diff_export_mode if self.diff_export_mode in DIFF_EXPORT_MODES else "all"
+        return (
+            self.diff_export_mode
+            if self.diff_export_mode in DIFF_EXPORT_MODES
+            else "all"
+        )
 
     def effective_max_text_file_bytes(self) -> int | None:
         if not self.text_file_size_limit_enabled:

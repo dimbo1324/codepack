@@ -542,41 +542,141 @@ SAFE_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {
     "zip",
 }
 
-BALANCED_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {"bak", "dump", "backup"}
+BALANCED_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {
+    "bak",
+    "dump",
+    "backup",
+}
 
 REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
-    ("PROJECT_PROFILE.json", "Machine-readable project passport: stack, commands, entrypoints, capabilities, risk level."),
-    ("reports/01_structure.txt", "PowerShell-like directory listing of the copied project."),
-    ("reports/02_git.txt", "Read-only Git snapshot from the ORIGINAL project (status, last commits)."),
-    ("reports/03_text_dump.txt", "Concatenated contents of every text-like file in the copy."),
-    ("reports/insights/00_project_profile.json", "Copy of the machine-readable project profile inside the insights folder."),
-    ("reports/insights/01_summary.txt", "High-level overview: stack detection, language counts, biggest files."),
-    ("reports/insights/02_file_statistics.txt", "File counts by extension, deepest paths, empty / suspicious files."),
-    ("reports/insights/03_dependencies.txt", "package.json / requirements.txt / go.mod / Cargo.toml dependencies."),
-    ("reports/insights/04_scripts.txt", "npm/pnpm scripts, Makefile targets, Docker convenience commands."),
-    ("reports/insights/05_git_deep.txt", "Extended read-only Git inspection (branches, remotes, diffs, ls-files)."),
-    ("reports/insights/06_security_scan.txt", "Heuristic scan for .env-like files, secret-looking lines, and risky code patterns."),
-    ("reports/insights/07_todo_fixme.txt", "TODO / FIXME / HACK / XXX / DEPRECATED markers across the codebase."),
-    ("reports/insights/08_code_metrics.txt", "LOC, comment ratios, files over 500 / 1000 lines."),
-    ("reports/insights/09_config.txt", "Detected configuration files and capability checklist."),
+    (
+        "PROJECT_PROFILE.json",
+        "Machine-readable project passport: stack, commands, entrypoints, capabilities, risk level.",
+    ),
+    (
+        "reports/01_structure.txt",
+        "PowerShell-like directory listing of the copied project.",
+    ),
+    (
+        "reports/02_git.txt",
+        "Read-only Git snapshot from the ORIGINAL project (status, last commits).",
+    ),
+    (
+        "reports/03_text_dump.txt",
+        "Concatenated contents of every text-like file in the copy.",
+    ),
+    (
+        "reports/insights/00_project_profile.json",
+        "Copy of the machine-readable project profile inside the insights folder.",
+    ),
+    (
+        "reports/insights/01_summary.txt",
+        "High-level overview: stack detection, language counts, biggest files.",
+    ),
+    (
+        "reports/insights/02_file_statistics.txt",
+        "File counts by extension, deepest paths, empty / suspicious files.",
+    ),
+    (
+        "reports/insights/03_dependencies.txt",
+        "package.json / requirements.txt / go.mod / Cargo.toml dependencies.",
+    ),
+    (
+        "reports/insights/04_scripts.txt",
+        "npm/pnpm scripts, Makefile targets, Docker convenience commands.",
+    ),
+    (
+        "reports/insights/05_git_deep.txt",
+        "Extended read-only Git inspection (branches, remotes, diffs, ls-files).",
+    ),
+    (
+        "reports/insights/06_security_scan.txt",
+        "Heuristic scan for .env-like files, secret-looking lines, and risky code patterns.",
+    ),
+    (
+        "reports/insights/07_todo_fixme.txt",
+        "TODO / FIXME / HACK / XXX / DEPRECATED markers across the codebase.",
+    ),
+    (
+        "reports/insights/08_code_metrics.txt",
+        "LOC, comment ratios, files over 500 / 1000 lines.",
+    ),
+    (
+        "reports/insights/09_config.txt",
+        "Detected configuration files and capability checklist.",
+    ),
     ("reports/insights/10_docker.txt", "Dockerfile / docker-compose service map."),
-    ("reports/insights/11_routes_and_pages.txt", "Heuristic UI map: routes, pages, components."),
-    ("reports/insights/12_ai_context_pack.md", "Drop-in summary for pasting into an LLM along with the project."),
+    (
+        "reports/insights/11_routes_and_pages.txt",
+        "Heuristic UI map: routes, pages, components.",
+    ),
+    (
+        "reports/insights/12_ai_context_pack.md",
+        "Drop-in summary for pasting into an LLM along with the project.",
+    ),
     ("reports/insights/13_runbook.md", "Generated setup/run/test/Docker instructions."),
-    ("reports/insights/14_dependency_graph.md", "Internal import/dependency graph in Markdown."),
-    ("reports/insights/14_dependency_graph.mmd", "Mermaid dependency graph for visual architecture review."),
-    ("reports/insights/15_architecture_report.md", "Layered architecture map and extension points."),
-    ("reports/insights/16_key_files_report.md", "Ranked list of the most important project files and reasons."),
-    ("reports/insights/17_code_quality_report.md", "Maintainability review: large files, long functions, duplication, mixed responsibilities."),
-    ("reports/insights/18_api_surface_report.md", "Backend route candidates and frontend HTTP call candidates."),
-    ("reports/insights/19_frontend_report.md", "Frontend-specific map: components, hooks, routes, stores, forms."),
-    ("reports/insights/20_backend_report.md", "Backend-specific map: API, services, models, repositories, migrations, jobs."),
-    ("reports/insights/21_git_timeline_report.md", "Recent commits, contributors, and file churn in Git history."),
-    ("reports/insights/22_project_health_report.md", "Project health score across architecture, security, maintainability, docs and AI readiness."),
-    ("reports/insights/23_refactoring_opportunities.md", "Prioritised refactoring candidates with suggested actions."),
-    ("reports/insights/24_architecture_map.md", "Layered architecture map with entry points, module responsibilities and Mermaid graph."),
-    ("reports/insights/25_large_files_report.md", "Large file and folder inspector for archive-size diagnostics."),
-    ("reports/insights/26_dependency_intelligence.md", "Dependency intelligence: package managers, lockfiles, runtime/dev groups and hygiene checks."),
-    ("reports/insights/AI_CONTEXT/", "Multi-file AI context folder for ChatGPT/Codex handoff."),
-    ("reports/insights/AI_PROMPTS/", "Ready-to-use prompts for ChatGPT/Codex review, refactoring, security and bug-hunting workflows."),
+    (
+        "reports/insights/14_dependency_graph.md",
+        "Internal import/dependency graph in Markdown.",
+    ),
+    (
+        "reports/insights/14_dependency_graph.mmd",
+        "Mermaid dependency graph for visual architecture review.",
+    ),
+    (
+        "reports/insights/15_architecture_report.md",
+        "Layered architecture map and extension points.",
+    ),
+    (
+        "reports/insights/16_key_files_report.md",
+        "Ranked list of the most important project files and reasons.",
+    ),
+    (
+        "reports/insights/17_code_quality_report.md",
+        "Maintainability review: large files, long functions, duplication, mixed responsibilities.",
+    ),
+    (
+        "reports/insights/18_api_surface_report.md",
+        "Backend route candidates and frontend HTTP call candidates.",
+    ),
+    (
+        "reports/insights/19_frontend_report.md",
+        "Frontend-specific map: components, hooks, routes, stores, forms.",
+    ),
+    (
+        "reports/insights/20_backend_report.md",
+        "Backend-specific map: API, services, models, repositories, migrations, jobs.",
+    ),
+    (
+        "reports/insights/21_git_timeline_report.md",
+        "Recent commits, contributors, and file churn in Git history.",
+    ),
+    (
+        "reports/insights/22_project_health_report.md",
+        "Project health score across architecture, security, maintainability, docs and AI readiness.",
+    ),
+    (
+        "reports/insights/23_refactoring_opportunities.md",
+        "Prioritised refactoring candidates with suggested actions.",
+    ),
+    (
+        "reports/insights/24_architecture_map.md",
+        "Layered architecture map with entry points, module responsibilities and Mermaid graph.",
+    ),
+    (
+        "reports/insights/25_large_files_report.md",
+        "Large file and folder inspector for archive-size diagnostics.",
+    ),
+    (
+        "reports/insights/26_dependency_intelligence.md",
+        "Dependency intelligence: package managers, lockfiles, runtime/dev groups and hygiene checks.",
+    ),
+    (
+        "reports/insights/AI_CONTEXT/",
+        "Multi-file AI context folder for ChatGPT/Codex handoff.",
+    ),
+    (
+        "reports/insights/AI_PROMPTS/",
+        "Ready-to-use prompts for ChatGPT/Codex review, refactoring, security and bug-hunting workflows.",
+    ),
 )

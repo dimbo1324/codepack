@@ -6,6 +6,7 @@ from tkinter import ttk
 from .constants import APP_NAME, APP_VERSION
 from .ui.app_window import App
 
+
 def main() -> None:
     root = tk.Tk()
 

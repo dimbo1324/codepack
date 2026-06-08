@@ -42,7 +42,9 @@ def should_consider_text_file(path: Path) -> bool:
     return False
 
 
-def read_text_safely(path: Path, max_bytes: int | None = None) -> tuple[str | None, str]:
+def read_text_safely(
+    path: Path, max_bytes: int | None = None
+) -> tuple[str | None, str]:
     """Read a text-like file defensively.
 
     ``max_bytes=None`` means unlimited. Even then, the function first reads a

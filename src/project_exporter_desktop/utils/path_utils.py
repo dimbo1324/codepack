@@ -7,13 +7,16 @@ from ..constants import IGNORED_DIR_NAMES, MONTHS
 from ..models import ExportPaths
 from .time_utils import now_stamp
 
+
 def desktop_path() -> Path:
     desktop = Path.home() / "Desktop"
     return desktop if desktop.exists() else Path.home()
 
+
 def sanitize_name(name: str) -> str:
     cleaned = "".join(ch for ch in name if ch not in '<>:"/\\|?*').strip()
     return cleaned or "project"
+
 
 def is_relative_to(child: Path, parent: Path) -> bool:
     try:
@@ -21,6 +24,7 @@ def is_relative_to(child: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
+
 
 def validate_source_root(path_text: str) -> Path:
     if not path_text.strip():
@@ -40,6 +44,7 @@ def validate_source_root(path_text: str) -> Path:
         )
 
     return root
+
 
 def build_export_paths(source_root: Path) -> ExportPaths:
     """Allocate a unique bundle path. If a collision is detected, suffix it."""
@@ -82,6 +87,7 @@ def build_export_paths(source_root: Path) -> ExportPaths:
         text_dump=reports_dir / "03_text_dump.txt",
     )
 
+
 def should_ignore_dir(
     name: str, extra: frozenset[str] | set[str] = frozenset()
 ) -> bool:
@@ -90,14 +96,17 @@ def should_ignore_dir(
     extras = {item.casefold() for item in extra}
     return normalised in defaults or normalised in extras
 
+
 def rel_display(path: Path, root: Path) -> str:
     rel = path.relative_to(root)
     if str(rel) == ".":
         return "."
     return ".\\" + str(rel).replace("/", "\\")
 
+
 def ps_mode(path: Path) -> str:
     return "d-----" if path.is_dir() else "-a----"
+
 
 def ps_date(timestamp: float) -> str:
     dt = datetime.fromtimestamp(timestamp)
