@@ -10,14 +10,14 @@ from ...utils.text_utils import read_text_safely, should_consider_text_file
 from ...utils.time_utils import human_now
 
 def write_todo_fixme_report(
-    copied_root: Path, output_file: Path, max_bytes_per_file: int
+    copied_root: Path, output_file: Path, max_bytes_per_file: int | None
 ) -> None:
     findings: list[tuple[Path, int, str, str]] = []
     for path in iter_project_files(copied_root):
         if not should_consider_text_file(path):
             continue
         try:
-            if path.stat().st_size > max_bytes_per_file:
+            if max_bytes_per_file is not None and path.stat().st_size > max_bytes_per_file:
                 continue
         except Exception:
             continue

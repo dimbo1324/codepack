@@ -31,3 +31,8 @@ Thumbs.db
 # Generated export bundles, if created inside the project by mistake
 *_export_*.zip
 *_export_*/
+*_export_*_archives/
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

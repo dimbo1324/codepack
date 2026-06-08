@@ -8,6 +8,8 @@ from pathlib import Path
 
 from ..models import CopyStats
 from ..utils.path_utils import rel_display, should_ignore_dir
+from .export_policy import should_skip_file_for_safety
+
 
 def copy_project(
     source_root: Path,
@@ -15,11 +17,15 @@ def copy_project(
     extra_ignored_dirs: frozenset[str] | set[str],
     log: Callable[[str], None],
     cancel: threading.Event,
+    safe_export_mode: str = "safe",
+    include_relative_paths: frozenset[str] | None = None,
 ) -> CopyStats:
     stats = CopyStats()
     destination_root.parent.mkdir(parents=True, exist_ok=True)
 
     log(f"Создаю копию проекта: {destination_root}")
+    if include_relative_paths is not None:
+        log(f"Diff export: выбрано Git-путей: {len(include_relative_paths):,}")
 
     for current_dir, dirnames, filenames in os.walk(
         source_root, topdown=True, followlinks=False
@@ -46,6 +52,15 @@ def copy_project(
                 )
                 continue
 
+            if include_relative_paths is not None:
+                try:
+                    rel_dir = str(child.relative_to(source_root)).replace("/", "\\")
+                except ValueError:
+                    rel_dir = ""
+                prefix = rel_dir + "\\"
+                if not any(path == rel_dir or path.startswith(prefix) for path in include_relative_paths):
+                    continue
+
             safe_dirnames.append(dirname)
 
         dirnames[:] = safe_dirnames
@@ -70,6 +85,27 @@ def copy_project(
                 log(
                     f"Пропущена символическая ссылка на файл: "
                     f"{rel_display(src_file, source_root)}"
+                )
+                continue
+
+            try:
+                relative_file = src_file.relative_to(source_root)
+            except ValueError:
+                stats.files_skipped += 1
+                continue
+            rel_key = str(relative_file).replace("/", "\\")
+
+            if include_relative_paths is not None and rel_key not in include_relative_paths:
+                stats.files_skipped_by_diff += 1
+                continue
+
+            safety = should_skip_file_for_safety(relative_file, safe_export_mode)
+            if safety.skip:
+                stats.files_skipped += 1
+                stats.files_skipped_by_safety += 1
+                log(
+                    f"Safe Export: пропущен файл {rel_display(src_file, source_root)} "
+                    f"({safety.reason})"
                 )
                 continue
 

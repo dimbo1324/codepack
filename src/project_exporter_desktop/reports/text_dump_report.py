@@ -13,7 +13,7 @@ from ..utils.time_utils import human_now
 def write_text_dump(
     root: Path,
     output_file: Path,
-    max_bytes_per_file: int,
+    max_bytes_per_file: int | None,
     redact: bool,
     log: Callable[[str], None],
     cancel: threading.Event,
@@ -29,7 +29,7 @@ def write_text_dump(
         out.write("=== Text Files Dump ===\n")
         out.write(f"Project copy root name: {root.name}\n")
         out.write(f"Generated: {human_now()}\n")
-        out.write(f"Max bytes per file: {max_bytes_per_file:,}\n")
+        out.write(f"Max bytes per file: {max_bytes_per_file:,}\n" if max_bytes_per_file is not None else "Max bytes per file: unlimited\n")
         out.write(f"Secrets redaction: {'enabled' if redact else 'disabled'}\n")
         out.write("Only readable text-like files are included.\n")
         out.write("=" * 100 + "\n\n")
@@ -51,7 +51,7 @@ def write_text_dump(
                 stats.skipped_decode += 1
                 continue
 
-            if size > max_bytes_per_file:
+            if max_bytes_per_file is not None and size > max_bytes_per_file:
                 stats.skipped_large += 1
                 continue
 

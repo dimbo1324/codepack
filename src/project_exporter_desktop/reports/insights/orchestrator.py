@@ -10,18 +10,23 @@ from ...constants import DEFAULT_EXPORT_PROFILE, EXPORT_PROFILES
 from ...utils.inventory import collect_basic_inventory
 from .ai_context import write_ai_context_pack
 from .ai_context_folder import write_ai_context_folder
+from .ai_prompts import write_ai_prompt_files
 from .api_surface import write_api_surface_report
 from .architecture import write_architecture_report
+from .architecture_map import write_architecture_map_report
 from .code_quality import write_code_quality_report
 from .config_report import write_config_report
 from .dependencies import write_dependency_report
+from .dependency_intelligence import write_dependency_intelligence_report
 from .dependency_graph import write_dependency_graph_reports
 from .docker_report import write_docker_report
 from .file_statistics import write_file_statistics_report
 from .frontend_backend import write_backend_report, write_frontend_report
 from .git_deep import write_git_deep_report
 from .git_timeline import write_git_timeline_report
+from .health_score import write_project_health_report
 from .key_files import write_key_files_report
+from .large_files import write_large_files_report
 from .metrics import write_code_metrics_report
 from .project_profile import write_project_profile_json
 from .refactoring import write_refactoring_opportunities_report
@@ -49,7 +54,7 @@ def write_project_insight_reports(
     copied_root: Path,
     source_root: Path,
     reports_dir: Path,
-    max_bytes_per_file: int,
+    max_bytes_per_file: int | None,
     log: Callable[[str], None],
     cancel: threading.Event,
     project_profile_file: Path | None = None,
@@ -208,11 +213,31 @@ def write_project_insight_reports(
             lambda output: write_git_timeline_report(source_root, output, log, cancel),
         ),
         (
+            "22_project_health_report.md",
+            {"quick", "full", "ai_review", "security", "minimal"},
+            lambda output: write_project_health_report(copied_root, output, inventory),
+        ),
+        (
             "23_refactoring_opportunities.md",
             {"quick", "full", "ai_review", "security"},
             lambda output: write_refactoring_opportunities_report(
                 copied_root, output, inventory, max_bytes_per_file
             ),
+        ),
+        (
+            "24_architecture_map.md",
+            {"quick", "full", "ai_review", "minimal"},
+            lambda output: write_architecture_map_report(copied_root, output, inventory),
+        ),
+        (
+            "25_large_files_report.md",
+            {"quick", "full", "ai_review", "security"},
+            lambda output: write_large_files_report(copied_root, output, inventory),
+        ),
+        (
+            "26_dependency_intelligence.md",
+            {"quick", "full", "ai_review", "security"},
+            lambda output: write_dependency_intelligence_report(copied_root, output),
         ),
     ]
 
@@ -248,5 +273,18 @@ def write_project_insight_reports(
                 errors="replace",
             )
             log(f"Ошибка создания AI_CONTEXT: {exc}")
+
+    if not cancel.is_set() and profile in {"full", "ai_review", "quick", "minimal", "security"}:
+        try:
+            log("Пишу AI_PROMPTS папку")
+            write_ai_prompt_files(copied_root, reports_dir / "AI_PROMPTS")
+        except Exception as exc:
+            error_file = reports_dir / "ERROR_AI_PROMPTS.txt"
+            error_file.write_text(
+                f"Failed to create AI_PROMPTS folder\n\n{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
+                encoding="utf-8",
+                errors="replace",
+            )
+            log(f"Ошибка создания AI_PROMPTS: {exc}")
 
     log("Расширенные аналитические отчёты готовы")

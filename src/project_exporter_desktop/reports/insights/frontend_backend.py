@@ -14,7 +14,7 @@ _PY_CLASS_RE = re.compile(r"^class\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
 _PY_FUNC_RE = re.compile(r"^def\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
 
 
-def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int) -> None:
+def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
     package_json = safe_read_json(copied_root / "package.json")
     deps = {}
     for section in ("dependencies", "devDependencies"):
@@ -106,7 +106,7 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
             out.write("- none detected\n")
 
 
-def write_backend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int) -> None:
+def write_backend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
     backend_dirs: dict[str, list[Path]] = {"api": [], "services": [], "models": [], "repositories": [], "migrations": [], "workers": [], "config": []}
     for directory in iter_project_dirs(copied_root):
         parts = {part.lower() for part in directory.relative_to(copied_root).parts}

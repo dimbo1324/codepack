@@ -28,7 +28,7 @@ def _python_function_lengths(path: Path) -> list[tuple[str, int, int]]:
     return results
 
 
-def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_per_file: int) -> None:
+def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
     large_files: list[tuple[Path, int]] = []
     long_symbols: list[tuple[Path, str, int, int]] = []
     todo_files: Counter[Path] = Counter()

@@ -1,91 +1,59 @@
-# Project Exporter Desktop
+# Project Exporter Desktop v4.0
 
-Desktop utility for Windows 11 that creates an AI-ready project export ZIP for a selected project folder.
+A safe Windows-friendly desktop utility for exporting a project into an AI/code-review handoff package. It creates a project copy, generated reports, AI context files, prompt templates and a ZIP archive. If the ZIP exceeds the configured limit, the app creates a Desktop folder with logically grouped archive parts.
 
-The generated archive contains a copied project folder plus human-readable and machine-readable reports that help you, ChatGPT, Codex, or a reviewer understand the project quickly and safely.
-
-## What the export contains
-
-- copied project folder, excluding cache/heavy folders such as `.git`, `node_modules`, `__pycache__`, `.venv`, `dist`, `build`, `.next`, `.turbo`, and user-defined exclusions;
-- `manifest.json` with export metadata;
-- `PROJECT_PROFILE.json` with project type, detected stack, commands, entrypoints, capabilities, and risk level;
-- `INDEX.md` as a table of contents;
-- structure, Git, and text-dump reports;
-- dependency, scripts, Docker, config, security, TODO/FIXME, metrics, API, frontend, backend, architecture, key-files, and refactoring reports;
-- Mermaid dependency graph;
-- `reports/insights/AI_CONTEXT/` folder with a ready-to-use Codex/ChatGPT handoff pack.
-
-## Export profiles
-
-The UI supports several export profiles:
-
-- `quick` — compact but useful overview;
-- `full` — all available reports;
-- `ai_review` — reports optimised for ChatGPT/Codex project analysis;
-- `security` — security/config/dependency/Git/code-quality oriented export;
-- `minimal` — lightweight overview for sharing.
-
-The default profile is `full`.
-
-## Requirements
-
-- Windows 11;
-- Python 3.11+ recommended;
-- no third-party Python packages required.
-
-The application intentionally uses only the Python standard library.
-
-## How to run
-
-### Option 1 — double-click the BAT file
-
-1. Extract this folder anywhere.
-2. Double-click `SaveFilesContent.bat`.
-3. Select the root folder of the project you want to export.
-4. Choose an export profile.
-5. Press `Создать экспорт`.
-6. The resulting ZIP will appear on your Desktop.
-
-### Option 2 — run from PowerShell
-
-```powershell
-py -3 main.py
-```
-
-or:
+## Run
 
 ```powershell
 python main.py
 ```
 
-## Project structure
-
-```text
-home-scripts/
-├── main.py
-├── SaveFilesContent.bat
-├── README.md
-├── .gitignore
-├── assets/
-│   └── ICO.ico
-└── src/
-    └── project_exporter_desktop/
-        ├── constants.py
-        ├── config.py
-        ├── models.py
-        ├── main.py
-        ├── services/
-        ├── reports/
-        ├── reports/insights/
-        ├── ui/
-        └── utils/
-```
-
-## Development checks
+or:
 
 ```powershell
-py -3 -m compileall main.py src
-py -3 main.py
+python -m project_exporter_desktop
 ```
 
-The application runs read-only Git commands only. It does not switch branches, commit files, or modify the selected source repository.
+For direct package imports from the repository root, use:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m project_exporter_desktop
+```
+
+## Main features
+
+- Safe Export modes: `safe`, `balanced`, `full`.
+- Pre-export risk preview before the copy starts.
+- Text dump size is unlimited by default; a manual limit can be enabled in the UI.
+- Logical ZIP splitting when the final archive exceeds the configured size limit.
+- Diff Export modes for full project, uncommitted changes, changed-since-ref and between-refs packages.
+- AI handoff material: `AI_CONTEXT/` and `AI_PROMPTS/`.
+- Project health score, architecture map, dependency intelligence and large-file reports.
+- Export history saved locally.
+- One-click Codex Package with safe defaults.
+- Editable local export profile presets via `~/.project_exporter_profiles.json`.
+
+## Safe sharing defaults
+
+The default mode is `safe`. It skips common high-risk files during copy, including `.env`, private keys, local databases, dumps and nested archives. This is a safety layer, not a replacement for manual review. Always check `reports/insights/06_security_scan.txt` before sharing a bundle externally.
+
+## Archive behaviour
+
+- If the generated ZIP is smaller than or equal to the configured limit, one ZIP is created on the Desktop.
+- If the ZIP is larger, the single archive is removed and a folder named `*_archives` is created on the Desktop.
+- Files are grouped by meaning: metadata/reports/source/tests/docs/config/assets/data/other.
+- `ARCHIVE_SET_MANIFEST.json` explains the generated archive set.
+
+## Tests
+
+The project uses only the Python standard library at runtime. The included tests use `unittest` and can be run without external packages:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m unittest discover -s tests
+```
+
+## Custom export profile presets
+
+Use the **Profiles JSON** button in the UI to create/open `~/.project_exporter_profiles.json`. Custom profiles can set a built-in `base_profile` plus safe-export, Git patch, ZIP limit and text-limit defaults. Restart the app after editing the file so the combobox reloads the profile list.

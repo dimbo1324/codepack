@@ -16,7 +16,7 @@ def write_refactoring_opportunities_report(
     copied_root: Path,
     output_file: Path,
     inventory: dict[str, Any],
-    max_bytes_per_file: int,
+    max_bytes_per_file: int | None,
 ) -> None:
     graph = collect_dependency_graph(copied_root, max_bytes_per_file=max_bytes_per_file)
     imported_by: dict[Path, int] = {path: 0 for path in graph}

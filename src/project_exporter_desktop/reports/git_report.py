@@ -5,7 +5,9 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
+from ..utils.text_utils import redact_secrets
 from ..utils.time_utils import human_now
+
 
 def run_git_command(
     args: list[str], cwd: Path, timeout_seconds: int = 120
@@ -30,17 +32,19 @@ def run_git_command(
         return (
             None,
             "",
-            "Git executable was not found. Install Git for Windows and "
-            "ensure git.exe is in PATH.",
+            "Git executable was not found. Install Git for Windows and ensure git.exe is in PATH.",
         )
     except Exception as exc:
         return None, "", f"{type(exc).__name__}: {exc}"
+
 
 def write_git_report(
     source_root: Path,
     output_file: Path,
     log: Callable[[str], None],
     cancel: threading.Event,
+    include_patch: bool = False,
+    redact: bool = True,
 ) -> None:
     log(f"Формирую Git-отчёт: {output_file.name}")
 
@@ -48,52 +52,39 @@ def write_git_report(
         ["git", "status", "--short", "--branch"],
         ["git", "branch", "--show-current"],
         ["git", "log", "--oneline", "-5"],
-        ["git", "show", "--stat", "HEAD"],
-        ["git", "show", "HEAD"],
+        ["git", "show", "--stat", "--name-status", "HEAD"],
     ]
+    if include_patch:
+        commands.append(["git", "show", "--patch", "--find-renames", "HEAD"])
 
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write("=== Git Report ===\n")
         out.write(f"Source root: {source_root}\n")
         out.write(f"Generated: {human_now()}\n")
-        out.write(
-            "Note: Git data is collected from the ORIGINAL project (the .git "
-            "directory is intentionally never copied into the bundle).\n"
-        )
+        out.write(f"Patch included: {'yes' if include_patch else 'no'}\n")
+        out.write("Git commands are read-only. The .git directory is not copied.\n")
+        out.write("Secret redaction is applied to command output.\n" if redact else "Secret redaction is disabled.\n")
         out.write("=" * 100 + "\n\n")
-
-        git_dir = source_root / ".git"
-        if not git_dir.exists():
-            out.write("No .git directory was found in the selected root.\n")
-            out.write("Git commands were not executed.\n")
-            log("Git-папка не найдена. Git-команды пропущены.")
-            return
 
         for command in commands:
             if cancel.is_set():
-                out.write("\nOperation cancelled by user.\n")
-                break
+                out.write("\nCANCELLED BY USER\n")
+                return
 
-            command_text = " ".join(command)
-            log(f"Выполняю: {command_text}")
-
-            out.write("\n" + "=" * 100 + "\n")
-            out.write(f"$ {command_text}\n")
-            out.write("=" * 100 + "\n\n")
-
-            code, stdout, stderr = run_git_command(command, cwd=source_root)
-            out.write(f"Exit code: {code}\n\n")
-
-            out.write("--- STDOUT ---\n")
-            out.write(stdout or "")
-            if stdout and not stdout.endswith("\n"):
-                out.write("\n")
-
-            out.write("\n--- STDERR ---\n")
-            out.write(stderr or "")
-            if stderr and not stderr.endswith("\n"):
-                out.write("\n")
-
-            out.write("\n")
-
-    log("Git-отчёт готов")
+            out.write(f"$ {' '.join(command)}\n")
+            code, stdout, stderr = run_git_command(command, source_root)
+            if redact:
+                stdout = redact_secrets(stdout)
+                stderr = redact_secrets(stderr)
+            out.write(f"exit_code: {code}\n")
+            if stdout:
+                out.write("--- stdout ---\n")
+                out.write(stdout)
+                if not stdout.endswith("\n"):
+                    out.write("\n")
+            if stderr:
+                out.write("--- stderr ---\n")
+                out.write(stderr)
+                if not stderr.endswith("\n"):
+                    out.write("\n")
+            out.write("\n" + "-" * 100 + "\n\n")

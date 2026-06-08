@@ -50,12 +50,14 @@ def build_export_paths(source_root: Path) -> ExportPaths:
     bundle_name = base
     staging = desktop / bundle_name
     final_zip = desktop / f"{bundle_name}.zip"
+    archive_set_dir = desktop / f"{bundle_name}_archives"
 
     counter = 1
-    while staging.exists() or final_zip.exists():
+    while staging.exists() or final_zip.exists() or archive_set_dir.exists():
         bundle_name = f"{base}_{counter}"
         staging = desktop / bundle_name
         final_zip = desktop / f"{bundle_name}.zip"
+        archive_set_dir = desktop / f"{bundle_name}_archives"
         counter += 1
 
     reports_dir = staging / "reports"
@@ -68,6 +70,7 @@ def build_export_paths(source_root: Path) -> ExportPaths:
         bundle_name=bundle_name,
         staging_dir=staging,
         final_zip=final_zip,
+        archive_set_dir=archive_set_dir,
         project_dir=staging / project_name,
         reports_dir=reports_dir,
         insights_dir=insights_dir,
@@ -82,7 +85,10 @@ def build_export_paths(source_root: Path) -> ExportPaths:
 def should_ignore_dir(
     name: str, extra: frozenset[str] | set[str] = frozenset()
 ) -> bool:
-    return name in IGNORED_DIR_NAMES or name in extra
+    normalised = name.casefold()
+    defaults = {item.casefold() for item in IGNORED_DIR_NAMES}
+    extras = {item.casefold() for item in extra}
+    return normalised in defaults or normalised in extras
 
 def rel_display(path: Path, root: Path) -> str:
     rel = path.relative_to(root)

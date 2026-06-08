@@ -83,7 +83,7 @@ def _python_edges(path: Path, root: Path) -> set[Path]:
     return edges
 
 
-def collect_dependency_graph(root: Path, max_bytes_per_file: int = 1_000_000) -> dict[Path, set[Path]]:
+def collect_dependency_graph(root: Path, max_bytes_per_file: int | None = 1_000_000) -> dict[Path, set[Path]]:
     files = [path for path in iter_project_files(root) if extension_key(path) in _SOURCE_EXTS]
     graph: dict[Path, set[Path]] = {path: set() for path in files}
 
@@ -127,7 +127,7 @@ def _node_id(path: Path, root: Path) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", rel)
 
 
-def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid_file: Path, max_bytes_per_file: int) -> None:
+def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid_file: Path, max_bytes_per_file: int | None) -> None:
     graph = collect_dependency_graph(copied_root, max_bytes_per_file=max_bytes_per_file)
     in_degree: Counter[Path] = Counter()
     for targets in graph.values():

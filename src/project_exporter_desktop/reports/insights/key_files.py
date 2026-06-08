@@ -17,7 +17,7 @@ _ENTRYPOINT_NAMES = {"main.py", "__main__.py", "app.py", "server.py", "manage.py
 _CONFIG_NAMES = {"package.json", "pyproject.toml", "go.mod", "Cargo.toml", "docker-compose.yml", "docker-compose.yaml", "Dockerfile", "README.md"}
 
 
-def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_per_file: int) -> tuple[int, list[str]]:
+def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_per_file: int | None) -> tuple[int, list[str]]:
     score = 0
     reasons: list[str] = []
     name = path.name
@@ -61,7 +61,7 @@ def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_pe
     return score, reasons
 
 
-def write_key_files_report(copied_root: Path, output_file: Path, inventory: dict[str, Any], max_bytes_per_file: int) -> None:
+def write_key_files_report(copied_root: Path, output_file: Path, inventory: dict[str, Any], max_bytes_per_file: int | None) -> None:
     graph = collect_dependency_graph(copied_root, max_bytes_per_file=max_bytes_per_file)
     imported_by: Counter[Path] = Counter()
     for targets in graph.values():

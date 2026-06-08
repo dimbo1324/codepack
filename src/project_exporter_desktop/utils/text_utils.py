@@ -13,16 +13,20 @@ from ..constants import (
     TRY_ENCODINGS,
 )
 
+_BINARY_SAMPLE_BYTES = 8192
+
+
 def looks_binary(raw: bytes) -> bool:
-    if b"\x00" in raw[:8192]:
+    if b"\x00" in raw[:_BINARY_SAMPLE_BYTES]:
         return True
 
-    sample = raw[:8192]
+    sample = raw[:_BINARY_SAMPLE_BYTES]
     if not sample:
         return False
 
     control_bytes = sum(1 for b in sample if b < 9 or (13 < b < 32))
     return (control_bytes / len(sample)) > 0.30
+
 
 def should_consider_text_file(path: Path) -> bool:
     name = path.name.lower()
@@ -37,19 +41,32 @@ def should_consider_text_file(path: Path) -> bool:
 
     return False
 
-def read_text_safely(path: Path, max_bytes: int) -> tuple[str | None, str]:
+
+def read_text_safely(path: Path, max_bytes: int | None = None) -> tuple[str | None, str]:
+    """Read a text-like file defensively.
+
+    ``max_bytes=None`` means unlimited. Even then, the function first reads a
+    small sample to reject obvious binaries before loading the full file.
+    """
     try:
-        raw = path.read_bytes()
+        size = path.stat().st_size
+    except Exception as exc:
+        return None, f"StatError: {exc}"
+
+    if size == 0:
+        return "", "empty"
+    if max_bytes is not None and size > max_bytes:
+        return None, f"too-large:{size}"
+
+    try:
+        with path.open("rb") as file:
+            sample = file.read(_BINARY_SAMPLE_BYTES)
+            if looks_binary(sample):
+                return None, "binary-detected"
+            file.seek(0)
+            raw = file.read()
     except Exception as exc:
         return None, f"IOError: {exc}"
-
-    if len(raw) == 0:
-        return "", "empty"
-    if len(raw) > max_bytes:
-        return None, f"too-large:{len(raw)}"
-
-    if looks_binary(raw):
-        return None, "binary-detected"
 
     for encoding in TRY_ENCODINGS:
         try:
@@ -63,6 +80,7 @@ def read_text_safely(path: Path, max_bytes: int) -> tuple[str | None, str]:
         return raw.decode("latin-1", errors="replace"), "latin-1(replace)"
     except Exception as exc:
         return None, f"DecodeError:{exc}"
+
 
 def redact_secrets(text: str) -> str:
     redacted = text
@@ -81,6 +99,7 @@ def redact_secrets(text: str) -> str:
         redacted = pattern.sub(repl, redacted)
     return redacted
 
+
 def format_bytes(size: int) -> str:
     units = ("B", "KB", "MB", "GB", "TB")
     value = float(size)
@@ -91,6 +110,7 @@ def format_bytes(size: int) -> str:
             return f"{value:.2f} {unit}"
         value /= 1024
     return f"{size} B"
+
 
 def safe_read_json(path: Path) -> dict[str, Any]:
     try:

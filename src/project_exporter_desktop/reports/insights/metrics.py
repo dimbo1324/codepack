@@ -21,7 +21,7 @@ def comment_like_line(stripped: str, suffix: str) -> bool:
     return False
 
 def write_code_metrics_report(
-    copied_root: Path, output_file: Path, max_bytes_per_file: int
+    copied_root: Path, output_file: Path, max_bytes_per_file: int | None
 ) -> None:
     per_file: list[dict[str, Any]] = []
     totals = Counter()
@@ -31,7 +31,7 @@ def write_code_metrics_report(
         if suffix not in SOURCE_CODE_EXTENSIONS:
             continue
         try:
-            if path.stat().st_size > max_bytes_per_file:
+            if max_bytes_per_file is not None and path.stat().st_size > max_bytes_per_file:
                 continue
         except Exception:
             continue

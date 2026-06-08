@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ...reports.git_report import run_git_command
+from ...utils.text_utils import redact_secrets
 from ...utils.time_utils import human_now
 
 def write_git_deep_report(
@@ -53,11 +54,11 @@ def write_git_deep_report(
             )
             out.write(f"Exit code: {code}\n\n")
             out.write("--- STDOUT ---\n")
-            out.write(stdout or "")
+            out.write(redact_secrets(stdout or ""))
             if stdout and not stdout.endswith("\n"):
                 out.write("\n")
             out.write("\n--- STDERR ---\n")
-            out.write(stderr or "")
+            out.write(redact_secrets(stderr or ""))
             if stderr and not stderr.endswith("\n"):
                 out.write("\n")
             out.write("\n")

@@ -16,7 +16,7 @@ _FETCH_RE = re.compile(r"(?:fetch|axios\.(?:get|post|put|patch|delete)|client\.(
 _OPENAPI_NAMES = {"openapi.yaml", "openapi.yml", "openapi.json", "swagger.yaml", "swagger.yml", "swagger.json"}
 
 
-def write_api_surface_report(copied_root: Path, output_file: Path, max_bytes_per_file: int) -> None:
+def write_api_surface_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
     backend_routes: list[tuple[Path, str, str]] = []
     frontend_calls: list[tuple[Path, str]] = []
     specs: list[Path] = []

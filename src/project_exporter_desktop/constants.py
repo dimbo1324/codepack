@@ -5,9 +5,16 @@ from pathlib import Path
 
 APP_NAME = "Project Exporter Desktop"
 
-APP_VERSION = "3.0"
+APP_VERSION = "4.0"
 
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
+
+USER_EXPORT_PROFILES_FILE = Path.home() / ".project_exporter_profiles.json"
+
+MAX_ARCHIVE_PART_MB = 512
+MAX_ARCHIVE_PART_BYTES = MAX_ARCHIVE_PART_MB * 1024 * 1024
+# Planning below the hard limit leaves room for ZIP headers and incompressible files.
+ARCHIVE_PART_TARGET_BYTES = 500 * 1024 * 1024
 
 IGNORED_DIR_NAMES: frozenset[str] = frozenset(
     {
@@ -487,6 +494,56 @@ EXPORT_PROFILES: dict[str, str] = {
     "minimal": "Minimal Source Export — compact overview for lightweight sharing.",
 }
 
+SAFE_EXPORT_MODES: dict[str, str] = {
+    "safe": "Safe — excludes secrets, private keys, local databases, dumps and archives.",
+    "balanced": "Balanced — excludes high-risk credentials and keys, keeps more project configuration.",
+    "full": "Full — copies project files except ignored directories; use only for private/local exports.",
+}
+
+DIFF_EXPORT_MODES: dict[str, str] = {
+    "all": "All files — export the whole project copy.",
+    "uncommitted": "Uncommitted changes — tracked changes plus untracked files.",
+    "changed_since_ref": "Changed since ref — files changed from a Git ref to HEAD.",
+    "between_refs": "Between refs — files changed between two Git refs.",
+}
+
+HIGH_RISK_FILENAMES: set[str] = {
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+    ".env.test",
+    ".npmrc",
+    ".pypirc",
+    "credentials.json",
+    "secrets.json",
+    "secret.json",
+    "service-account.json",
+    "service_account.json",
+    "firebase-adminsdk.json",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+}
+
+SAFE_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {
+    "db",
+    "sqlite",
+    "sqlite3",
+    "bak",
+    "dump",
+    "backup",
+    "7z",
+    "rar",
+    "tar",
+    "gz",
+    "xz",
+    "zip",
+}
+
+BALANCED_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {"bak", "dump", "backup"}
+
 REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
     ("PROJECT_PROFILE.json", "Machine-readable project passport: stack, commands, entrypoints, capabilities, risk level."),
     ("reports/01_structure.txt", "PowerShell-like directory listing of the copied project."),
@@ -515,6 +572,11 @@ REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
     ("reports/insights/19_frontend_report.md", "Frontend-specific map: components, hooks, routes, stores, forms."),
     ("reports/insights/20_backend_report.md", "Backend-specific map: API, services, models, repositories, migrations, jobs."),
     ("reports/insights/21_git_timeline_report.md", "Recent commits, contributors, and file churn in Git history."),
+    ("reports/insights/22_project_health_report.md", "Project health score across architecture, security, maintainability, docs and AI readiness."),
     ("reports/insights/23_refactoring_opportunities.md", "Prioritised refactoring candidates with suggested actions."),
+    ("reports/insights/24_architecture_map.md", "Layered architecture map with entry points, module responsibilities and Mermaid graph."),
+    ("reports/insights/25_large_files_report.md", "Large file and folder inspector for archive-size diagnostics."),
+    ("reports/insights/26_dependency_intelligence.md", "Dependency intelligence: package managers, lockfiles, runtime/dev groups and hygiene checks."),
     ("reports/insights/AI_CONTEXT/", "Multi-file AI context folder for ChatGPT/Codex handoff."),
+    ("reports/insights/AI_PROMPTS/", "Ready-to-use prompts for ChatGPT/Codex review, refactoring, security and bug-hunting workflows."),
 )
