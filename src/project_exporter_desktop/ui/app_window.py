@@ -25,10 +25,13 @@ from ..constants import (
     SETTINGS_FILE,
 )
 from ..services.export_history import load_export_history
+from ..services.export_ignore import ExportIgnoreRules
+from ..services.export_plan import build_export_plan, format_export_plan_for_user
 from ..services.export_profiles import apply_custom_profile_if_needed, ensure_user_profiles_file, load_profile_catalog
 from ..services.exporter import ProjectExporter
 from ..services.git_diff import resolve_diff_selection
-from ..services.risk_preview import build_pre_export_risk_preview, format_risk_preview_for_user
+from ..services.incremental import resolve_incremental_selection
+from ..services.prompt_builder import PROMPT_GOALS
 from ..utils.path_utils import desktop_path, validate_source_root
 
 
@@ -228,6 +231,21 @@ class App:
         self.entry_extra_ignored = ttk.Entry(extras_line, textvariable=self.var_extra_ignored)
         self.entry_extra_ignored.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
+        self.var_incremental = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            options,
+            text="Инкрементальный экспорт: включать только файлы, изменённые после прошлого успешного экспорта",
+            variable=self.var_incremental,
+        ).pack(anchor="w", pady=(6, 0))
+
+        advanced_line = ttk.Frame(options)
+        advanced_line.pack(anchor="w", fill="x", pady=(8, 0))
+        ttk.Button(advanced_line, text="Include/Exclude Rules", command=self._edit_rules).pack(side="left")
+        ttk.Button(advanced_line, text="Prompt Builder", command=self._edit_prompt_goals).pack(side="left", padx=(8, 0))
+        ttk.Button(advanced_line, text="Создать .exportignore", command=self._create_exportignore_template).pack(side="left", padx=(8, 0))
+        ttk.Button(advanced_line, text="Export settings", command=self._export_settings).pack(side="right")
+        ttk.Button(advanced_line, text="Import settings", command=self._import_settings).pack(side="right", padx=(0, 8))
+
         ttk.Label(
             options,
             text="Базовые исключения (.git, node_modules, .venv, build/dist/cache) сохраняются всегда. Git-команды read-only.",
@@ -254,22 +272,24 @@ class App:
 
         progress_line = ttk.Frame(root)
         progress_line.grid(row=6, column=0, columnspan=3, sticky="we", pady=(4, 8))
-        self.progress = ttk.Progressbar(progress_line, mode="indeterminate")
+        self.progress = ttk.Progressbar(progress_line, mode="determinate", maximum=100)
         self.progress.pack(side="left", fill="x", expand=True)
-        self.lbl_status = ttk.Label(progress_line, text="Готов", width=18)
+        self.lbl_status = ttk.Label(progress_line, text="Готов", width=24)
         self.lbl_status.pack(side="left", padx=(10, 0))
+        self.lbl_current_file = ttk.Label(root, text="", foreground="gray")
+        self.lbl_current_file.grid(row=7, column=0, columnspan=3, sticky="we", pady=(0, 4))
 
         self.log = scrolledtext.ScrolledText(root, height=22, state="disabled", wrap="word", font=("Consolas", 9))
-        self.log.grid(row=7, column=0, columnspan=3, sticky="nsew")
+        self.log.grid(row=8, column=0, columnspan=3, sticky="nsew")
 
         ttk.Label(
             root,
             text="Результат создаётся на Desktop: один ZIP либо папка *_archives, если требуется разбиение.",
             foreground="gray",
-        ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ).grid(row=9, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(7, weight=1)
+        root.rowconfigure(8, weight=1)
 
     # -- Config sync --------------------------------------------------------
 
@@ -289,6 +309,7 @@ class App:
         self.var_diff_mode.set(self.config.normalized_diff_export_mode())
         self.var_diff_base.set(self.config.diff_base_ref)
         self.var_diff_target.set(self.config.diff_target_ref)
+        self.var_incremental.set(self.config.incremental_export_enabled)
         self._sync_profile_hint()
         self._sync_safe_hint()
         self._sync_diff_hint()
@@ -315,6 +336,7 @@ class App:
 
         cfg.redact_secrets = bool(self.var_redact.get())
         cfg.include_git_patch = bool(self.var_include_git_patch.get())
+        cfg.incremental_export_enabled = bool(self.var_incremental.get())
         cfg.include_project_in_zip = bool(self.var_include_project.get())
         cfg.keep_staging_folder = bool(self.var_keep_staging.get())
         cfg.export_profile = self.var_export_profile.get().strip()
@@ -375,14 +397,23 @@ class App:
             include_git_patch=False,
             include_project_in_zip=True,
             diff_export_mode="all",
+            incremental_export_enabled=False,
             zip_part_limit_mb=MAX_ARCHIVE_PART_MB,
         )
 
     def _confirm_risk_preview(self, source_root: Path, cfg: Config) -> bool:
         diff_selection = resolve_diff_selection(source_root, cfg.normalized_diff_export_mode(), cfg.diff_base_ref, cfg.diff_target_ref)
-        report = build_pre_export_risk_preview(source_root, cfg.effective_ignored_dirs(), diff_selection)
-        preview_text = format_risk_preview_for_user(report, cfg.normalized_safe_export_mode())
-        return messagebox.askyesno("Pre-export risk preview", preview_text)
+        incremental_selection = resolve_incremental_selection(source_root, cfg.effective_ignored_dirs(), cfg.incremental_export_enabled)
+        export_rules = ExportIgnoreRules.from_project_and_config(
+            source_root,
+            excluded_files=cfg.custom_excluded_files,
+            excluded_extensions=cfg.custom_excluded_extensions,
+            always_include_files=cfg.always_include_files,
+            always_include_dirs=cfg.always_include_dirs,
+        )
+        plan = build_export_plan(source_root, cfg, cfg.effective_ignored_dirs(), diff_selection, incremental_selection, export_rules)
+        preview_text = format_export_plan_for_user(plan, cfg.effective_zip_part_bytes())
+        return messagebox.askyesno("Export Plan", preview_text)
 
     def _start(self, codex_package: bool = False) -> None:
         if self.worker and self.worker.is_alive():
@@ -453,9 +484,11 @@ class App:
         self.btn_cancel.config(state="normal" if running else "disabled")
         self.lbl_status.config(text="Выполняется..." if running else "Готов")
         if running:
-            self.progress.start(15)
+            self.progress.configure(mode="determinate")
+            self.progress["value"] = 0
+            self.lbl_current_file.config(text="")
         else:
-            self.progress.stop()
+            self.progress["value"] = 0 if self.cancel_event.is_set() else self.progress["value"]
 
     def _open_path(self, path: Path) -> None:
         try:
@@ -506,6 +539,139 @@ class App:
         self._load_config_to_ui()
         self._log("Настройки сброшены.")
 
+    def _split_multiline_rules(self, text: str) -> list[str]:
+        values: list[str] = []
+        for token in re.split(r"[,;\n]", text):
+            token = token.strip()
+            if token and token not in values:
+                values.append(token)
+        return values
+
+    def _edit_rules(self) -> None:
+        dialog = tk.Toplevel(self.master)
+        dialog.title("Include / Exclude Rules")
+        dialog.geometry("760x620")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        ttk.Label(dialog, text="Custom export rules. One item per line or comma-separated.", padding=10).pack(anchor="w")
+        container = ttk.Frame(dialog, padding=10)
+        container.pack(fill="both", expand=True)
+        fields: list[tuple[str, list[str]]] = [
+            ("Exclude files / glob patterns", self.config.custom_excluded_files),
+            ("Exclude extensions", self.config.custom_excluded_extensions),
+            ("Always include files / glob patterns", self.config.always_include_files),
+            ("Always include directories", self.config.always_include_dirs),
+        ]
+        widgets: list[tk.Text] = []
+        for row, (label, values) in enumerate(fields):
+            ttk.Label(container, text=label).grid(row=row * 2, column=0, sticky="w", pady=(6, 0))
+            text = tk.Text(container, height=5, wrap="word")
+            text.grid(row=row * 2 + 1, column=0, sticky="nsew")
+            text.insert("1.0", "\n".join(values))
+            widgets.append(text)
+        container.columnconfigure(0, weight=1)
+        for row in range(1, 8, 2):
+            container.rowconfigure(row, weight=1)
+
+        def save_rules() -> None:
+            self.config.custom_excluded_files = self._split_multiline_rules(widgets[0].get("1.0", "end"))
+            self.config.custom_excluded_extensions = self._split_multiline_rules(widgets[1].get("1.0", "end"))
+            self.config.always_include_files = self._split_multiline_rules(widgets[2].get("1.0", "end"))
+            self.config.always_include_dirs = self._split_multiline_rules(widgets[3].get("1.0", "end"))
+            self.config.save()
+            self._log("Include/Exclude rules сохранены.")
+            dialog.destroy()
+
+        buttons = ttk.Frame(dialog, padding=10)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Save", command=save_rules).pack(side="right")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+    def _edit_prompt_goals(self) -> None:
+        dialog = tk.Toplevel(self.master)
+        dialog.title("Prompt Builder")
+        dialog.geometry("620x420")
+        dialog.transient(self.master)
+        dialog.grab_set()
+        ttk.Label(dialog, text="Choose what CUSTOM_PROMPT.md should ask AI/Codex to do.", padding=10).pack(anchor="w")
+        vars_by_key: dict[str, tk.BooleanVar] = {}
+        body = ttk.Frame(dialog, padding=10)
+        body.pack(fill="both", expand=True)
+        current = set(self.config.prompt_goals)
+        for key, description in PROMPT_GOALS.items():
+            var = tk.BooleanVar(value=key in current)
+            vars_by_key[key] = var
+            ttk.Checkbutton(body, text=f"{key}: {description}", variable=var).pack(anchor="w", pady=3)
+
+        def save_goals() -> None:
+            goals = [key for key, var in vars_by_key.items() if var.get()]
+            self.config.prompt_goals = goals or ["architecture_review", "bug_hunt", "write_tests"]
+            self.config.save()
+            self._log("Prompt Builder goals сохранены.")
+            dialog.destroy()
+
+        buttons = ttk.Frame(dialog, padding=10)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Save", command=save_goals).pack(side="right")
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="right", padx=(0, 8))
+
+    def _create_exportignore_template(self) -> None:
+        source_root = self._validate_before_start()
+        if source_root is None:
+            return
+        target = source_root / ".exportignore"
+        if target.exists() and not messagebox.askyesno(".exportignore", ".exportignore уже существует. Перезаписать шаблоном?"):
+            return
+        template = """# Project Exporter rules\n# Similar to .gitignore. Use !pattern to explicitly include custom-ignored files.\n\nnode_modules/\n.git/\ndist/\nbuild/\n*.log\n*.zip\n*.rar\n*.7z\n*.db\n*.sqlite\n.env*\nprivate/\nlarge-assets/\n\n# Examples:\n# !README.md\n# !docs/\n"""
+        try:
+            target.write_text(template, encoding="utf-8", newline="\n")
+            self._log(f"Создан .exportignore: {target}")
+            self._open_path(target)
+        except Exception as exc:
+            messagebox.showerror("Ошибка", f"Не удалось создать .exportignore:\n{exc}")
+
+    def _export_settings(self) -> None:
+        self._save_config_from_ui()
+        target = filedialog.asksaveasfilename(
+            title="Export settings",
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json")],
+            initialfile="project_exporter_settings.json",
+        )
+        if not target:
+            return
+        try:
+            Config.export_settings(Path(target), self.config)
+            self._log(f"Настройки экспортированы: {target}")
+        except Exception as exc:
+            messagebox.showerror("Ошибка", f"Не удалось экспортировать настройки:\n{exc}")
+
+    def _import_settings(self) -> None:
+        source = filedialog.askopenfilename(title="Import settings", filetypes=[("JSON", "*.json")])
+        if not source:
+            return
+        try:
+            self.config = Config.import_settings(Path(source))
+            self.config.save()
+            self._load_config_to_ui()
+            self._log(f"Настройки импортированы: {source}")
+        except Exception as exc:
+            messagebox.showerror("Ошибка", f"Не удалось импортировать настройки:\n{exc}")
+
+    def _handle_progress_message(self, message: str) -> None:
+        parts = message.split("\t", 3)
+        if len(parts) < 3:
+            return
+        try:
+            percent = max(0, min(100, int(parts[1])))
+        except Exception:
+            percent = 0
+        stage = parts[2]
+        current = parts[3] if len(parts) > 3 else ""
+        self.progress["value"] = percent
+        self.lbl_status.config(text=f"{percent}% — {stage[:28]}")
+        self.lbl_current_file.config(text=current[:180])
+
     def _log(self, message: str) -> None:
         self.log_queue.put(message)
 
@@ -513,6 +679,9 @@ class App:
         try:
             while True:
                 message = self.log_queue.get_nowait()
+                if message.startswith("PROGRESS\t"):
+                    self._handle_progress_message(message)
+                    continue
                 timestamp = datetime.now().strftime("%H:%M:%S")
                 self.log.configure(state="normal")
                 self.log.insert("end", f"[{timestamp}] {message}\n")

@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "Project Exporter Desktop"
 
-APP_VERSION = "4.0"
+APP_VERSION = "5.0"
 
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
 
@@ -670,6 +670,30 @@ REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
     (
         "reports/insights/26_dependency_intelligence.md",
         "Dependency intelligence: package managers, lockfiles, runtime/dev groups and hygiene checks.",
+    ),
+    (
+        "reports/insights/27_archive_plan.md",
+        "Archive plan: single ZIP or logical split parts before writing archive files.",
+    ),
+    (
+        "reports/insights/28_export_plan.md",
+        "Pre-copy export plan: included/excluded files, warnings, large files and selected size.",
+    ),
+    (
+        "reports/insights/29_export_comparison_report.md",
+        "Incremental export comparison against the previous successful baseline.",
+    ),
+    (
+        "reports/insights/REPORT_DASHBOARD.html",
+        "Local HTML dashboard for navigating project health, security and export reports.",
+    ),
+    (
+        "reports/insights/06_security_scan.json",
+        "Machine-readable security findings JSON.",
+    ),
+    (
+        "reports/insights/06_security_scan.sarif",
+        "SARIF security findings for code-review/security tooling.",
     ),
     (
         "reports/insights/AI_CONTEXT/",

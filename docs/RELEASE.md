@@ -1,23 +1,38 @@
-# Release process
+# Release Process
 
-1. Create a task branch.
-2. Run static compilation:
-
-```powershell
-python -m compileall src tests
-```
-
-3. Run tests:
+## Before release
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m unittest discover -s tests
+python -m compileall -q src tests
+python -m unittest discover -s tests -v
 ```
 
-4. Smoke-test the GUI on Windows 11.
-5. Export a small test project using `safe`, `balanced`, `full` and `Codex Package` modes.
-6. Verify that `.env`, private keys and `node_modules` are handled correctly.
-7. Verify archive splitting with a temporary low ZIP limit.
-8. Update README/docs if behaviour changed.
-9. Merge into `main` only after checks pass.
-10. Tag the version and keep the previous ZIP release available for rollback.
+## Optional Windows EXE build
+
+```powershell
+build_windows_exe.bat
+```
+
+The output executable is created under `dist\ProjectExporterDesktop.exe`.
+
+## Manual smoke test
+
+1. Run `python main.py`.
+2. Select a small test project.
+3. Keep Safe Export enabled.
+4. Click **Создать экспорт**.
+5. Confirm the Export Plan.
+6. Open the result from Desktop.
+7. Check these generated files:
+   - `INDEX.md`
+   - `manifest.json`
+   - `reports/insights/REPORT_DASHBOARD.html`
+   - `reports/insights/28_export_plan.md`
+   - `reports/insights/27_archive_plan.md`
+   - `reports/insights/06_security_scan.json`
+8. Repeat once with Incremental Export enabled to verify `29_export_comparison_report.md`.
+
+## Rollback
+
+This is a local application. To rollback, keep the previous ZIP/source folder or reinstall the previous EXE. User settings live in the home folder and can be reset from the UI.

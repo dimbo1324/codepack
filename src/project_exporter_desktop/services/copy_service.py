@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..models import CopyStats
 from ..utils.path_utils import rel_display, should_ignore_dir
+from .export_ignore import ExportIgnoreRules
 from .export_policy import should_skip_file_for_safety
 
 
@@ -19,6 +20,8 @@ def copy_project(
     cancel: threading.Event,
     safe_export_mode: str = "safe",
     include_relative_paths: frozenset[str] | None = None,
+    export_rules: ExportIgnoreRules | None = None,
+    progress: Callable[[int, str, str], None] | None = None,
 ) -> CopyStats:
     stats = CopyStats()
     destination_root.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +64,17 @@ def copy_project(
                 if not any(path == rel_dir or path.startswith(prefix) for path in include_relative_paths):
                     continue
 
+            if export_rules is not None:
+                try:
+                    relative_dir = child.relative_to(source_root)
+                except ValueError:
+                    relative_dir = Path(dirname)
+                skip_by_rule, reason = export_rules.should_skip_dir(relative_dir)
+                if skip_by_rule:
+                    stats.dirs_skipped += 1
+                    log(f"Export rules: пропущена папка {rel_display(child, source_root)} ({reason})")
+                    continue
+
             safe_dirnames.append(dirname)
 
         dirnames[:] = safe_dirnames
@@ -99,6 +113,13 @@ def copy_project(
                 stats.files_skipped_by_diff += 1
                 continue
 
+            if export_rules is not None:
+                skip_by_rule, reason = export_rules.should_skip_file(relative_file)
+                if skip_by_rule:
+                    stats.files_skipped += 1
+                    log(f"Export rules: пропущен файл {rel_display(src_file, source_root)} ({reason})")
+                    continue
+
             safety = should_skip_file_for_safety(relative_file, safe_export_mode)
             if safety.skip:
                 stats.files_skipped += 1
@@ -116,6 +137,8 @@ def copy_project(
                 stats.files_copied += 1
                 if stats.files_copied % 250 == 0:
                     log(f"Скопировано файлов: {stats.files_copied:,}")
+                    if progress is not None:
+                        progress(20, "Copying files", rel_display(src_file, source_root))
             except Exception as exc:
                 stats.errors += 1
                 log(f"Ошибка копирования {rel_display(src_file, source_root)}: {exc}")

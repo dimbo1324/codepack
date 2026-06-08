@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import threading
 import traceback
@@ -20,6 +21,7 @@ from .dependencies import write_dependency_report
 from .dependency_intelligence import write_dependency_intelligence_report
 from .dependency_graph import write_dependency_graph_reports
 from .docker_report import write_docker_report
+from .dashboard import write_html_dashboard
 from .file_statistics import write_file_statistics_report
 from .frontend_backend import write_backend_report, write_frontend_report
 from .git_deep import write_git_deep_report
@@ -28,6 +30,7 @@ from .health_score import write_project_health_report
 from .key_files import write_key_files_report
 from .large_files import write_large_files_report
 from .metrics import write_code_metrics_report
+from .plugins import ReportPlugin, plugin_catalog
 from .project_profile import write_project_profile_json
 from .refactoring import write_refactoring_opportunities_report
 from .routes_report import write_routes_and_pages_report
@@ -241,25 +244,36 @@ def write_project_insight_reports(
         ),
     ]
 
-    for filename, job_profiles, writer in report_jobs:
+    plugins = [ReportPlugin(filename, job_profiles, writer) for filename, job_profiles, writer in report_jobs]
+    try:
+        (reports_dir / "REPORT_PLUGINS.json").write_text(
+            json.dumps(plugin_catalog(plugins), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+            newline="\n",
+        )
+    except Exception as exc:
+        log(f"Не удалось записать REPORT_PLUGINS.json: {exc}")
+
+    for plugin in plugins:
         if cancel.is_set():
             log("Создание расширенных отчётов остановлено пользователем.")
             break
-        if not _should_run(profile, job_profiles):
-            log(f"Пропущен отчёт по профилю {profile}: {filename}")
+        if not plugin.should_run(profile):
+            log(f"Пропущен отчёт по профилю {profile}: {plugin.filename}")
             continue
-        output_file = reports_dir / filename
-        log(f"Пишу отчёт: {filename}")
+        output_file = reports_dir / plugin.filename
+        log(f"Пишу отчёт: {plugin.filename}")
         try:
-            writer(output_file)
+            plugin.writer(output_file)
         except Exception as exc:
-            error_file = reports_dir / f"ERROR_{filename}.txt"
+            safe_filename = plugin.filename.replace("/", "_").replace("\\", "_")
+            error_file = reports_dir / f"ERROR_{safe_filename}.txt"
             error_file.write_text(
-                f"Failed to create {filename}\n\n{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
+                f"Failed to create {plugin.filename}\n\n{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
                 encoding="utf-8",
                 errors="replace",
             )
-            log(f"Ошибка создания {filename}: {exc}")
+            log(f"Ошибка создания {plugin.filename}: {exc}")
 
     if not cancel.is_set() and profile in {"full", "ai_review", "quick", "minimal"}:
         try:
@@ -286,5 +300,18 @@ def write_project_insight_reports(
                 errors="replace",
             )
             log(f"Ошибка создания AI_PROMPTS: {exc}")
+
+    if not cancel.is_set() and profile in {"full", "ai_review", "quick", "minimal", "security"}:
+        try:
+            log("Пишу REPORT_DASHBOARD.html")
+            write_html_dashboard(reports_dir, reports_dir / "REPORT_DASHBOARD.html")
+        except Exception as exc:
+            error_file = reports_dir / "ERROR_REPORT_DASHBOARD.txt"
+            error_file.write_text(
+                f"Failed to create REPORT_DASHBOARD.html\n\n{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}",
+                encoding="utf-8",
+                errors="replace",
+            )
+            log(f"Ошибка создания REPORT_DASHBOARD.html: {exc}")
 
     log("Расширенные аналитические отчёты готовы")

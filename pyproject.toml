@@ -1,6 +1,6 @@
 [project]
 name = "project-exporter-desktop"
-version = "4.0.0"
+version = "5.0.0"
 description = "Safe desktop project exporter for AI/Codex handoff and code review."
 requires-python = ">=3.11"
 dependencies = []

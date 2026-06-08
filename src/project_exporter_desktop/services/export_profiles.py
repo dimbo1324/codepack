@@ -21,6 +21,12 @@ ALLOWED_PROFILE_OVERRIDE_FIELDS = {
     "diff_export_mode",
     "diff_base_ref",
     "diff_target_ref",
+    "custom_excluded_files",
+    "custom_excluded_extensions",
+    "always_include_files",
+    "always_include_dirs",
+    "incremental_export_enabled",
+    "prompt_goals",
 }
 
 
