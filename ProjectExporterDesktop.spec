@@ -1,16 +1,35 @@
 # -*- mode: python ; coding: utf-8 -*-
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(SPECPATH).resolve()
+ENTRYPOINT = ROOT / "main.py"
+SRC = ROOT / "src"
+ICON = ROOT / "assets" / "ICO.ico"
+
+DATA_FILES = []
+if (ROOT / "assets").exists():
+    DATA_FILES.append((str(ROOT / "assets"), "assets"))
+if (SRC / "project_exporter_desktop" / "gui" / "styles").exists():
+    DATA_FILES.append(
+        (
+            str(SRC / "project_exporter_desktop" / "gui" / "styles"),
+            "project_exporter_desktop/gui/styles",
+        )
+    )
 
 
 a = Analysis(
-    ['C:\\Users\\Users\\AppData\\Local\\text_merger\\main.py'],
-    pathex=[],
+    [str(ENTRYPOINT)],
+    pathex=[str(SRC)],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=DATA_FILES,
+    hiddenimports=["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=["pytest", "unittest"],
     noarchive=False,
     optimize=0,
 )
@@ -22,11 +41,11 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ProjectExporterDesktop',
+    name="ProjectExporterDesktop",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -35,5 +54,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\Users\\AppData\\Local\\text_merger\\assets\\ICO.ico'],
+    icon=str(ICON) if ICON.exists() else None,
 )

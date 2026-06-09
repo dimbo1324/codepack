@@ -223,6 +223,25 @@ class ProjectExporter:
         )
         write_index_md(paths=paths, config=self.config, extra_ignored_dirs=ignored_for_walk)
 
+        def refresh_bundle_metadata(archive_result: ArchiveBuildResult | None) -> None:
+            try:
+                write_manifest(
+                    paths=paths,
+                    config=self.config,
+                    copy_stats=copy_stats,
+                    text_stats=text_stats,
+                    extra_ignored_dirs=ignored_for_walk,
+                    cancelled=cancelled,
+                    archive_result=archive_result,
+                    diff_selection=diff_selection,
+                )
+            except Exception as exc:
+                self.log(f"Не удалось обновить manifest: {exc}")
+            try:
+                write_html_dashboard(paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html")
+            except Exception as exc:
+                self.log(f"Не удалось обновить REPORT_DASHBOARD.html: {exc}")
+
         progress.step("Шаг 8/8: упаковка итогового ZIP / набора ZIP")
         self.archive_result = build_final_archives(
             paths=paths,
@@ -231,26 +250,10 @@ class ProjectExporter:
             cancel=self.cancel_event,
             part_limit_bytes=self.config.effective_zip_part_bytes(),
             progress=progress.update,
+            pre_archive_hook=refresh_bundle_metadata,
         )
 
-        try:
-            write_manifest(
-                paths=paths,
-                config=self.config,
-                copy_stats=copy_stats,
-                text_stats=text_stats,
-                extra_ignored_dirs=ignored_for_walk,
-                cancelled=cancelled,
-                archive_result=self.archive_result,
-                diff_selection=diff_selection,
-            )
-        except Exception as exc:
-            self.log(f"Не удалось обновить manifest после архивации: {exc}")
-
-        try:
-            write_html_dashboard(paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html")
-        except Exception as exc:
-            self.log(f"Не удалось обновить REPORT_DASHBOARD.html после архивации: {exc}")
+        refresh_bundle_metadata(self.archive_result)
 
         result_path = self.archive_result.primary_result if self.archive_result else paths.final_zip
         append_export_history(

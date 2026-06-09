@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "Project Exporter Desktop"
 
-APP_VERSION = "5.0"
+APP_VERSION = "5.1"
 
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
 

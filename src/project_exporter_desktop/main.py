@@ -1,23 +1,23 @@
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
+import sys
 
-from .constants import APP_NAME, APP_VERSION
-from .ui.app_window import App
+from .constants import APP_NAME
 
 
 def main() -> None:
-    root = tk.Tk()
-
     try:
-        style = ttk.Style()
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-    except Exception:
-        pass
+        from .gui.main_window import run_app
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.startswith("PySide6"):
+            raise SystemExit(
+                f"{APP_NAME} requires PySide6. Install dependencies with: "
+                "python -m pip install -r requirements.txt"
+            ) from exc
+        raise
 
-    app = App(root)
-    app._log(f"{APP_NAME} v{APP_VERSION} — готов к работе.")
-    app._log("Выберите корневую папку проекта и нажмите «Создать экспорт».")
-    root.mainloop()
+    raise SystemExit(run_app())
+
+
+if __name__ == "__main__":
+    main()

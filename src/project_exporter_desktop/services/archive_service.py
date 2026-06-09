@@ -283,6 +283,28 @@ def write_archive_plan_report(plan: ArchivePlan, output_file: Path) -> None:
             out.write(f'- Part {part.index:03d} `{part.group_hint}` — {part.file_count:,} files — {format_bytes(part.estimated_bytes)} — groups: {", ".join(part.groups)}\n')
 
 
+def _predicted_result_for_plan(paths: ExportPaths, plan: ArchivePlan) -> ArchiveBuildResult:
+    if not plan.split:
+        return ArchiveBuildResult(
+            archives=[paths.final_zip],
+            output_dir=None,
+            split=False,
+            file_count=plan.file_count,
+            skipped_project_files=plan.skipped_project_files,
+        )
+    archives = [
+        paths.archive_set_dir / f'{paths.bundle_name}_part_{part.index:03d}_{part.group_hint}.zip'
+        for part in plan.parts
+    ]
+    return ArchiveBuildResult(
+        archives=archives,
+        output_dir=paths.archive_set_dir,
+        split=True,
+        file_count=plan.file_count,
+        skipped_project_files=plan.skipped_project_files,
+    )
+
+
 def build_final_archives(
     paths: ExportPaths,
     include_project: bool,
@@ -290,6 +312,7 @@ def build_final_archives(
     cancel: threading.Event,
     part_limit_bytes: int = MAX_ARCHIVE_PART_BYTES,
     progress: Callable[[int, str, str], None] | None = None,
+    pre_archive_hook: Callable[[ArchiveBuildResult], None] | None = None,
 ) -> ArchiveBuildResult:
     """Create one ZIP or a logical archive set without first creating a huge ZIP.
 
@@ -319,6 +342,11 @@ def build_final_archives(
     except Exception as exc:
         log(f'Не удалось обновить REPORT_DASHBOARD.html перед архивацией: {exc}')
     plan = build_archive_plan(paths, include_project, part_limit_bytes)
+    if pre_archive_hook is not None and not cancel.is_set():
+        pre_archive_hook(_predicted_result_for_plan(paths, plan))
+        # Metadata files can change slightly when manifest/dashboard are refreshed.
+        # Rebuild the plan once more so the archive input list contains the latest files.
+        plan = build_archive_plan(paths, include_project, part_limit_bytes)
 
     if plan.skipped_project_files:
         log(f'Копия проекта исключена из ZIP по настройке ({plan.skipped_project_files:,} файлов)')
@@ -342,6 +370,11 @@ def build_final_archives(
             pass
         plan.split = True
         plan.parts = _plan_logical_parts(plan.entries, plan.target_bytes)
+        if pre_archive_hook is not None and not cancel.is_set():
+            pre_archive_hook(_predicted_result_for_plan(paths, plan))
+            plan = build_archive_plan(paths, include_project, part_limit_bytes)
+            plan.split = True
+            plan.parts = _plan_logical_parts(plan.entries, plan.target_bytes)
 
     paths.archive_set_dir.mkdir(parents=True, exist_ok=True)
     result = ArchiveBuildResult(archives=[], output_dir=paths.archive_set_dir, split=True, file_count=0, skipped_project_files=plan.skipped_project_files)

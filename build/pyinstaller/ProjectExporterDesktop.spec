@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-ROOT = Path(SPECPATH).resolve()
+ROOT = Path(SPECPATH).resolve().parents[1]
 ENTRYPOINT = ROOT / "main.py"
 SRC = ROOT / "src"
 ICON = ROOT / "assets" / "ICO.ico"
@@ -25,7 +25,11 @@ a = Analysis(
     pathex=[str(SRC)],
     binaries=[],
     datas=DATA_FILES,
-    hiddenimports=["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"],
+    hiddenimports=[
+        "PySide6.QtCore",
+        "PySide6.QtGui",
+        "PySide6.QtWidgets",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
