@@ -13,11 +13,33 @@ from .dependency_graph import collect_dependency_graph
 
 _IMPORT_RE = re.compile(r"\b(import|from|require\s*\(|include|using)\b")
 _CLASS_FUNC_RE = re.compile(r"\b(class|def|function|const|let|var|interface|type|struct|func)\b")
-_ENTRYPOINT_NAMES = {"main.py", "__main__.py", "app.py", "server.py", "manage.py", "main.tsx", "main.ts", "index.tsx", "index.ts", "main.go"}
-_CONFIG_NAMES = {"package.json", "pyproject.toml", "go.mod", "Cargo.toml", "docker-compose.yml", "docker-compose.yaml", "Dockerfile", "README.md"}
+_ENTRYPOINT_NAMES = {
+    "main.py",
+    "__main__.py",
+    "app.py",
+    "server.py",
+    "manage.py",
+    "main.tsx",
+    "main.ts",
+    "index.tsx",
+    "index.ts",
+    "main.go",
+}
+_CONFIG_NAMES = {
+    "package.json",
+    "pyproject.toml",
+    "go.mod",
+    "Cargo.toml",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "Dockerfile",
+    "README.md",
+}
 
 
-def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_per_file: int | None) -> tuple[int, list[str]]:
+def _score_file(
+    path: Path, root: Path, imported_by: Counter[Path], max_bytes_per_file: int | None
+) -> tuple[int, list[str]]:
     score = 0
     reasons: list[str] = []
     name = path.name
@@ -27,14 +49,19 @@ def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_pe
     if name in _ENTRYPOINT_NAMES:
         score += 40
         reasons.append("entrypoint/bootstrap filename")
-    if name in _CONFIG_NAMES or name.lower().startswith(("vite.config", "next.config", "eslint.config", "tailwind.config")):
+    if name in _CONFIG_NAMES or name.lower().startswith(
+        ("vite.config", "next.config", "eslint.config", "tailwind.config")
+    ):
         score += 25
         reasons.append("important configuration/build file")
     if imported_by[path]:
         boost = min(40, imported_by[path] * 8)
         score += boost
         reasons.append(f"imported by {imported_by[path]} internal file(s)")
-    if any(part in {"services", "api", "routes", "controllers", "stores", "domain", "core", "ui"} for part in rel_parts):
+    if any(
+        part in {"services", "api", "routes", "controllers", "stores", "domain", "core", "ui"}
+        for part in rel_parts
+    ):
         score += 12
         reasons.append("located in an architecturally important folder")
 
@@ -61,7 +88,9 @@ def _score_file(path: Path, root: Path, imported_by: Counter[Path], max_bytes_pe
     return score, reasons
 
 
-def write_key_files_report(copied_root: Path, output_file: Path, inventory: dict[str, Any], max_bytes_per_file: int | None) -> None:
+def write_key_files_report(
+    copied_root: Path, output_file: Path, inventory: dict[str, Any], max_bytes_per_file: int | None
+) -> None:
     graph = collect_dependency_graph(copied_root, max_bytes_per_file=max_bytes_per_file)
     imported_by: Counter[Path] = Counter()
     for targets in graph.values():
@@ -78,7 +107,9 @@ def write_key_files_report(copied_root: Path, output_file: Path, inventory: dict
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write(f"# Key Files Report: {copied_root.name}\n\n")
         out.write(f"Generated: {human_now()}\n\n")
-        out.write("This report ranks files by likely importance: entrypoints, configuration files, central imports, size, and architectural location.\n\n")
+        out.write(
+            "This report ranks files by likely importance: entrypoints, configuration files, central imports, size, and architectural location.\n\n"
+        )
         if scored:
             for score, path, reasons in scored[:80]:
                 out.write(f"## `{rel_display(path, copied_root)}`\n\n")

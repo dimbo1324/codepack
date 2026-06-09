@@ -83,7 +83,11 @@ def load_user_profiles() -> dict[str, dict[str, Any]]:
 def load_profile_catalog() -> dict[str, str]:
     catalog = dict(EXPORT_PROFILES)
     for key, profile in load_user_profiles().items():
-        label = profile.get("label") or profile.get("description") or f"Custom profile based on {profile.get('base_profile', 'full')}"
+        label = (
+            profile.get("label")
+            or profile.get("description")
+            or f"Custom profile based on {profile.get('base_profile', 'full')}"
+        )
         catalog[key] = str(label)
     return catalog
 

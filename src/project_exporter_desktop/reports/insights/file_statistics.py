@@ -9,6 +9,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import format_bytes
 from ...utils.time_utils import human_now
 
+
 def write_file_statistics_report(
     copied_root: Path, output_file: Path, inventory: dict[str, Any]
 ) -> None:
@@ -75,9 +76,7 @@ def write_file_statistics_report(
         out.write("\n--- Potential Windows long-path risks >= 240 characters ---\n")
         if long_paths:
             for path in long_paths[:100]:
-                out.write(
-                    f"{len(str(path)):>4} chars  {rel_display(path, copied_root)}\n"
-                )
+                out.write(f"{len(str(path)):>4} chars  {rel_display(path, copied_root)}\n")
             if len(long_paths) > 100:
                 out.write(f"... and {len(long_paths) - 100:,} more\n")
         else:

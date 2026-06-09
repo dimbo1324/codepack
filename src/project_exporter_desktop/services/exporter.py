@@ -9,9 +9,9 @@ from ..config import Config
 from ..constants import IGNORED_DIR_NAMES
 from ..models import ArchiveBuildResult, ExportPaths, TextDumpStats
 from ..reports.git_report import write_git_report
+from ..reports.insights.dashboard import write_html_dashboard
 from ..reports.insights.orchestrator import write_project_insight_reports
 from ..reports.metadata import write_index_md, write_manifest
-from ..reports.insights.dashboard import write_html_dashboard
 from ..reports.structure_report import write_structure_report
 from ..reports.text_dump_report import write_text_dump
 from ..utils.path_utils import build_export_paths
@@ -23,7 +23,11 @@ from .export_history import append_export_history
 from .export_ignore import ExportIgnoreRules
 from .export_plan import build_export_plan, write_export_plan_files
 from .git_diff import resolve_diff_selection
-from .incremental import resolve_incremental_selection, save_incremental_baseline, write_export_diff_report
+from .incremental import (
+    resolve_incremental_selection,
+    save_incremental_baseline,
+    write_export_diff_report,
+)
 from .progress import ProgressReporter
 from .prompt_builder import write_custom_prompt
 
@@ -48,7 +52,9 @@ class ProjectExporter:
     def run(self) -> ExportPaths:
         paths = build_export_paths(self.source_root)
         progress = ProgressReporter(self.log, total_steps=8)
-        extra_ignored = self.config.effective_ignored_dirs() - {name.casefold() for name in IGNORED_DIR_NAMES}
+        extra_ignored = self.config.effective_ignored_dirs() - {
+            name.casefold() for name in IGNORED_DIR_NAMES
+        }
         ignored_for_walk = self.config.effective_ignored_dirs()
         max_bytes = self.config.effective_max_text_file_bytes()
         cancelled = False
@@ -117,8 +123,14 @@ class ProjectExporter:
             incremental_selection=incremental_selection,
             export_rules=export_rules,
         )
-        write_export_plan_files(export_plan, paths.insights_dir / "28_export_plan.json", paths.insights_dir / "28_export_plan.md")
-        write_export_diff_report(paths.insights_dir / "29_export_comparison_report.md", incremental_selection)
+        write_export_plan_files(
+            export_plan,
+            paths.insights_dir / "28_export_plan.json",
+            paths.insights_dir / "28_export_plan.md",
+        )
+        write_export_diff_report(
+            paths.insights_dir / "29_export_comparison_report.md", incremental_selection
+        )
         self.log(
             "План экспорта: "
             f"included={export_plan.included_count:,}, excluded={export_plan.excluded_count:,}, "
@@ -205,7 +217,11 @@ class ProjectExporter:
                 export_profile=self.config.normalized_export_profile(),
             )
             try:
-                write_custom_prompt(paths.insights_dir / "AI_PROMPTS" / "CUSTOM_PROMPT.md", paths.project_name, self.config.prompt_goals)
+                write_custom_prompt(
+                    paths.insights_dir / "AI_PROMPTS" / "CUSTOM_PROMPT.md",
+                    paths.project_name,
+                    self.config.prompt_goals,
+                )
             except Exception as exc:
                 self.log(f"Не удалось создать CUSTOM_PROMPT.md: {exc}")
 
@@ -238,7 +254,9 @@ class ProjectExporter:
             except Exception as exc:
                 self.log(f"Не удалось обновить manifest: {exc}")
             try:
-                write_html_dashboard(paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html")
+                write_html_dashboard(
+                    paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html"
+                )
             except Exception as exc:
                 self.log(f"Не удалось обновить REPORT_DASHBOARD.html: {exc}")
 
@@ -267,7 +285,10 @@ class ProjectExporter:
                 "incremental_export_enabled": self.config.incremental_export_enabled,
                 "result": str(result_path) if result_path else "",
                 "split_archives": bool(self.archive_result and self.archive_result.split),
-                "archives": [str(path) for path in (self.archive_result.archives if self.archive_result else [])],
+                "archives": [
+                    str(path)
+                    for path in (self.archive_result.archives if self.archive_result else [])
+                ],
                 "copy_stats": {
                     "files_copied": copy_stats.files_copied,
                     "files_skipped_by_safety": copy_stats.files_skipped_by_safety,
@@ -288,7 +309,9 @@ class ProjectExporter:
                 self.log(f"Не удалось удалить staging-папку: {exc}")
 
         if cancelled:
-            self.log("Готово (с прерыванием). Итоговый результат содержит то, что успело собраться.")
+            self.log(
+                "Готово (с прерыванием). Итоговый результат содержит то, что успело собраться."
+            )
         else:
             progress.done("Готово")
             self.log(f"Готово. Итоговый результат: {result_path}")

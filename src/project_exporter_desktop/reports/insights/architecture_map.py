@@ -14,7 +14,12 @@ def _layer_for_path(path: Path) -> str:
     suffix = extension_key(path)
     if name in {"main.py", "__main__.py", "app.py", "manage.py"} or name.startswith("vite.config"):
         return "entrypoints"
-    if "ui" in parts or "components" in parts or "pages" in parts or suffix in {"html", "css", "scss", "tsx", "jsx", "vue", "svelte"}:
+    if (
+        "ui" in parts
+        or "components" in parts
+        or "pages" in parts
+        or suffix in {"html", "css", "scss", "tsx", "jsx", "vue", "svelte"}
+    ):
         return "interface"
     if "services" in parts or "service" in parts or "usecases" in parts:
         return "business_services"
@@ -33,7 +38,9 @@ def _layer_for_path(path: Path) -> str:
     return "other"
 
 
-def write_architecture_map_report(copied_root: Path, output_file: Path, inventory: dict[str, Any]) -> None:
+def write_architecture_map_report(
+    copied_root: Path, output_file: Path, inventory: dict[str, Any]
+) -> None:
     layers: dict[str, list[Path]] = defaultdict(list)
     for path in inventory.get("files", []):
         layers[_layer_for_path(path)].append(path)

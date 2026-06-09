@@ -17,18 +17,18 @@ class ReportPlugin:
     filename: str
     profiles: set[str]
     writer: Callable[[Path], None]
-    description: str = ''
+    description: str = ""
 
     def should_run(self, profile: str) -> bool:
-        return profile == 'full' or profile in self.profiles
+        return profile == "full" or profile in self.profiles
 
 
 def plugin_catalog(plugins: list[ReportPlugin]) -> list[dict[str, object]]:
     return [
         {
-            'filename': plugin.filename,
-            'profiles': sorted(plugin.profiles),
-            'description': plugin.description,
+            "filename": plugin.filename,
+            "profiles": sorted(plugin.profiles),
+            "description": plugin.description,
         }
         for plugin in plugins
     ]

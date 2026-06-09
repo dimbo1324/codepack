@@ -15,7 +15,9 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n", errors="replace")
 
 
-def write_ai_context_folder(copied_root: Path, source_root: Path, output_dir: Path, inventory: dict[str, Any]) -> None:
+def write_ai_context_folder(
+    copied_root: Path, source_root: Path, output_dir: Path, inventory: dict[str, Any]
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     profile = build_project_profile(copied_root, source_root, inventory)
     configs = find_config_files(copied_root)
@@ -45,7 +47,8 @@ def write_ai_context_folder(copied_root: Path, source_root: Path, output_dir: Pa
                 "",
                 *(f"- {item}" for item in profile["risk_reasons"]),
             ]
-        ) + "\n",
+        )
+        + "\n",
     )
 
     _write(
@@ -65,7 +68,9 @@ def write_ai_context_folder(copied_root: Path, source_root: Path, output_dir: Pa
 
     entry_lines = ["# Entrypoints", ""]
     for entry in profile["entrypoints"] or ["No obvious entrypoint detected."]:
-        entry_lines.append(f"- `{entry}`" if entry != "No obvious entrypoint detected." else f"- {entry}")
+        entry_lines.append(
+            f"- `{entry}`" if entry != "No obvious entrypoint detected." else f"- {entry}"
+        )
     _write(output_dir / "03_ENTRYPOINTS.md", "\n".join(entry_lines) + "\n")
 
     key_lines = ["# Key Files Reading Order", ""]

@@ -86,12 +86,18 @@ class RulesDialog(QDialog):
         fields = [
             ("Exclude files / glob patterns", self.excluded_files, excluded_files),
             ("Exclude extensions", self.excluded_extensions, excluded_extensions),
-            ("Always include files / glob patterns", self.always_include_files, always_include_files),
+            (
+                "Always include files / glob patterns",
+                self.always_include_files,
+                always_include_files,
+            ),
             ("Always include directories", self.always_include_dirs, always_include_dirs),
         ]
 
         layout = QVBoxLayout(self)
-        intro = QLabel("Enter one item per line or comma-separated. Safe Export can still block risky files.")
+        intro = QLabel(
+            "Enter one item per line or comma-separated. Safe Export can still block risky files."
+        )
         intro.setObjectName("PageHint")
         layout.addWidget(intro)
 

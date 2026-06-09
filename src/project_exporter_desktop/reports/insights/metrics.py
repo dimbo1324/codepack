@@ -10,6 +10,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely
 from ...utils.time_utils import human_now
 
+
 def comment_like_line(stripped: str, suffix: str) -> bool:
     if not stripped:
         return False
@@ -19,6 +20,7 @@ def comment_like_line(stripped: str, suffix: str) -> bool:
     if suffix in {"sql"} and stripped.startswith("--"):
         return True
     return False
+
 
 def write_code_metrics_report(
     copied_root: Path, output_file: Path, max_bytes_per_file: int | None
@@ -63,9 +65,7 @@ def write_code_metrics_report(
         totals["comments"] += comments
         totals["code"] += code
 
-    largest_by_lines = sorted(per_file, key=lambda item: item["lines"], reverse=True)[
-        :50
-    ]
+    largest_by_lines = sorted(per_file, key=lambda item: item["lines"], reverse=True)[:50]
     over_500 = [item for item in per_file if item["lines"] >= 500]
     over_1000 = [item for item in per_file if item["lines"] >= 1000]
     by_ext: dict[str, Counter[str]] = defaultdict(Counter)
@@ -95,9 +95,7 @@ def write_code_metrics_report(
 
         out.write("\n--- Metrics by extension ---\n")
         out.write(f"{'Ext':<16} {'Files':>8} {'Lines':>12} {'Code':>12}\n")
-        for ext, counter in sorted(
-            by_ext.items(), key=lambda item: item[1]["lines"], reverse=True
-        ):
+        for ext, counter in sorted(by_ext.items(), key=lambda item: item[1]["lines"], reverse=True):
             out.write(
                 f"{ext:<16} {counter['files']:>8,} {counter['lines']:>12,} {counter['code']:>12,}\n"
             )
@@ -111,8 +109,6 @@ def write_code_metrics_report(
         out.write("\n--- Files >= 500 lines ---\n")
         if over_500:
             for item in sorted(over_500, key=lambda x: x["lines"], reverse=True):
-                out.write(
-                    f"{item['lines']:>8,} lines  {rel_display(item['path'], copied_root)}\n"
-                )
+                out.write(f"{item['lines']:>8,} lines  {rel_display(item['path'], copied_root)}\n")
         else:
             out.write("None detected.\n")

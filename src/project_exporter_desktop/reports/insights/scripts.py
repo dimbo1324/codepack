@@ -6,6 +6,7 @@ from pathlib import Path
 from ...utils.text_utils import safe_read_json
 from ...utils.time_utils import human_now
 
+
 def write_scripts_report(copied_root: Path, output_file: Path) -> None:
     package_json = safe_read_json(copied_root / "package.json")
 
@@ -18,28 +19,20 @@ def write_scripts_report(copied_root: Path, output_file: Path) -> None:
         out.write("--- package.json scripts ---\n")
         if isinstance(scripts, dict) and scripts:
             manager = "pnpm" if (copied_root / "pnpm-lock.yaml").exists() else "npm"
-            for name, command in sorted(
-                scripts.items(), key=lambda item: item[0].lower()
-            ):
+            for name, command in sorted(scripts.items(), key=lambda item: item[0].lower()):
                 out.write(f"{manager} run {name:<24} # {command}\n")
         else:
             out.write("No package.json scripts detected.\n")
 
         out.write("\n--- Makefile targets ---\n")
         makefile = next(
-            (
-                p
-                for p in (copied_root / "Makefile", copied_root / "makefile")
-                if p.exists()
-            ),
+            (p for p in (copied_root / "Makefile", copied_root / "makefile") if p.exists()),
             None,
         )
         if makefile:
             try:
                 targets = []
-                for line in makefile.read_text(
-                    encoding="utf-8", errors="replace"
-                ).splitlines():
+                for line in makefile.read_text(encoding="utf-8", errors="replace").splitlines():
                     match = re.match(r"^([A-Za-z0-9_.-]+):(?:\s|$)", line)
                     if match and not line.startswith("\t"):
                         targets.append(match.group(1))

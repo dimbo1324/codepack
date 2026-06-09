@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from ..constants import SETTINGS_FILE
@@ -12,7 +11,9 @@ MAX_HISTORY_ITEMS = 50
 
 def append_export_history(entry: dict[str, Any]) -> None:
     try:
-        history = json.loads(HISTORY_FILE.read_text(encoding="utf-8")) if HISTORY_FILE.exists() else []
+        history = (
+            json.loads(HISTORY_FILE.read_text(encoding="utf-8")) if HISTORY_FILE.exists() else []
+        )
         if not isinstance(history, list):
             history = []
         history.insert(0, entry)

@@ -18,7 +18,7 @@ from ..services.incremental import resolve_incremental_selection
 class QtLogQueue:
     """Queue-compatible adapter used by core services inside a Qt worker thread."""
 
-    def __init__(self, worker: "ExportWorker") -> None:
+    def __init__(self, worker: ExportWorker) -> None:
         self.worker = worker
 
     def put(self, message: str) -> None:

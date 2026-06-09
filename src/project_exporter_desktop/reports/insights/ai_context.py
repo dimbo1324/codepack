@@ -9,6 +9,7 @@ from ...utils.text_utils import format_bytes, safe_read_json
 from ...utils.time_utils import human_now
 from .config_report import find_config_files
 
+
 def write_ai_context_pack(
     copied_root: Path, source_root: Path, output_file: Path, inventory: dict[str, Any]
 ) -> None:
@@ -37,9 +38,7 @@ def write_ai_context_pack(
 
         out.write("\n## Detected stack\n\n")
         for group, values in stack.items():
-            out.write(
-                f"- **{group}**: {', '.join(values) if values else 'not detected'}\n"
-            )
+            out.write(f"- **{group}**: {', '.join(values) if values else 'not detected'}\n")
 
         out.write("\n## Main languages\n\n")
         if language_count:
@@ -51,9 +50,7 @@ def write_ai_context_pack(
         out.write("\n## Scripts / commands\n\n")
         if isinstance(scripts, dict) and scripts:
             manager = "pnpm" if (copied_root / "pnpm-lock.yaml").exists() else "npm"
-            for name, command in sorted(
-                scripts.items(), key=lambda item: item[0].lower()
-            ):
+            for name, command in sorted(scripts.items(), key=lambda item: item[0].lower()):
                 out.write(f"- `{manager} run {name}` — `{command}`\n")
         else:
             out.write("- No package.json scripts detected.\n")

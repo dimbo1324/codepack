@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 from ...utils.inventory import extension_key, iter_project_files
@@ -11,7 +11,9 @@ from ...utils.text_utils import read_text_safely, should_consider_text_file
 from ...utils.time_utils import human_now
 
 _SOURCE_EXTS = {"py", "js", "jsx", "ts", "tsx", "mjs", "cjs", "vue", "svelte", "astro", "go"}
-_JS_IMPORT_RE = re.compile(r"(?:from\s+['\"]([^'\"]+)['\"]|import\s*\(\s*['\"]([^'\"]+)['\"]\s*\)|require\s*\(\s*['\"]([^'\"]+)['\"]\s*\))")
+_JS_IMPORT_RE = re.compile(
+    r"(?:from\s+['\"]([^'\"]+)['\"]|import\s*\(\s*['\"]([^'\"]+)['\"]\s*\)|require\s*\(\s*['\"]([^'\"]+)['\"]\s*\))"
+)
 _GO_IMPORT_RE = re.compile(r"^\s*(?:import\s+)?[\"`]([^\"`]+)[\"`]", re.MULTILINE)
 
 
@@ -23,7 +25,9 @@ def _module_name(path: Path, root: Path) -> str:
     return ".".join(parts)
 
 
-def _resolve_python_import(current: Path, root: Path, module: str | None, level: int = 0) -> Path | None:
+def _resolve_python_import(
+    current: Path, root: Path, module: str | None, level: int = 0
+) -> Path | None:
     base = current.parent
     if level:
         for _ in range(max(0, level - 1)):
@@ -52,7 +56,19 @@ def _resolve_relative_import(current: Path, specifier: str, root: Path) -> Path 
         candidate.relative_to(root.resolve())
     except ValueError:
         return None
-    extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte", ".astro", ".json"]
+    extensions = [
+        "",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".vue",
+        ".svelte",
+        ".astro",
+        ".json",
+    ]
     for ext in extensions:
         path = candidate if ext == "" else Path(str(candidate) + ext)
         if path.exists() and path.is_file():
@@ -83,7 +99,9 @@ def _python_edges(path: Path, root: Path) -> set[Path]:
     return edges
 
 
-def collect_dependency_graph(root: Path, max_bytes_per_file: int | None = 1_000_000) -> dict[Path, set[Path]]:
+def collect_dependency_graph(
+    root: Path, max_bytes_per_file: int | None = 1_000_000
+) -> dict[Path, set[Path]]:
     files = [path for path in iter_project_files(root) if extension_key(path) in _SOURCE_EXTS]
     graph: dict[Path, set[Path]] = {path: set() for path in files}
 
@@ -119,7 +137,9 @@ def collect_dependency_graph(root: Path, max_bytes_per_file: int | None = 1_000_
                         for go_file in candidate.glob("*.go"):
                             graph[path].add(go_file)
                             break
-    return {path: {target for target in targets if target.exists()} for path, targets in graph.items()}
+    return {
+        path: {target for target in targets if target.exists()} for path, targets in graph.items()
+    }
 
 
 def _node_id(path: Path, root: Path) -> str:
@@ -127,7 +147,9 @@ def _node_id(path: Path, root: Path) -> str:
     return re.sub(r"[^A-Za-z0-9_]", "_", rel)
 
 
-def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid_file: Path, max_bytes_per_file: int | None) -> None:
+def write_dependency_graph_reports(
+    copied_root: Path, output_file: Path, mermaid_file: Path, max_bytes_per_file: int | None
+) -> None:
     graph = collect_dependency_graph(copied_root, max_bytes_per_file=max_bytes_per_file)
     in_degree: Counter[Path] = Counter()
     for targets in graph.values():
@@ -138,7 +160,9 @@ def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid
 
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write(f"# Dependency Graph\n\nGenerated: {human_now()}\n\n")
-        out.write("This report maps internal imports/references using static heuristics. It is intentionally dependency-free and may not resolve every alias.\n\n")
+        out.write(
+            "This report maps internal imports/references using static heuristics. It is intentionally dependency-free and may not resolve every alias.\n\n"
+        )
         out.write(f"- Files in graph: **{len(graph):,}**\n")
         out.write(f"- Internal edges: **{edge_count:,}**\n\n")
 
@@ -151,7 +175,9 @@ def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid
 
         out.write("\n## Internal import edges\n\n")
         emitted = 0
-        for source, targets in sorted(graph.items(), key=lambda item: rel_display(item[0], copied_root).lower()):
+        for source, targets in sorted(
+            graph.items(), key=lambda item: rel_display(item[0], copied_root).lower()
+        ):
             if not targets:
                 continue
             out.write(f"### `{rel_display(source, copied_root)}`\n\n")
@@ -168,12 +194,16 @@ def write_dependency_graph_reports(copied_root: Path, output_file: Path, mermaid
     with mermaid_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write("graph TD\n")
         emitted = 0
-        for source, targets in sorted(graph.items(), key=lambda item: rel_display(item[0], copied_root).lower()):
+        for source, targets in sorted(
+            graph.items(), key=lambda item: rel_display(item[0], copied_root).lower()
+        ):
             for target in sorted(targets, key=lambda p: rel_display(p, copied_root).lower()):
-                out.write(f"  {_node_id(source, copied_root)}[\"{rel_display(source, copied_root)}\"] --> {_node_id(target, copied_root)}[\"{rel_display(target, copied_root)}\"]\n")
+                out.write(
+                    f'  {_node_id(source, copied_root)}["{rel_display(source, copied_root)}"] --> {_node_id(target, copied_root)}["{rel_display(target, copied_root)}"]\n'
+                )
                 emitted += 1
                 if emitted >= 250:
                     out.write("  %% Mermaid output truncated after 250 edges.\n")
                     return
         if emitted == 0:
-            out.write(f"  root[\"{copied_root.name}\"]\n")
+            out.write(f'  root["{copied_root.name}"]\n')

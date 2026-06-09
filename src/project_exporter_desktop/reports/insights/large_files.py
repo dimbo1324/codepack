@@ -8,7 +8,9 @@ from ...utils.text_utils import format_bytes
 from ...utils.time_utils import human_now
 
 
-def write_large_files_report(copied_root: Path, output_file: Path, inventory: dict[str, Any]) -> None:
+def write_large_files_report(
+    copied_root: Path, output_file: Path, inventory: dict[str, Any]
+) -> None:
     sizes: list[tuple[Path, int]] = list(inventory.get("sizes", []))
     folder_sizes: Counter[Path] = Counter()
     for path, size in sizes:
@@ -38,6 +40,12 @@ def write_large_files_report(copied_root: Path, output_file: Path, inventory: di
             out.write(f"- `{folder}` — {format_bytes(size)}\n")
 
         out.write("\n## Archive-size guidance\n\n")
-        out.write("- Safe Export mode removes common local databases, archives and credentials before packaging.\n")
-        out.write("- If the single ZIP exceeds the configured limit, archives are split by logical groups.\n")
-        out.write("- Very large individual files should normally be excluded from AI/code-review exports.\n")
+        out.write(
+            "- Safe Export mode removes common local databases, archives and credentials before packaging.\n"
+        )
+        out.write(
+            "- If the single ZIP exceeds the configured limit, archives are split by logical groups.\n"
+        )
+        out.write(
+            "- Very large individual files should normally be excluded from AI/code-review exports.\n"
+        )

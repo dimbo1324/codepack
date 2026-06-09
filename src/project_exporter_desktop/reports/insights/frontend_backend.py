@@ -8,13 +8,17 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely, safe_read_json, should_consider_text_file
 from ...utils.time_utils import human_now
 
-_COMPONENT_RE = re.compile(r"\b(?:export\s+default\s+)?function\s+([A-Z][A-Za-z0-9_]*)|\bconst\s+([A-Z][A-Za-z0-9_]*)\s*=\s*(?:\(|React\.)")
+_COMPONENT_RE = re.compile(
+    r"\b(?:export\s+default\s+)?function\s+([A-Z][A-Za-z0-9_]*)|\bconst\s+([A-Z][A-Za-z0-9_]*)\s*=\s*(?:\(|React\.)"
+)
 _HOOK_RE = re.compile(r"\bfunction\s+(use[A-Z][A-Za-z0-9_]*)|\bconst\s+(use[A-Z][A-Za-z0-9_]*)\s*=")
 _PY_CLASS_RE = re.compile(r"^class\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
 _PY_FUNC_RE = re.compile(r"^def\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
 
 
-def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
+def write_frontend_report(
+    copied_root: Path, output_file: Path, max_bytes_per_file: int | None
+) -> None:
     package_json = safe_read_json(copied_root / "package.json")
     deps = {}
     for section in ("dependencies", "devDependencies"):
@@ -22,7 +26,14 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
         if isinstance(value, dict):
             deps.update(value)
 
-    dirs_by_role: dict[str, list[Path]] = {"pages": [], "routes": [], "components": [], "hooks": [], "stores": [], "styles": []}
+    dirs_by_role: dict[str, list[Path]] = {
+        "pages": [],
+        "routes": [],
+        "components": [],
+        "hooks": [],
+        "stores": [],
+        "styles": [],
+    }
     for directory in iter_project_dirs(copied_root):
         parts = {part.lower() for part in directory.relative_to(copied_root).parts}
         for key in dirs_by_role:
@@ -40,7 +51,12 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
         rel_lower = str(path.relative_to(copied_root)).lower().replace("\\", "/")
         if ext not in {"js", "jsx", "ts", "tsx", "vue", "svelte", "astro"}:
             continue
-        if "route" in rel_lower or "router" in rel_lower or "/pages/" in rel_lower or path.name.lower().startswith("page."):
+        if (
+            "route" in rel_lower
+            or "router" in rel_lower
+            or "/pages/" in rel_lower
+            or path.name.lower().startswith("page.")
+        ):
             route_files.append(path)
         if any(token in rel_lower for token in ("store", "zustand", "redux", "state")):
             state_files.append(path)
@@ -63,7 +79,21 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write(f"# Frontend Report\n\nGenerated: {human_now()}\n\n")
         out.write("## Frontend libraries detected from package.json\n\n")
-        interesting = ["react", "vue", "svelte", "@tanstack/react-router", "@tanstack/react-query", "react-hook-form", "zod", "zustand", "redux", "tailwindcss", "framer-motion", "recharts", "echarts"]
+        interesting = [
+            "react",
+            "vue",
+            "svelte",
+            "@tanstack/react-router",
+            "@tanstack/react-query",
+            "react-hook-form",
+            "zod",
+            "zustand",
+            "redux",
+            "tailwindcss",
+            "framer-motion",
+            "recharts",
+            "echarts",
+        ]
         detected = [name for name in interesting if name in deps]
         if detected:
             for name in detected:
@@ -81,7 +111,11 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
                 out.write("- not detected\n")
             out.write("\n")
 
-        groups = (("Route/page files", route_files), ("State/store files", state_files), ("Form/schema files", form_files))
+        groups = (
+            ("Route/page files", route_files),
+            ("State/store files", state_files),
+            ("Form/schema files", form_files),
+        )
         for title, paths in groups:
             out.write(f"## {title}\n\n")
             if paths:
@@ -93,25 +127,41 @@ def write_frontend_report(copied_root: Path, output_file: Path, max_bytes_per_fi
 
         out.write("## Component candidates\n\n")
         if components:
-            for path, name in sorted(set(components), key=lambda item: (item[1].lower(), str(item[0]).lower()))[:200]:
+            for path, name in sorted(
+                set(components), key=lambda item: (item[1].lower(), str(item[0]).lower())
+            )[:200]:
                 out.write(f"- `{name}` — `{rel_display(path, copied_root)}`\n")
         else:
             out.write("- none detected\n")
 
         out.write("\n## Hook candidates\n\n")
         if hooks:
-            for path, name in sorted(set(hooks), key=lambda item: (item[1].lower(), str(item[0]).lower()))[:200]:
+            for path, name in sorted(
+                set(hooks), key=lambda item: (item[1].lower(), str(item[0]).lower())
+            )[:200]:
                 out.write(f"- `{name}` — `{rel_display(path, copied_root)}`\n")
         else:
             out.write("- none detected\n")
 
 
-def write_backend_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
-    backend_dirs: dict[str, list[Path]] = {"api": [], "services": [], "models": [], "repositories": [], "migrations": [], "workers": [], "config": []}
+def write_backend_report(
+    copied_root: Path, output_file: Path, max_bytes_per_file: int | None
+) -> None:
+    backend_dirs: dict[str, list[Path]] = {
+        "api": [],
+        "services": [],
+        "models": [],
+        "repositories": [],
+        "migrations": [],
+        "workers": [],
+        "config": [],
+    }
     for directory in iter_project_dirs(copied_root):
         parts = {part.lower() for part in directory.relative_to(copied_root).parts}
         for key in backend_dirs:
-            if key in parts or (key == "workers" and {"tasks", "jobs", "worker"}.intersection(parts)):
+            if key in parts or (
+                key == "workers" and {"tasks", "jobs", "worker"}.intersection(parts)
+            ):
                 backend_dirs[key].append(directory)
 
     py_symbols: list[tuple[Path, str, str]] = []
@@ -149,7 +199,11 @@ def write_backend_report(copied_root: Path, output_file: Path, max_bytes_per_fil
                 out.write("- not detected\n")
             out.write("\n")
 
-        groups = (("Go files", go_files), ("Database/migration files", db_files), ("Config/settings files", config_files))
+        groups = (
+            ("Go files", go_files),
+            ("Database/migration files", db_files),
+            ("Config/settings files", config_files),
+        )
         for title, paths in groups:
             out.write(f"## {title}\n\n")
             if paths:
@@ -161,7 +215,9 @@ def write_backend_report(copied_root: Path, output_file: Path, max_bytes_per_fil
 
         out.write("## Python class/function candidates\n\n")
         if py_symbols:
-            for path, kind, name in sorted(set(py_symbols), key=lambda item: (str(item[0]).lower(), item[2].lower()))[:250]:
+            for path, kind, name in sorted(
+                set(py_symbols), key=lambda item: (str(item[0]).lower(), item[2].lower())
+            )[:250]:
                 out.write(f"- `{kind} {name}` — `{rel_display(path, copied_root)}`\n")
         else:
             out.write("- none detected\n")

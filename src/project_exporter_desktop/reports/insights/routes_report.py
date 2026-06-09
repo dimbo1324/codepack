@@ -7,6 +7,7 @@ from ...utils.inventory import extension_key, iter_project_dirs, iter_project_fi
 from ...utils.path_utils import rel_display
 from ...utils.time_utils import human_now
 
+
 def write_routes_and_pages_report(copied_root: Path, output_file: Path) -> None:
     interesting_dirs = {
         "pages": [],
@@ -19,9 +20,7 @@ def write_routes_and_pages_report(copied_root: Path, output_file: Path) -> None:
     }
 
     for directory in iter_project_dirs(copied_root):
-        lower_parts = [
-            part.lower() for part in directory.relative_to(copied_root).parts
-        ]
+        lower_parts = [part.lower() for part in directory.relative_to(copied_root).parts]
         for key in interesting_dirs:
             if key in lower_parts:
                 interesting_dirs[key].append(directory)
@@ -36,11 +35,7 @@ def write_routes_and_pages_report(copied_root: Path, output_file: Path) -> None:
         suffix = extension_key(path)
         if suffix not in {"ts", "tsx", "js", "jsx", "vue", "svelte", "astro"}:
             continue
-        if (
-            "routes" in rel_parts
-            or "router" in path.name.lower()
-            or "route" in path.name.lower()
-        ):
+        if "routes" in rel_parts or "router" in path.name.lower() or "route" in path.name.lower():
             route_like_files.append(path)
         if "components" in rel_parts or re.match(
             r"^[A-Z].*\.(tsx|jsx|vue|svelte|astro)$", path.name

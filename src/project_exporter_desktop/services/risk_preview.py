@@ -11,7 +11,19 @@ from .export_policy import classify_sensitive_file
 from .git_diff import DiffSelection
 
 _ARCHIVE_OR_DUMP_SUFFIXES = {
-    "zip", "rar", "7z", "tar", "gz", "xz", "bz2", "db", "sqlite", "sqlite3", "dump", "bak", "backup"
+    "zip",
+    "rar",
+    "7z",
+    "tar",
+    "gz",
+    "xz",
+    "bz2",
+    "db",
+    "sqlite",
+    "sqlite3",
+    "dump",
+    "bak",
+    "backup",
 }
 
 
@@ -63,18 +75,30 @@ def build_pre_export_risk_preview(
             safety = classify_sensitive_file(rel)
             if safety.skip and len(report.sensitive_files) < 100:
                 report.sensitive_files.append(
-                    RiskPreviewItem(rel_display(path, source_root), safety.reason, size, safety.severity)
+                    RiskPreviewItem(
+                        rel_display(path, source_root), safety.reason, size, safety.severity
+                    )
                 )
 
             suffix = path.suffix.casefold().lstrip(".")
             if suffix in _ARCHIVE_OR_DUMP_SUFFIXES and len(report.archive_or_dump_files) < 100:
                 report.archive_or_dump_files.append(
-                    RiskPreviewItem(rel_display(path, source_root), f"archive/dump/database suffix .{suffix}", size, "medium")
+                    RiskPreviewItem(
+                        rel_display(path, source_root),
+                        f"archive/dump/database suffix .{suffix}",
+                        size,
+                        "medium",
+                    )
                 )
 
             if size >= large_file_threshold_bytes and len(report.large_files) < 100:
                 report.large_files.append(
-                    RiskPreviewItem(rel_display(path, source_root), f"large file >= {format_bytes(large_file_threshold_bytes)}", size, "medium")
+                    RiskPreviewItem(
+                        rel_display(path, source_root),
+                        f"large file >= {format_bytes(large_file_threshold_bytes)}",
+                        size,
+                        "medium",
+                    )
                 )
 
     return report
@@ -90,7 +114,9 @@ def format_risk_preview_for_user(report: RiskPreviewReport, safe_mode: str) -> s
         f"Safe export mode: {safe_mode}",
     ]
     if report.diff_limited:
-        lines.append(f"Diff-limited export: yes ({report.diff_file_count or 0:,} Git paths selected)")
+        lines.append(
+            f"Diff-limited export: yes ({report.diff_file_count or 0:,} Git paths selected)"
+        )
     if report.git_warning:
         lines.append(f"Git warning: {report.git_warning}")
 
@@ -100,7 +126,9 @@ def format_risk_preview_for_user(report: RiskPreviewReport, safe_mode: str) -> s
             lines.append("- none")
             return
         for item in items[:12]:
-            lines.append(f"- [{item.severity}] {item.path} — {item.reason}; {format_bytes(item.size)}")
+            lines.append(
+                f"- [{item.severity}] {item.path} — {item.reason}; {format_bytes(item.size)}"
+            )
         if len(items) > 12:
             lines.append(f"- ... and {len(items) - 12:,} more")
 
@@ -108,9 +136,11 @@ def format_risk_preview_for_user(report: RiskPreviewReport, safe_mode: str) -> s
     add_section("Large files", report.large_files)
     add_section("Archives, dumps or local databases", report.archive_or_dump_files)
 
-    lines.extend([
-        "",
-        "Continue only if this preview matches what you expect.",
-        "In Safe mode, high-risk files are excluded during project copy.",
-    ])
+    lines.extend(
+        [
+            "",
+            "Continue only if this preview matches what you expect.",
+            "In Safe mode, high-risk files are excluded during project copy.",
+        ]
+    )
     return "\n".join(lines)

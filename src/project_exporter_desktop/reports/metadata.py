@@ -50,9 +50,13 @@ def write_manifest(
         "cancelled": cancelled,
         "settings": {
             "text_file_size_limit_enabled": config.text_file_size_limit_enabled,
-            "max_text_file_mb": config.max_text_file_mb if config.text_file_size_limit_enabled else None,
+            "max_text_file_mb": config.max_text_file_mb
+            if config.text_file_size_limit_enabled
+            else None,
             "max_text_file_bytes": text_limit,
-            "max_text_file_human": format_bytes(text_limit) if text_limit is not None else "unlimited",
+            "max_text_file_human": format_bytes(text_limit)
+            if text_limit is not None
+            else "unlimited",
             "redact_secrets": config.redact_secrets,
             "keep_staging_folder": config.keep_staging_folder,
             "include_project_in_zip": config.include_project_in_zip,
@@ -75,7 +79,9 @@ def write_manifest(
         else {
             "mode": diff_selection.mode,
             "limited": diff_selection.is_limited,
-            "selected_paths_count": len(diff_selection.paths) if diff_selection.paths is not None else None,
+            "selected_paths_count": len(diff_selection.paths)
+            if diff_selection.paths is not None
+            else None,
             "warning": diff_selection.warning,
         },
         "ignored_dirs": {
@@ -114,7 +120,9 @@ def write_index_md(
     extra_ignored_dirs: frozenset[str] | set[str],
 ) -> None:
     """Write a human-readable bundle table of contents."""
-    ignored_effective = sorted({name.casefold() for name in IGNORED_DIR_NAMES} | set(extra_ignored_dirs))
+    ignored_effective = sorted(
+        {name.casefold() for name in IGNORED_DIR_NAMES} | set(extra_ignored_dirs)
+    )
     text_limit = config.effective_max_text_file_bytes()
 
     with paths.index_file.open("w", encoding="utf-8", newline="\n") as out:
@@ -145,7 +153,9 @@ def write_index_md(
         out.write(f"- Secret redaction: **{'enabled' if config.redact_secrets else 'disabled'}**\n")
         out.write(f"- Safe Export mode: **{config.normalized_safe_export_mode()}**\n")
         out.write(f"- Diff Export mode: **{config.normalized_diff_export_mode()}**\n")
-        out.write(f"- Incremental Export: **{'enabled' if config.incremental_export_enabled else 'disabled'}**\n")
+        out.write(
+            f"- Incremental Export: **{'enabled' if config.incremental_export_enabled else 'disabled'}**\n"
+        )
         out.write(f"- Archive part limit: **{config.zip_part_limit_mb} MB**\n")
         out.write(
             f"- Project included in ZIP: **{'yes' if config.include_project_in_zip else 'no (reports only)'}**\n"
@@ -156,8 +166,16 @@ def write_index_md(
         out.write("- Ignored directories: " + ", ".join(f"`{n}`" for n in ignored_effective) + "\n")
 
         out.write("\n## Notes\n\n")
-        out.write("- Git data was collected from the **original** project. The `.git` directory itself is intentionally not part of the bundle.\n")
+        out.write(
+            "- Git data was collected from the **original** project. The `.git` directory itself is intentionally not part of the bundle.\n"
+        )
         out.write("- Full Git patches are disabled by default because diffs can expose secrets.\n")
-        out.write("- Safe Export mode filters high-risk files during copy; still review the security report before sharing externally.\n")
-        out.write("- Symbolic links were skipped during the copy to avoid accidental escape from the project tree.\n")
-        out.write("- If the export was split, all archives are placed into a Desktop folder and include an `ARCHIVE_SET_MANIFEST.json`.\n")
+        out.write(
+            "- Safe Export mode filters high-risk files during copy; still review the security report before sharing externally.\n"
+        )
+        out.write(
+            "- Symbolic links were skipped during the copy to avoid accidental escape from the project tree.\n"
+        )
+        out.write(
+            "- If the export was split, all archives are placed into a Desktop folder and include an `ARCHIVE_SET_MANIFEST.json`.\n"
+        )
