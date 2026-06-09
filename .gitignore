@@ -18,7 +18,9 @@ htmlcov/
 
 # Build / packaging outputs
 /dist/
-/build/pyinstaller/work/
+# PyInstaller creates build/{AppName}/ as its work directory
+/build/ProjectExporterDesktop/
+# Keep tracked build config files but ignore generated caches inside them
 /build/pyinstaller/__pycache__/
 *.egg-info/
 

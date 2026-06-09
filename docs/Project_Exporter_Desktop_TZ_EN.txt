@@ -1220,7 +1220,7 @@ Use this checklist before calling the project complete.
 [ ] Duplicated logic is removed.
 [ ] Complex logic is split into steps.
 [ ] Formatting is automated.
-[ ] Ruff passes.
+[+] Ruff passes.
 [ ] Type hints are used consistently where useful.
 [ ] Comments explain why, not what.
 
@@ -1230,7 +1230,7 @@ Use this checklist before calling the project complete.
 [ ] .env files are excluded.
 [ ] Private keys are excluded.
 [ ] Dependency folders are excluded.
-[ ] Build artifacts are excluded.
+[+] Build artifacts are excluded.
 [ ] Secret patterns are detected.
 [ ] Risky files are shown in preview.
 [ ] Path traversal is prevented.
@@ -1295,15 +1295,15 @@ Use this checklist before calling the project complete.
 [ ] Integration tests cover risky files.
 [ ] GUI smoke tests pass.
 [ ] Packaging smoke tests pass.
-[ ] pytest passes locally.
+[+] pytest passes locally.
 [ ] CI passes.
 
 25.8 Build and release
 
 [ ] Dependencies are locked.
-[ ] PyInstaller spec path is standardised.
-[ ] PyInstaller build works.
-[ ] Built EXE launches.
+[+] PyInstaller spec path is standardised.
+[+] PyInstaller build works.
+[+] Built EXE launches.
 [ ] EXE can perform basic export.
 [ ] Inno Setup script exists.
 [ ] Installer builds.
