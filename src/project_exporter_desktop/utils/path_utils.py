@@ -39,9 +39,7 @@ def validate_source_root(path_text: str) -> Path:
     if root.parent == root:
         raise ValueError("Нельзя выбирать корень диска.")
     if root == Path.home().resolve():
-        raise ValueError(
-            "Не выбирайте всю домашнюю папку целиком. Укажите конкретный проект."
-        )
+        raise ValueError("Не выбирайте всю домашнюю папку целиком. Укажите конкретный проект.")
 
     return root
 
@@ -88,9 +86,7 @@ def build_export_paths(source_root: Path) -> ExportPaths:
     )
 
 
-def should_ignore_dir(
-    name: str, extra: frozenset[str] | set[str] = frozenset()
-) -> bool:
+def should_ignore_dir(name: str, extra: frozenset[str] | set[str] = frozenset()) -> bool:
     normalised = name.casefold()
     defaults = {item.casefold() for item in IGNORED_DIR_NAMES}
     extras = {item.casefold() for item in extra}

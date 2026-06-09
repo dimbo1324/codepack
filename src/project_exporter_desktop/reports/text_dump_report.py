@@ -10,6 +10,7 @@ from ..utils.path_utils import rel_display
 from ..utils.text_utils import read_text_safely, redact_secrets, should_consider_text_file
 from ..utils.time_utils import human_now
 
+
 def write_text_dump(
     root: Path,
     output_file: Path,
@@ -21,15 +22,17 @@ def write_text_dump(
     log(f"Собираю текстовое содержимое файлов: {output_file.name}")
 
     stats = TextDumpStats()
-    files = sorted(
-        (p for p in root.rglob("*") if p.is_file()), key=lambda p: str(p).lower()
-    )
+    files = sorted((p for p in root.rglob("*") if p.is_file()), key=lambda p: str(p).lower())
 
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write("=== Text Files Dump ===\n")
         out.write(f"Project copy root name: {root.name}\n")
         out.write(f"Generated: {human_now()}\n")
-        out.write(f"Max bytes per file: {max_bytes_per_file:,}\n" if max_bytes_per_file is not None else "Max bytes per file: unlimited\n")
+        out.write(
+            f"Max bytes per file: {max_bytes_per_file:,}\n"
+            if max_bytes_per_file is not None
+            else "Max bytes per file: unlimited\n"
+        )
         out.write(f"Secrets redaction: {'enabled' if redact else 'disabled'}\n")
         out.write("Only readable text-like files are included.\n")
         out.write("=" * 100 + "\n\n")

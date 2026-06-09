@@ -21,7 +21,10 @@ def _detect_node_manager(root: Path) -> str:
 def _compose_files(root: Path) -> list[Path]:
     return [
         path
-        for path in (root / name for name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"))
+        for path in (
+            root / name
+            for name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
+        )
         if path.exists()
     ]
 
@@ -37,7 +40,9 @@ def write_runbook_report(copied_root: Path, output_file: Path) -> None:
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write(f"# Runbook: {copied_root.name}\n\n")
         out.write(f"Generated: {human_now()}\n\n")
-        out.write("This runbook is generated heuristically from common project files. Verify commands before using them in production.\n\n")
+        out.write(
+            "This runbook is generated heuristically from common project files. Verify commands before using them in production.\n\n"
+        )
 
         out.write("## Detected package / build systems\n\n")
         if managers:
@@ -58,7 +63,12 @@ def write_runbook_report(copied_root: Path, output_file: Path) -> None:
             else:
                 commands.append("npm install")
         if (copied_root / "requirements.txt").exists():
-            commands.extend(["python -m venv .venv", ".venv\\Scripts\\python -m pip install -r requirements.txt"])
+            commands.extend(
+                [
+                    "python -m venv .venv",
+                    ".venv\\Scripts\\python -m pip install -r requirements.txt",
+                ]
+            )
         if (copied_root / "pyproject.toml").exists():
             commands.append("python -m pip install -e .")
         if (copied_root / "go.mod").exists():
@@ -103,7 +113,9 @@ def write_runbook_report(copied_root: Path, output_file: Path) -> None:
             for path in compose_files:
                 out.write(f"- Compose file: `{rel_display(path, copied_root)}`\n")
             out.write("\n```powershell\ndocker compose up --build\n```\n")
-        elif any(path.name.lower().startswith("dockerfile") for path in copied_root.glob("Dockerfile*")):
+        elif any(
+            path.name.lower().startswith("dockerfile") for path in copied_root.glob("Dockerfile*")
+        ):
             out.write("```powershell\ndocker build -t <image-name> .\n```\n")
         else:
             out.write("No Dockerfile/docker-compose file detected.\n")

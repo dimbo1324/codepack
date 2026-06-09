@@ -17,11 +17,11 @@ from .architecture import write_architecture_report
 from .architecture_map import write_architecture_map_report
 from .code_quality import write_code_quality_report
 from .config_report import write_config_report
-from .dependencies import write_dependency_report
-from .dependency_intelligence import write_dependency_intelligence_report
-from .dependency_graph import write_dependency_graph_reports
-from .docker_report import write_docker_report
 from .dashboard import write_html_dashboard
+from .dependencies import write_dependency_report
+from .dependency_graph import write_dependency_graph_reports
+from .dependency_intelligence import write_dependency_intelligence_report
+from .docker_report import write_docker_report
 from .file_statistics import write_file_statistics_report
 from .frontend_backend import write_backend_report, write_frontend_report
 from .git_deep import write_git_deep_report
@@ -72,9 +72,6 @@ def write_project_insight_reports(
 
     all_profiles = {"quick", "full", "ai_review", "security", "minimal"}
     ai_security = {"ai_review", "security"}
-    ai_quick_minimal = {"quick", "ai_review", "minimal"}
-    ai_only = {"ai_review"}
-    security_only = {"security"}
 
     def project_profile_job(output: Path) -> None:
         write_project_profile_json(copied_root, source_root, output, inventory)
@@ -117,23 +114,17 @@ def write_project_insight_reports(
         (
             "06_security_scan.txt",
             {"quick", "full", "ai_review", "security", "minimal"},
-            lambda output: write_security_scan_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_security_scan_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "07_todo_fixme.txt",
             {"quick", "full", "ai_review", "security"},
-            lambda output: write_todo_fixme_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_todo_fixme_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "08_code_metrics.txt",
             {"quick", "full", "ai_review", "security"},
-            lambda output: write_code_metrics_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_code_metrics_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "09_config.txt",
@@ -153,9 +144,7 @@ def write_project_insight_reports(
         (
             "12_ai_context_pack.md",
             {"quick", "full", "ai_review", "minimal"},
-            lambda output: write_ai_context_pack(
-                copied_root, source_root, output, inventory
-            ),
+            lambda output: write_ai_context_pack(copied_root, source_root, output, inventory),
         ),
         (
             "13_runbook.md",
@@ -187,23 +176,17 @@ def write_project_insight_reports(
         (
             "17_code_quality_report.md",
             {"quick", "full", "ai_review", "security"},
-            lambda output: write_code_quality_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_code_quality_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "18_api_surface_report.md",
             {"full", "ai_review", "security"},
-            lambda output: write_api_surface_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_api_surface_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "19_frontend_report.md",
             {"full", "ai_review"},
-            lambda output: write_frontend_report(
-                copied_root, output, max_bytes_per_file
-            ),
+            lambda output: write_frontend_report(copied_root, output, max_bytes_per_file),
         ),
         (
             "20_backend_report.md",
@@ -244,7 +227,10 @@ def write_project_insight_reports(
         ),
     ]
 
-    plugins = [ReportPlugin(filename, job_profiles, writer) for filename, job_profiles, writer in report_jobs]
+    plugins = [
+        ReportPlugin(filename, job_profiles, writer)
+        for filename, job_profiles, writer in report_jobs
+    ]
     try:
         (reports_dir / "REPORT_PLUGINS.json").write_text(
             json.dumps(plugin_catalog(plugins), ensure_ascii=False, indent=2),

@@ -45,13 +45,16 @@ from ..constants import (
     SETTINGS_FILE,
 )
 from ..services.export_history import load_export_history
-from ..services.export_profiles import apply_custom_profile_if_needed, ensure_user_profiles_file, load_profile_catalog
+from ..services.export_profiles import (
+    apply_custom_profile_if_needed,
+    ensure_user_profiles_file,
+    load_profile_catalog,
+)
 from ..utils.path_utils import desktop_path, validate_source_root
 from .dialogs import ExportPlanDialog, HistoryDialog, PromptGoalsDialog, RulesDialog
-from .logging import append_app_log, app_log_file
+from .logging import app_log_file, append_app_log
 from .resources import asset_path, read_text_resource, style_path
 from .workers import ExportWorker, PlanPreviewWorker
-
 
 EXPORTIGNORE_TEMPLATE = """# Project Exporter rules
 # Similar to .gitignore. Use !pattern to explicitly include custom-ignored files.
@@ -202,13 +205,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(subtitle)
         layout.addSpacing(20)
 
-        for index, text in enumerate([
-            "1  Project",
-            "2  Export settings",
-            "3  Safety & filters",
-            "4  Run log",
-            "5  Result summary",
-        ]):
+        for index, text in enumerate(
+            [
+                "1  Project",
+                "2  Export settings",
+                "3  Safety & filters",
+                "4  Run log",
+                "5  Result summary",
+            ]
+        ):
             button = QPushButton(text)
             button.setObjectName("NavButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -333,7 +338,9 @@ class MainWindow(QMainWindow):
         refs_row.addWidget(self.diff_target_edit)
         form.addRow("Refs", self._wrap(refs_row))
 
-        self.incremental_checkbox = QCheckBox("Export only files added/modified since previous successful baseline")
+        self.incremental_checkbox = QCheckBox(
+            "Export only files added/modified since previous successful baseline"
+        )
         form.addRow("Incremental", self.incremental_checkbox)
 
         card_layout.addLayout(form)
@@ -360,7 +367,9 @@ class MainWindow(QMainWindow):
         form.addRow("Safe Export mode", self._wrap(safe_block))
 
         self.redact_checkbox = QCheckBox("Redact obvious secrets in text and Git reports")
-        self.git_patch_checkbox = QCheckBox("Include full Git patch; disabled by default because patches may contain secrets")
+        self.git_patch_checkbox = QCheckBox(
+            "Include full Git patch; disabled by default because patches may contain secrets"
+        )
         self.include_project_checkbox = QCheckBox("Include copied project in final ZIP")
         self.keep_staging_checkbox = QCheckBox("Keep staging folder after export")
         form.addRow("Redaction", self.redact_checkbox)
@@ -471,7 +480,9 @@ class MainWindow(QMainWindow):
 
     def _sync_profile_hint(self) -> None:
         profile = self.profile_combo.currentText().strip()
-        self.profile_hint.setText(self.profile_catalog.get(profile, EXPORT_PROFILES.get(profile, "")))
+        self.profile_hint.setText(
+            self.profile_catalog.get(profile, EXPORT_PROFILES.get(profile, ""))
+        )
 
     def _sync_safe_hint(self) -> None:
         mode = self.safe_mode_combo.currentText().strip()
@@ -492,8 +503,14 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(not running)
         self.codex_button.setEnabled(not running)
         self.cancel_button.setEnabled(running and not preview)
-        self.open_result_button.setEnabled(bool(self.last_result_path and self.last_result_path.exists()))
-        self.status_label.setText("Building Export Plan..." if preview else ("Export is running..." if running else "Ready"))
+        self.open_result_button.setEnabled(
+            bool(self.last_result_path and self.last_result_path.exists())
+        )
+        self.status_label.setText(
+            "Building Export Plan..."
+            if preview
+            else ("Export is running..." if running else "Ready")
+        )
 
     # -- Config ------------------------------------------------------------
 
@@ -501,7 +518,9 @@ class MainWindow(QMainWindow):
         self.root_edit.setText(self.config.last_root)
         self.text_limit_checkbox.setChecked(self.config.text_file_size_limit_enabled)
         self.max_text_mb_spin.setValue(max(1, int(self.config.max_text_file_mb)))
-        self.zip_limit_spin.setValue(max(1, int(self.config.zip_part_limit_mb or MAX_ARCHIVE_PART_MB)))
+        self.zip_limit_spin.setValue(
+            max(1, int(self.config.zip_part_limit_mb or MAX_ARCHIVE_PART_MB))
+        )
         self.redact_checkbox.setChecked(self.config.redact_secrets)
         self.git_patch_checkbox.setChecked(self.config.include_git_patch)
         self.include_project_checkbox.setChecked(self.config.include_project_in_zip)
@@ -621,7 +640,9 @@ class MainWindow(QMainWindow):
             self._append_log("Export cancelled at Export Plan confirmation stage.")
             return
         if self.pending_source_root is None or self.pending_config is None:
-            QMessageBox.critical(self, "Export error", "Internal state was lost before export start.")
+            QMessageBox.critical(
+                self, "Export error", "Internal state was lost before export start."
+            )
             return
         self._run_export(self.pending_source_root, self.pending_config)
 
@@ -672,14 +693,22 @@ class MainWindow(QMainWindow):
             self.last_result_path = result_path
         cancelled = bool(data.get("cancelled"))
         self._set_running(False)
-        self.open_result_button.setEnabled(bool(self.last_result_path and self.last_result_path.exists()))
+        self.open_result_button.setEnabled(
+            bool(self.last_result_path and self.last_result_path.exists())
+        )
         self._set_page(4)
         if cancelled:
-            self.summary_status.setText("Export stopped by user. Partial output may have been created.")
-            QMessageBox.warning(self, "Stopped", "Export was stopped. Review the result and run log.")
+            self.summary_status.setText(
+                "Export stopped by user. Partial output may have been created."
+            )
+            QMessageBox.warning(
+                self, "Stopped", "Export was stopped. Review the result and run log."
+            )
         else:
             self.summary_status.setText("Export completed successfully.")
-            QMessageBox.information(self, "Export complete", "Project export was created successfully.")
+            QMessageBox.information(
+                self, "Export complete", "Project export was created successfully."
+            )
         if self.last_result_path:
             self.summary_path.setText(str(self.last_result_path))
         self.status_label.setText("Ready")
@@ -688,8 +717,14 @@ class MainWindow(QMainWindow):
         self._set_running(False)
         self._append_diagnostic(traceback_text)
         self._set_page(4)
-        self.summary_status.setText(f"Export failed. Technical details were written to {self.log_file}.")
-        QMessageBox.critical(self, "Export failed", f"Export failed. Technical details were written to:\n{self.log_file}")
+        self.summary_status.setText(
+            f"Export failed. Technical details were written to {self.log_file}."
+        )
+        QMessageBox.critical(
+            self,
+            "Export failed",
+            f"Export failed. Technical details were written to:\n{self.log_file}",
+        )
 
     def _handle_progress(self, percent: int, stage: str, current: str) -> None:
         self.progress_bar.setValue(max(0, min(100, int(percent))))
@@ -784,7 +819,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Import settings failed", str(exc))
 
     def _reset_settings(self) -> None:
-        reply = QMessageBox.question(self, "Reset settings", "Reset saved settings to safe defaults?")
+        reply = QMessageBox.question(
+            self, "Reset settings", "Reset saved settings to safe defaults?"
+        )
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
@@ -851,4 +888,3 @@ def run_app() -> int:
     window = MainWindow()
     window.show()
     return app.exec()
-

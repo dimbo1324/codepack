@@ -28,7 +28,11 @@ def _run_git(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
             encoding="utf-8",
             errors="replace",
         )
-        lines = [line.strip().replace("/", "\\") for line in completed.stdout.splitlines() if line.strip()]
+        lines = [
+            line.strip().replace("/", "\\")
+            for line in completed.stdout.splitlines()
+            if line.strip()
+        ]
         return completed.returncode, lines, completed.stderr.strip()
     except FileNotFoundError:
         return 127, [], "Git executable was not found."
@@ -48,7 +52,11 @@ def resolve_diff_selection(
 
     rc, _inside, err = _run_git(["rev-parse", "--is-inside-work-tree"], source_root)
     if rc != 0:
-        return DiffSelection(mode="all", paths=None, warning=f"Git diff mode disabled: {err or 'not a Git repository'}")
+        return DiffSelection(
+            mode="all",
+            paths=None,
+            warning=f"Git diff mode disabled: {err or 'not a Git repository'}",
+        )
 
     paths: set[str] = set()
     warning: str | None = None
@@ -67,7 +75,9 @@ def resolve_diff_selection(
 
     elif mode == "changed_since_ref":
         ref = (base_ref or "HEAD").strip()
-        rc, lines, err = _run_git(["diff", "--name-only", "--diff-filter=ACMRTUXB", f"{ref}...HEAD", "--"], source_root)
+        rc, lines, err = _run_git(
+            ["diff", "--name-only", "--diff-filter=ACMRTUXB", f"{ref}...HEAD", "--"], source_root
+        )
         if rc == 0:
             paths.update(lines)
         else:
@@ -76,7 +86,10 @@ def resolve_diff_selection(
     elif mode == "between_refs":
         base = (base_ref or "HEAD").strip()
         target = (target_ref or "HEAD").strip()
-        rc, lines, err = _run_git(["diff", "--name-only", "--diff-filter=ACMRTUXB", f"{base}...{target}", "--"], source_root)
+        rc, lines, err = _run_git(
+            ["diff", "--name-only", "--diff-filter=ACMRTUXB", f"{base}...{target}", "--"],
+            source_root,
+        )
         if rc == 0:
             paths.update(lines)
         else:

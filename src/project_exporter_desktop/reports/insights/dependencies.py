@@ -6,6 +6,7 @@ from ...utils.inventory import detect_package_managers
 from ...utils.text_utils import safe_read_json
 from ...utils.time_utils import human_now
 
+
 def parse_go_mod(path: Path) -> tuple[str, list[str]]:
     module_name = ""
     requirements: list[str] = []
@@ -28,6 +29,7 @@ def parse_go_mod(path: Path) -> tuple[str, list[str]]:
         elif in_require_block and stripped and not stripped.startswith("//"):
             requirements.append(stripped)
     return module_name, requirements
+
 
 def write_dependency_report(copied_root: Path, output_file: Path) -> None:
     package_json_path = copied_root / "package.json"
@@ -63,9 +65,7 @@ def write_dependency_report(copied_root: Path, output_file: Path) -> None:
                 deps = package_json.get(section)
                 out.write(f"\n--- {section} ---\n")
                 if isinstance(deps, dict) and deps:
-                    for name, version in sorted(
-                        deps.items(), key=lambda item: item[0].lower()
-                    ):
+                    for name, version in sorted(deps.items(), key=lambda item: item[0].lower()):
                         out.write(f"{name:<45} {version}\n")
                 else:
                     out.write("None.\n")

@@ -11,7 +11,9 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely, should_consider_text_file
 from ...utils.time_utils import human_now
 
-_DANGEROUS_MIX_RE = re.compile(r"\b(tkinter|subprocess|requests|fetch|sql|database|threading|Queue|open\(|write_text|read_text)\b")
+_DANGEROUS_MIX_RE = re.compile(
+    r"\b(tkinter|subprocess|requests|fetch|sql|database|threading|Queue|open\(|write_text|read_text)\b"
+)
 
 
 def _python_function_lengths(path: Path) -> list[tuple[str, int, int]]:
@@ -28,7 +30,9 @@ def _python_function_lengths(path: Path) -> list[tuple[str, int, int]]:
     return results
 
 
-def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_per_file: int | None) -> None:
+def write_code_quality_report(
+    copied_root: Path, output_file: Path, max_bytes_per_file: int | None
+) -> None:
     large_files: list[tuple[Path, int]] = []
     long_symbols: list[tuple[Path, str, int, int]] = []
     todo_files: Counter[Path] = Counter()
@@ -50,7 +54,7 @@ def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_pe
         line_count = len(text.splitlines())
         if line_count >= 400:
             large_files.append((path, line_count))
-        for match in TODO_PATTERN.finditer(text):
+        for _match in TODO_PATTERN.finditer(text):
             todo_files[path] += 1
         if ext == "py":
             for name, line, length in _python_function_lengths(path):
@@ -58,18 +62,26 @@ def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_pe
                     long_symbols.append((path, name, line, length))
         signals: list[str] = []
         lower_path = str(path.relative_to(copied_root)).lower()
-        if "ui" in lower_path and re.search(r"\b(shutil|zipfile|subprocess|os\.walk|threading)\b", text):
+        if "ui" in lower_path and re.search(
+            r"\b(shutil|zipfile|subprocess|os\.walk|threading)\b", text
+        ):
             signals.append("UI file appears to contain infrastructure/threading/file-system logic")
         if len(set(_DANGEROUS_MIX_RE.findall(text))) >= 4 and line_count >= 180:
             signals.append("many mixed technical concerns in a medium/large file")
         if signals:
             mixed_responsibility.append((path, signals))
 
-    duplicate_groups = {name: paths for name, paths in duplicate_names.items() if len(paths) >= 3 and name not in {"index.ts", "index.tsx", "__init__.py"}}
+    duplicate_groups = {
+        name: paths
+        for name, paths in duplicate_names.items()
+        if len(paths) >= 3 and name not in {"index.ts", "index.tsx", "__init__.py"}
+    }
 
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write(f"# Code Quality Report\n\nGenerated: {human_now()}\n\n")
-        out.write("This report highlights maintainability risks using static heuristics. Treat findings as review prompts, not absolute errors.\n\n")
+        out.write(
+            "This report highlights maintainability risks using static heuristics. Treat findings as review prompts, not absolute errors.\n\n"
+        )
         out.write("## Summary\n\n")
         out.write(f"- Source files analysed: {len(source_files):,}\n")
         out.write(f"- Large files >= 400 lines: {len(large_files):,}\n")
@@ -86,8 +98,12 @@ def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_pe
 
         out.write("\n## Long Python classes/functions\n\n")
         if long_symbols:
-            for path, name, line, length in sorted(long_symbols, key=lambda item: item[3], reverse=True)[:100]:
-                out.write(f"- `{rel_display(path, copied_root)}`:{line} `{name}` — {length:,} lines\n")
+            for path, name, line, length in sorted(
+                long_symbols, key=lambda item: item[3], reverse=True
+            )[:100]:
+                out.write(
+                    f"- `{rel_display(path, copied_root)}`:{line} `{name}` — {length:,} lines\n"
+                )
         else:
             out.write("No long Python symbols detected.\n")
 
@@ -102,7 +118,9 @@ def write_code_quality_report(copied_root: Path, output_file: Path, max_bytes_pe
 
         out.write("\n## Repeated filenames\n\n")
         if duplicate_groups:
-            for name, paths in sorted(duplicate_groups.items(), key=lambda item: len(item[1]), reverse=True)[:50]:
+            for name, paths in sorted(
+                duplicate_groups.items(), key=lambda item: len(item[1]), reverse=True
+            )[:50]:
                 out.write(f"### `{name}` ({len(paths)} files)\n")
                 for path in sorted(paths, key=lambda p: str(p).lower())[:20]:
                     out.write(f"- `{rel_display(path, copied_root)}`\n")

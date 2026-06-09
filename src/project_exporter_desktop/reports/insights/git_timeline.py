@@ -54,7 +54,10 @@ def write_git_timeline_report(
 
         out.write("## Last 30 commits\n\n")
         log("Git timeline: last commits")
-        commits = _git_lines(source_root, ["git", "log", "--date=short", "--pretty=format:%h%x09%ad%x09%an%x09%s", "-30"])
+        commits = _git_lines(
+            source_root,
+            ["git", "log", "--date=short", "--pretty=format:%h%x09%ad%x09%an%x09%s", "-30"],
+        )
         if commits:
             for line in commits:
                 parts = line.split("\t", 3)
@@ -68,7 +71,9 @@ def write_git_timeline_report(
 
         out.write("\n## Files with the most churn in the last 200 commits\n\n")
         log("Git timeline: numstat churn")
-        numstat = _git_lines(source_root, ["git", "log", "--numstat", "--pretty=format:", "-200"], timeout=180)
+        numstat = _git_lines(
+            source_root, ["git", "log", "--numstat", "--pretty=format:", "-200"], timeout=180
+        )
         churn: Counter[str] = Counter()
         changes: Counter[str] = Counter()
         for line in numstat:
@@ -77,7 +82,9 @@ def write_git_timeline_report(
                 continue
             added, deleted, path = parts
             try:
-                delta = (0 if added == "-" else int(added)) + (0 if deleted == "-" else int(deleted))
+                delta = (0 if added == "-" else int(added)) + (
+                    0 if deleted == "-" else int(deleted)
+                )
             except ValueError:
                 continue
             churn[path] += delta

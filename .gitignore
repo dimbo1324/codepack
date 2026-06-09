@@ -50,3 +50,7 @@ Thumbs.db
 *_export_*.zip
 *_export_*/
 *_export_*_archives/
+
+# Temporary test data and build scratch
+.tmp/
+exports/

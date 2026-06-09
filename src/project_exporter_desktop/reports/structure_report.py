@@ -9,6 +9,7 @@ from ..constants import IGNORED_DIR_NAMES
 from ..utils.path_utils import ps_date, ps_mode, rel_display, should_ignore_dir
 from ..utils.time_utils import human_now
 
+
 def write_structure_report(
     root: Path,
     output_file: Path,
@@ -28,16 +29,12 @@ def write_structure_report(
         out.write(f"Ignored directories: {ignored_display}\n")
         out.write("=" * 100 + "\n\n")
 
-        for current_dir, dirnames, filenames in os.walk(
-            root, topdown=True, followlinks=False
-        ):
+        for current_dir, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
             if cancel.is_set():
                 break
 
             current = Path(current_dir)
-            dirnames[:] = [
-                d for d in dirnames if not should_ignore_dir(d, extra_ignored_dirs)
-            ]
+            dirnames[:] = [d for d in dirnames if not should_ignore_dir(d, extra_ignored_dirs)]
 
             entries: list[Path] = []
             for dirname in sorted(dirnames, key=str.lower):

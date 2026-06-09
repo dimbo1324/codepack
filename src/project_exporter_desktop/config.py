@@ -43,11 +43,13 @@ class Config:
     always_include_files: list[str] = field(default_factory=list)
     always_include_dirs: list[str] = field(default_factory=list)
     incremental_export_enabled: bool = False
-    prompt_goals: list[str] = field(default_factory=lambda: [
-        "architecture_review",
-        "bug_hunt",
-        "write_tests",
-    ])
+    prompt_goals: list[str] = field(
+        default_factory=lambda: [
+            "architecture_review",
+            "bug_hunt",
+            "write_tests",
+        ]
+    )
 
     @classmethod
     def load(cls) -> Config:
@@ -55,9 +57,7 @@ class Config:
             if SETTINGS_FILE.exists():
                 data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
                 known = {f.name for f in cls.__dataclass_fields__.values()}
-                data = _migrate_legacy_settings(
-                    {k: v for k, v in data.items() if k in known}
-                )
+                data = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
                 return cls(**data)
         except Exception:
             return cls()
@@ -74,9 +74,7 @@ class Config:
 
     def effective_ignored_dirs(self) -> frozenset[str]:
         """Defaults are always present; user values are additive only."""
-        extras = {
-            name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()
-        }
+        extras = {name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()}
         defaults = {name.casefold() for name in IGNORED_DIR_NAMES}
         return frozenset(defaults | extras)
 
@@ -88,18 +86,10 @@ class Config:
         )
 
     def normalized_safe_export_mode(self) -> str:
-        return (
-            self.safe_export_mode
-            if self.safe_export_mode in SAFE_EXPORT_MODES
-            else "safe"
-        )
+        return self.safe_export_mode if self.safe_export_mode in SAFE_EXPORT_MODES else "safe"
 
     def normalized_diff_export_mode(self) -> str:
-        return (
-            self.diff_export_mode
-            if self.diff_export_mode in DIFF_EXPORT_MODES
-            else "all"
-        )
+        return self.diff_export_mode if self.diff_export_mode in DIFF_EXPORT_MODES else "all"
 
     def effective_max_text_file_bytes(self) -> int | None:
         if not self.text_file_size_limit_enabled:
@@ -110,7 +100,7 @@ class Config:
         return max(1, int(self.zip_part_limit_mb)) * 1024 * 1024
 
     @staticmethod
-    def export_settings(path: Path, config: "Config") -> None:
+    def export_settings(path: Path, config: Config) -> None:
         path.write_text(
             json.dumps(asdict(config), ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -118,7 +108,7 @@ class Config:
         )
 
     @classmethod
-    def import_settings(cls, path: Path) -> "Config":
+    def import_settings(cls, path: Path) -> Config:
         data = json.loads(path.read_text(encoding="utf-8"))
         known = {f.name for f in cls.__dataclass_fields__.values()}
         migrated = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})

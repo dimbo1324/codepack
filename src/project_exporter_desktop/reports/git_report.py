@@ -63,7 +63,11 @@ def write_git_report(
         out.write(f"Generated: {human_now()}\n")
         out.write(f"Patch included: {'yes' if include_patch else 'no'}\n")
         out.write("Git commands are read-only. The .git directory is not copied.\n")
-        out.write("Secret redaction is applied to command output.\n" if redact else "Secret redaction is disabled.\n")
+        out.write(
+            "Secret redaction is applied to command output.\n"
+            if redact
+            else "Secret redaction is disabled.\n"
+        )
         out.write("=" * 100 + "\n\n")
 
         for command in commands:

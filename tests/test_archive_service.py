@@ -41,7 +41,9 @@ class ArchiveServiceTests(unittest.TestCase):
             (paths.project_dir / "main.py").write_text("print('ok')", encoding="utf-8")
             logs: list[str] = []
 
-            result = build_final_archives(paths, True, logs.append, threading.Event(), part_limit_bytes=10_000_000)
+            result = build_final_archives(
+                paths, True, logs.append, threading.Event(), part_limit_bytes=10_000_000
+            )
 
             self.assertFalse(result.split)
             self.assertTrue(paths.final_zip.exists())

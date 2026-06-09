@@ -10,6 +10,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import format_bytes
 from ...utils.time_utils import human_now
 
+
 def write_project_summary_report(
     copied_root: Path,
     source_root: Path,
@@ -27,9 +28,7 @@ def write_project_summary_report(
     test_files = [
         p
         for p in files
-        if re.search(
-            r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(copied_root))
-        )
+        if re.search(r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(copied_root)))
     ]
     ci_files = list((copied_root / ".github" / "workflows").glob("*.yml")) + list(
         (copied_root / ".github" / "workflows").glob("*.yaml")
@@ -59,14 +58,10 @@ def write_project_summary_report(
                 "Total copied size": format_bytes(int(inventory["total_size"])),
                 "README present": "yes" if readmes else "no",
                 "LICENSE present": "yes" if licenses else "no",
-                "Tests detected": (
-                    f"yes ({len(test_files):,} files)" if test_files else "no"
-                ),
+                "Tests detected": (f"yes ({len(test_files):,} files)" if test_files else "no"),
                 "Docker detected": "yes" if docker_files or compose_files else "no",
                 "CI/CD detected": (
-                    f"yes ({len(ci_files):,} GitHub Actions workflows)"
-                    if ci_files
-                    else "no"
+                    f"yes ({len(ci_files):,} GitHub Actions workflows)" if ci_files else "no"
                 ),
                 ".env-like files": f"{len(env_files):,}",
             },
@@ -81,9 +76,7 @@ def write_project_summary_report(
         if language_count:
             for language, count in language_count.most_common(30):
                 size = inventory["language_size"][language]
-                out.write(
-                    f"{language:<28} {count:>8,} files   {format_bytes(size):>12}\n"
-                )
+                out.write(f"{language:<28} {count:>8,} files   {format_bytes(size):>12}\n")
         else:
             out.write("No known language extensions detected.\n")
 
@@ -99,10 +92,6 @@ def write_project_summary_report(
         if env_files:
             out.write("- Review .env-like files before sharing the export.\n")
         if not test_files:
-            out.write(
-                "- No obvious test files found; consider adding smoke/unit tests.\n"
-            )
+            out.write("- No obvious test files found; consider adding smoke/unit tests.\n")
         if not ci_files:
-            out.write(
-                "- No GitHub Actions workflow detected; consider adding CI for checks.\n"
-            )
+            out.write("- No GitHub Actions workflow detected; consider adding CI for checks.\n")

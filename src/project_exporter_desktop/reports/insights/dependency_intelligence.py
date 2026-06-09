@@ -30,7 +30,12 @@ def write_dependency_intelligence_report(copied_root: Path, output_file: Path) -
         _section(out, "JavaScript / TypeScript")
         if package_json:
             out.write("package.json detected.\n\n")
-            for section in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            for section in (
+                "dependencies",
+                "devDependencies",
+                "peerDependencies",
+                "optionalDependencies",
+            ):
                 deps = package_json.get(section)
                 out.write(f"### {section}\n\n")
                 if isinstance(deps, dict) and deps:
@@ -39,13 +44,43 @@ def write_dependency_intelligence_report(copied_root: Path, output_file: Path) -
                 else:
                     out.write("None.\n")
                 out.write("\n")
-            lockfiles = [name for name in ("pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb") if (copied_root / name).exists()]
-            out.write("Lockfile status: " + (", ".join(lockfiles) if lockfiles else "missing — add one for reproducible installs") + "\n")
+            lockfiles = [
+                name
+                for name in (
+                    "pnpm-lock.yaml",
+                    "package-lock.json",
+                    "yarn.lock",
+                    "bun.lock",
+                    "bun.lockb",
+                )
+                if (copied_root / name).exists()
+            ]
+            out.write(
+                "Lockfile status: "
+                + (
+                    ", ".join(lockfiles)
+                    if lockfiles
+                    else "missing — add one for reproducible installs"
+                )
+                + "\n"
+            )
         else:
             out.write("package.json not detected.\n")
 
         _section(out, "Python")
-        py_files = [name for name in ("pyproject.toml", "requirements.txt", "requirements-dev.txt", "poetry.lock", "Pipfile", "Pipfile.lock", "uv.lock") if (copied_root / name).exists()]
+        py_files = [
+            name
+            for name in (
+                "pyproject.toml",
+                "requirements.txt",
+                "requirements-dev.txt",
+                "poetry.lock",
+                "Pipfile",
+                "Pipfile.lock",
+                "uv.lock",
+            )
+            if (copied_root / name).exists()
+        ]
         if py_files:
             for name in py_files:
                 out.write(f"- `{name}`\n")
@@ -64,9 +99,24 @@ def write_dependency_intelligence_report(copied_root: Path, output_file: Path) -
             out.write("go.mod not detected.\n")
 
         _section(out, "Hygiene checks")
-        if package_json and not any((copied_root / name).exists() for name in ("pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb")):
+        if package_json and not any(
+            (copied_root / name).exists()
+            for name in (
+                "pnpm-lock.yaml",
+                "package-lock.json",
+                "yarn.lock",
+                "bun.lock",
+                "bun.lockb",
+            )
+        ):
             out.write("- Add a JS lockfile for reproducibility.\n")
-        if (copied_root / "requirements.txt").exists() and not (copied_root / "pyproject.toml").exists():
-            out.write("- Consider adding `pyproject.toml` for tool configuration and packaging metadata.\n")
+        if (copied_root / "requirements.txt").exists() and not (
+            copied_root / "pyproject.toml"
+        ).exists():
+            out.write(
+                "- Consider adding `pyproject.toml` for tool configuration and packaging metadata.\n"
+            )
         if not managers:
-            out.write("- No dependency action required unless this project is expected to be installable.\n")
+            out.write(
+                "- No dependency action required unless this project is expected to be installable.\n"
+            )

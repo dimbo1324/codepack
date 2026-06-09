@@ -8,6 +8,7 @@ from ...utils.path_utils import rel_display
 from ...utils.time_utils import human_now
 from .security import redacted_line
 
+
 def parse_compose_services(text: str) -> dict[str, dict[str, list[str]]]:
     services: dict[str, dict[str, list[str]]] = {}
     lines = text.splitlines()
@@ -41,18 +42,13 @@ def parse_compose_services(text: str) -> dict[str, dict[str, list[str]]]:
                 services[current_service].setdefault(current_key, []).append(value)
             continue
         if current_service and indent >= 6 and stripped.startswith("-") and current_key:
-            services[current_service].setdefault(current_key, []).append(
-                stripped[1:].strip()
-            )
+            services[current_service].setdefault(current_key, []).append(stripped[1:].strip())
     return services
+
 
 def write_docker_report(copied_root: Path, output_file: Path) -> None:
     dockerfiles = sorted(
-        [
-            p
-            for p in iter_project_files(copied_root)
-            if p.name.lower().startswith("dockerfile")
-        ],
+        [p for p in iter_project_files(copied_root) if p.name.lower().startswith("dockerfile")],
         key=lambda p: str(p).lower(),
     )
     compose_files = sorted(
@@ -73,9 +69,7 @@ def write_docker_report(copied_root: Path, output_file: Path) -> None:
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:
         out.write("=== Docker / Infrastructure Report ===\n")
         out.write(f"Generated: {human_now()}\n")
-        out.write(
-            "Compose parsing is heuristic and works best with simple YAML files.\n"
-        )
+        out.write("Compose parsing is heuristic and works best with simple YAML files.\n")
         out.write("=" * 100 + "\n\n")
 
         out.write("--- Dockerfiles ---\n")
@@ -93,9 +87,7 @@ def write_docker_report(copied_root: Path, output_file: Path) -> None:
             out.write("None detected.\n")
 
         for compose in compose_files:
-            out.write(
-                f"\n--- Parsed services from {rel_display(compose, copied_root)} ---\n"
-            )
+            out.write(f"\n--- Parsed services from {rel_display(compose, copied_root)} ---\n")
             try:
                 text = compose.read_text(encoding="utf-8", errors="replace")
             except Exception as exc:

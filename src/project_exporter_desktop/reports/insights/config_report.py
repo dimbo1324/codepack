@@ -8,15 +8,14 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import format_bytes
 from ...utils.time_utils import human_now
 
+
 def find_config_files(copied_root: Path) -> list[Path]:
     known: list[Path] = []
     for path in iter_project_files(copied_root):
         rel = str(path.relative_to(copied_root)).replace("\\", "/")
         name = path.name
         lower_name = name.lower()
-        if name in CONFIG_FILES or lower_name in {
-            item.lower() for item in CONFIG_FILES
-        }:
+        if name in CONFIG_FILES or lower_name in {item.lower() for item in CONFIG_FILES}:
             known.append(path)
             continue
         if rel.startswith(".github/workflows/") and path.suffix.lower() in {
@@ -33,6 +32,7 @@ def find_config_files(copied_root: Path) -> list[Path]:
             continue
     return sorted(set(known), key=lambda p: str(p).lower())
 
+
 def write_config_report(copied_root: Path, output_file: Path) -> None:
     configs = find_config_files(copied_root)
     names = {p.name.lower() for p in configs}
@@ -41,16 +41,13 @@ def write_config_report(copied_root: Path, output_file: Path) -> None:
         "TypeScript": "tsconfig.json" in names,
         "Vite": any(p.name.lower().startswith("vite.config") for p in configs),
         "ESLint": any(
-            "eslint" in p.name.lower() or p.name.lower().startswith(".eslintrc")
-            for p in configs
+            "eslint" in p.name.lower() or p.name.lower().startswith(".eslintrc") for p in configs
         ),
         "Prettier": any(
             "prettier" in p.name.lower() or p.name.lower().startswith(".prettierrc")
             for p in configs
         ),
-        "Tailwind CSS": any(
-            p.name.lower().startswith("tailwind.config") for p in configs
-        ),
+        "Tailwind CSS": any(p.name.lower().startswith("tailwind.config") for p in configs),
         "PostCSS": any(p.name.lower().startswith("postcss.config") for p in configs),
         "Docker": any(p.name.lower().startswith("dockerfile") for p in configs),
         "Docker Compose": any(
@@ -64,9 +61,7 @@ def write_config_report(copied_root: Path, output_file: Path) -> None:
             for p in configs
         ),
         "GitHub Actions": any(
-            str(p.relative_to(copied_root))
-            .replace("\\", "/")
-            .startswith(".github/workflows/")
+            str(p.relative_to(copied_root)).replace("\\", "/").startswith(".github/workflows/")
             for p in configs
         ),
         "Python pyproject": "pyproject.toml" in names,

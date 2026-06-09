@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ...utils.inventory import detect_package_managers, iter_project_files
+from ...utils.inventory import detect_package_managers
 from ...utils.path_utils import rel_display
 from ...utils.text_utils import safe_read_json
 from ...utils.time_utils import human_now
@@ -92,7 +92,15 @@ def _detect_commands(root: Path) -> dict[str, list[str]]:
     managers = detect_package_managers(root)
     package_json = safe_read_json(root / "package.json")
     scripts = package_json.get("scripts")
-    node_manager = "pnpm" if "pnpm" in managers else "npm" if "npm" in managers else "yarn" if "Yarn" in managers else "npm"
+    node_manager = (
+        "pnpm"
+        if "pnpm" in managers
+        else "npm"
+        if "npm" in managers
+        else "yarn"
+        if "Yarn" in managers
+        else "npm"
+    )
     if package_json:
         if node_manager == "pnpm":
             commands["install"].append("pnpm install")
@@ -126,7 +134,12 @@ def _detect_commands(root: Path) -> dict[str, list[str]]:
     if (root / "Cargo.toml").exists():
         commands["build"].append("cargo build")
         commands["test"].append("cargo test")
-    if (root / "docker-compose.yml").exists() or (root / "docker-compose.yaml").exists() or (root / "compose.yml").exists() or (root / "compose.yaml").exists():
+    if (
+        (root / "docker-compose.yml").exists()
+        or (root / "docker-compose.yaml").exists()
+        or (root / "compose.yml").exists()
+        or (root / "compose.yaml").exists()
+    ):
         commands["run"].append("docker compose up --build")
     elif any(path.name.lower().startswith("dockerfile") for path in root.glob("Dockerfile*")):
         commands["build"].append("docker build -t <image-name> .")
@@ -138,7 +151,9 @@ def _detect_risk_level(root: Path, files: list[Path]) -> tuple[str, list[str]]:
     env_files = [p for p in files if p.name.lower().startswith(".env")]
     if env_files:
         reasons.append(f"{len(env_files)} .env-like file(s) detected")
-    if not any(re.search(r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(root))) for p in files):
+    if not any(
+        re.search(r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(root))) for p in files
+    ):
         reasons.append("no obvious test files detected")
     if not ((root / ".github" / "workflows").exists()):
         reasons.append("no GitHub Actions workflow detected")
@@ -151,7 +166,9 @@ def _detect_risk_level(root: Path, files: list[Path]) -> tuple[str, list[str]]:
     return "low", ["no obvious high-level project hygiene risks detected"]
 
 
-def build_project_profile(copied_root: Path, source_root: Path, inventory: dict[str, Any]) -> dict[str, Any]:
+def build_project_profile(
+    copied_root: Path, source_root: Path, inventory: dict[str, Any]
+) -> dict[str, Any]:
     files: list[Path] = inventory["files"]
     stack: dict[str, list[str]] = inventory["stack"]
     configs = find_config_files(copied_root)
@@ -159,7 +176,8 @@ def build_project_profile(copied_root: Path, source_root: Path, inventory: dict[
     docker_compose_files = [
         p.name
         for p in configs
-        if p.name.lower() in {"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
+        if p.name.lower()
+        in {"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
     ]
     package_json = safe_read_json(copied_root / "package.json")
     scripts = package_json.get("scripts") if package_json else None
@@ -181,8 +199,12 @@ def build_project_profile(copied_root: Path, source_root: Path, inventory: dict[
         "capabilities": {
             "has_git": (source_root / ".git").exists(),
             "has_ci": (copied_root / ".github" / "workflows").exists(),
-            "has_tests": any(re.search(r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(copied_root))) for p in files),
-            "has_docker": bool(docker_compose_files) or any(p.name.lower().startswith("dockerfile") for p in configs),
+            "has_tests": any(
+                re.search(r"(?i)(^|[._/-])(test|spec)([._/-]|$)", str(p.relative_to(copied_root)))
+                for p in files
+            ),
+            "has_docker": bool(docker_compose_files)
+            or any(p.name.lower().startswith("dockerfile") for p in configs),
             "has_env_files": any(p.name.lower().startswith(".env") for p in files),
             "has_readme": any(p.name.lower().startswith("readme") for p in files),
             "has_license": any(p.name.lower().startswith("license") for p in files),

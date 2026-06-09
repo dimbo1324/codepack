@@ -12,14 +12,11 @@ from .text_utils import safe_read_json
 
 
 def iter_project_files(root: Path) -> Iterable[Path]:
-    for current_dir, dirnames, filenames in os.walk(
-        root, topdown=True, followlinks=False
-    ):
+    for current_dir, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
         dirnames[:] = [
             dirname
             for dirname in dirnames
-            if not should_ignore_dir(dirname)
-            and not (Path(current_dir) / dirname).is_symlink()
+            if not should_ignore_dir(dirname) and not (Path(current_dir) / dirname).is_symlink()
         ]
         for filename in filenames:
             path = Path(current_dir) / filename
@@ -29,9 +26,7 @@ def iter_project_files(root: Path) -> Iterable[Path]:
 
 
 def iter_project_dirs(root: Path) -> Iterable[Path]:
-    for current_dir, dirnames, _filenames in os.walk(
-        root, topdown=True, followlinks=False
-    ):
+    for current_dir, dirnames, _filenames in os.walk(root, topdown=True, followlinks=False):
         current = Path(current_dir)
         dirnames[:] = [
             dirname
@@ -102,11 +97,7 @@ def package_json_dependencies(root: Path) -> dict[str, str]:
 def detect_stack(root: Path) -> dict[str, list[str]]:
     deps = package_json_dependencies(root)
     dep_names = set(deps)
-    files = (
-        {p.name.lower() for p in root.iterdir() if p.exists()}
-        if root.exists()
-        else set()
-    )
+    files = {p.name.lower() for p in root.iterdir() if p.exists()} if root.exists() else set()
 
     frontend: list[str] = []
     backend: list[str] = []
@@ -160,9 +151,7 @@ def detect_stack(root: Path) -> dict[str, list[str]]:
         frontend.append("shadcn/ui-style component registry")
     if (root / "Dockerfile").exists() or list(root.glob("Dockerfile*")):
         infrastructure.append("Dockerfile")
-    if (root / "docker-compose.yml").exists() or (
-        root / "docker-compose.yaml"
-    ).exists():
+    if (root / "docker-compose.yml").exists() or (root / "docker-compose.yaml").exists():
         infrastructure.append("Docker Compose")
     if (root / ".github" / "workflows").exists():
         infrastructure.append("GitHub Actions")

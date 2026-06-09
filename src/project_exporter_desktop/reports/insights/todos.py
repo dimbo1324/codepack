@@ -9,6 +9,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely, should_consider_text_file
 from ...utils.time_utils import human_now
 
+
 def write_todo_fixme_report(
     copied_root: Path, output_file: Path, max_bytes_per_file: int | None
 ) -> None:
@@ -27,9 +28,7 @@ def write_todo_fixme_report(
         for line_number, line in enumerate(text.splitlines(), start=1):
             match = TODO_PATTERN.search(line)
             if match:
-                findings.append(
-                    (path, line_number, match.group(1).upper(), line.strip())
-                )
+                findings.append((path, line_number, match.group(1).upper(), line.strip()))
 
     by_kind: Counter[str] = Counter(kind for _path, _line, kind, _text in findings)
 
@@ -48,9 +47,7 @@ def write_todo_fixme_report(
         out.write("\n--- Findings ---\n")
         if findings:
             for path, line_number, kind, line in findings[:1000]:
-                out.write(
-                    f"{rel_display(path, copied_root)}:{line_number}: [{kind}] {line}\n"
-                )
+                out.write(f"{rel_display(path, copied_root)}:{line_number}: [{kind}] {line}\n")
             if len(findings) > 1000:
                 out.write(f"... and {len(findings) - 1000:,} more\n")
         else:

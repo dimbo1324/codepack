@@ -30,9 +30,7 @@ def copy_project(
     if include_relative_paths is not None:
         log(f"Diff export: выбрано Git-путей: {len(include_relative_paths):,}")
 
-    for current_dir, dirnames, filenames in os.walk(
-        source_root, topdown=True, followlinks=False
-    ):
+    for current_dir, dirnames, filenames in os.walk(source_root, topdown=True, followlinks=False):
         if cancel.is_set():
             log("Копирование остановлено пользователем.")
             break
@@ -49,10 +47,7 @@ def copy_project(
             child = current / dirname
             if child.is_symlink():
                 stats.symlinks_skipped += 1
-                log(
-                    f"Пропущена символическая ссылка на папку: "
-                    f"{rel_display(child, source_root)}"
-                )
+                log(f"Пропущена символическая ссылка на папку: {rel_display(child, source_root)}")
                 continue
 
             if include_relative_paths is not None:
@@ -61,7 +56,9 @@ def copy_project(
                 except ValueError:
                     rel_dir = ""
                 prefix = rel_dir + "\\"
-                if not any(path == rel_dir or path.startswith(prefix) for path in include_relative_paths):
+                if not any(
+                    path == rel_dir or path.startswith(prefix) for path in include_relative_paths
+                ):
                     continue
 
             if export_rules is not None:
@@ -72,7 +69,9 @@ def copy_project(
                 skip_by_rule, reason = export_rules.should_skip_dir(relative_dir)
                 if skip_by_rule:
                     stats.dirs_skipped += 1
-                    log(f"Export rules: пропущена папка {rel_display(child, source_root)} ({reason})")
+                    log(
+                        f"Export rules: пропущена папка {rel_display(child, source_root)} ({reason})"
+                    )
                     continue
 
             safe_dirnames.append(dirname)
@@ -96,10 +95,7 @@ def copy_project(
             src_file = current / filename
             if src_file.is_symlink():
                 stats.symlinks_skipped += 1
-                log(
-                    f"Пропущена символическая ссылка на файл: "
-                    f"{rel_display(src_file, source_root)}"
-                )
+                log(f"Пропущена символическая ссылка на файл: {rel_display(src_file, source_root)}")
                 continue
 
             try:
@@ -117,7 +113,9 @@ def copy_project(
                 skip_by_rule, reason = export_rules.should_skip_file(relative_file)
                 if skip_by_rule:
                     stats.files_skipped += 1
-                    log(f"Export rules: пропущен файл {rel_display(src_file, source_root)} ({reason})")
+                    log(
+                        f"Export rules: пропущен файл {rel_display(src_file, source_root)} ({reason})"
+                    )
                     continue
 
             safety = should_skip_file_for_safety(relative_file, safe_export_mode)

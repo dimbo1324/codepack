@@ -6,8 +6,8 @@ from pathlib import Path
 from ..constants import (
     BALANCED_MODE_EXCLUDED_SUFFIXES,
     HIGH_RISK_FILENAMES,
-    SAFE_MODE_EXCLUDED_SUFFIXES,
     SAFE_EXPORT_MODES,
+    SAFE_MODE_EXCLUDED_SUFFIXES,
 )
 
 
@@ -24,10 +24,15 @@ def normalise_mode(mode: str) -> str:
 
 def is_env_example(name: str) -> bool:
     lowered = name.casefold()
-    return lowered.endswith(".example") or lowered.endswith(".sample") or lowered in {
-        ".env.example",
-        ".env.sample",
-    }
+    return (
+        lowered.endswith(".example")
+        or lowered.endswith(".sample")
+        or lowered
+        in {
+            ".env.example",
+            ".env.sample",
+        }
+    )
 
 
 def classify_sensitive_file(path: Path) -> SafetyDecision:
