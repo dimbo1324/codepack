@@ -1198,9 +1198,9 @@ Use this checklist before calling the project complete.
 25.1 Architecture
 
 [ ] Project structure is clear.
-[ ] UI, services, core logic and infrastructure are separated.
-[ ] MainWindow is not a god object.
-[ ] Export logic is not inside UI files.
+[+] UI, services, core logic and infrastructure are separated.
+[+] MainWindow is not a god object.
+[+] Export logic is not inside UI files.
 [ ] Constants are split by meaning.
 [ ] Export pipeline is explicit.
 [ ] Every pipeline step is testable.
@@ -1214,7 +1214,7 @@ Use this checklist before calling the project complete.
 
 [ ] Names are clear.
 [ ] Functions are small enough.
-[ ] Files are not overloaded.
+[+] Files are not overloaded.
 [ ] No unnecessary abbreviations.
 [ ] No magic values without explanation.
 [ ] Duplicated logic is removed.
