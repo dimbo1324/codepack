@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer
-from PySide6.QtGui import QAction, QCursor, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QCursor, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -128,6 +128,7 @@ class MainWindow(QMainWindow):
         self._zoom_in_action: QAction | None = None
         self._zoom_out_action: QAction | None = None
         self._zoom_reset_action: QAction | None = None
+        self._zoom_shortcuts: list[QShortcut] = []
         self._lang_action: QAction | None = None
         self.tray_menu: QMenu | None = None
         self.tray_quick_action: QAction | None = None
@@ -145,6 +146,7 @@ class MainWindow(QMainWindow):
         self._build_tray()
         self._build_watcher()
         self._build_menu()
+        self._install_zoom_shortcuts()
         self._build_ui()
         self._load_config_to_ui()
         self._apply_configured_theme()
@@ -198,21 +200,18 @@ class MainWindow(QMainWindow):
         )
         zoom_in_act.triggered.connect(self._zoom_in)
         view_menu.addAction(zoom_in_act)
-        self.addAction(zoom_in_act)
         self._zoom_in_action = zoom_in_act
 
         zoom_out_act = QAction(t("menu.view.zoom_out"), self)
         zoom_out_act.setShortcuts([QKeySequence.StandardKey.ZoomOut, QKeySequence("Ctrl+-")])
         zoom_out_act.triggered.connect(self._zoom_out)
         view_menu.addAction(zoom_out_act)
-        self.addAction(zoom_out_act)
         self._zoom_out_action = zoom_out_act
 
         zoom_reset_act = QAction(t("menu.view.zoom_reset"), self)
         zoom_reset_act.setShortcuts([QKeySequence("Ctrl+0")])
         zoom_reset_act.triggered.connect(self._zoom_reset)
         view_menu.addAction(zoom_reset_act)
-        self.addAction(zoom_reset_act)
         self._zoom_reset_action = zoom_reset_act
 
         view_menu.addSeparator()
@@ -470,9 +469,6 @@ class MainWindow(QMainWindow):
         self.config.save()
 
     def _on_language_changed(self) -> None:
-        for action in (self._zoom_in_action, self._zoom_out_action, self._zoom_reset_action):
-            if action is not None:
-                self.removeAction(action)
         self.menuBar().clear()
         self._build_menu()
         self._update_zoom_actions()
@@ -996,6 +992,23 @@ class MainWindow(QMainWindow):
             self._zoom_in_action.setEnabled(self._zoom_factor < _ZOOM_MAX - 0.01)
         if self._zoom_out_action is not None:
             self._zoom_out_action.setEnabled(self._zoom_factor > _ZOOM_MIN + 0.01)
+
+    def _install_zoom_shortcuts(self) -> None:
+        shortcut_map = {
+            "Ctrl++": self._zoom_in,
+            "Ctrl+=": self._zoom_in,
+            "Ctrl+Num++": self._zoom_in,
+            "Ctrl+-": self._zoom_out,
+            "Ctrl+_": self._zoom_out,
+            "Ctrl+Num+-": self._zoom_out,
+            "Ctrl+0": self._zoom_reset,
+            "Ctrl+Num+0": self._zoom_reset,
+        }
+        for sequence, slot in shortcut_map.items():
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            shortcut.activated.connect(slot)
+            self._zoom_shortcuts.append(shortcut)
 
     def _zoom_in(self) -> None:
         self._apply_zoom(self._zoom_factor + 0.1)

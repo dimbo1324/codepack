@@ -62,16 +62,20 @@ def test_application_menus_have_hover_and_shortcut_spacing_styles() -> None:
         assert "padding: 8px 90px 8px 18px" in text
         assert "QLineEdit:hover" in text
         assert "QCheckBox:hover" in text
+        assert "QComboBox::drop-down" not in text
+        assert "QSpinBox::up-button" not in text
 
 
 def test_main_window_retranslates_menu_bar_and_zoom_shortcuts() -> None:
     text = (SRC / "gui" / "main_window.py").read_text(encoding="utf-8")
     assert "self.menuBar().clear()" in text
     assert "self._build_menu()" in text
-    assert "self.addAction(zoom_in_act)" in text
-    assert "self.removeAction(action)" in text
+    assert "QShortcut" in text
+    assert "ApplicationShortcut" in text
     assert 'QKeySequence("Ctrl+=")' in text
     assert 'QKeySequence("Ctrl++")' in text
+    assert '"Ctrl+_"' in text
+    assert '"Ctrl+Num+-"' in text
     assert "QKeySequence.StandardKey.ZoomIn" in text
 
 
@@ -85,13 +89,15 @@ def test_zoom_scales_stylesheet_font_sizes() -> None:
     assert "font-size: 14pt;" in _scaled_stylesheet(qss, 0.7)
 
 
-def test_full_uninstall_script_requires_explicit_delete_confirmation() -> None:
+def test_full_uninstall_script_uses_safe_yes_no_confirmation() -> None:
     root = SRC.parents[1]
     batch_text = (root / "uninstall_project_exporter.bat").read_text(encoding="utf-8")
     ps_text = (root / "tools" / "uninstall_project_exporter.ps1").read_text(encoding="utf-8")
     assert "tools\\uninstall_project_exporter.ps1" in batch_text
-    assert "Type DELETE to continue" in ps_text
-    assert '$answer -ne "DELETE"' in ps_text
+    assert "Continue with full removal? [Y/n]" in ps_text
+    assert 'notmatch "^(y|yes)$"' in ps_text
+    assert "Stop-RunningApp" in ps_text
+    assert "Get-ShortcutInstallLocations" in ps_text
     assert "Get-InstallEntries" in ps_text
     assert "Remove-InstallDirectory" in ps_text
 

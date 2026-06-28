@@ -78,21 +78,6 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus, QPlainTextEdi
 
 QComboBox {
     min-height: 20px;
-    padding-right: 30px;
-}
-
-QComboBox::drop-down {
-    subcontrol-origin: padding;
-    subcontrol-position: top right;
-    width: 28px;
-    border-left: 1px solid #334155;
-    border-top-right-radius: 8px;
-    border-bottom-right-radius: 8px;
-    background: #111827;
-}
-
-QComboBox::drop-down:hover {
-    background: #1e293b;
 }
 
 QComboBox QAbstractItemView {
@@ -106,29 +91,6 @@ QComboBox QAbstractItemView {
 
 QSpinBox {
     min-height: 20px;
-    padding-right: 32px;
-}
-
-QSpinBox::up-button, QSpinBox::down-button {
-    width: 28px;
-    border-left: 1px solid #334155;
-    background: #111827;
-}
-
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background: #1e293b;
-}
-
-QSpinBox::up-button {
-    subcontrol-origin: border;
-    subcontrol-position: top right;
-    border-top-right-radius: 8px;
-}
-
-QSpinBox::down-button {
-    subcontrol-origin: border;
-    subcontrol-position: bottom right;
-    border-bottom-right-radius: 8px;
 }
 
 QHeaderView::section {
