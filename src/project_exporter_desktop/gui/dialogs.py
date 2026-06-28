@@ -33,15 +33,15 @@ def _split_rules(text: str) -> list[str]:
 class ExportPlanDialog(QDialog):
     def __init__(self, preview_text: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Export Plan confirmation")
+        self.setWindowTitle("Подтверждение плана экспорта")
         self.setMinimumSize(760, 560)
 
         layout = QVBoxLayout(self)
-        title = QLabel("Review Export Plan before copying")
+        title = QLabel("Проверьте план экспорта перед копированием")
         title.setObjectName("PageTitle")
         hint = QLabel(
-            "The project will not be copied until you confirm this plan. "
-            "Safe Export exclusions remain active even if custom include rules exist."
+            "Проект не будет скопирован до подтверждения плана. "
+            "Правила безопасного экспорта остаются активными, даже если заданы пользовательские правила включения."
         )
         hint.setWordWrap(True)
         hint.setObjectName("PageHint")
@@ -54,8 +54,8 @@ class ExportPlanDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Continue export")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancel")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Начать экспорт")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -75,7 +75,7 @@ class RulesDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Custom include / exclude rules")
+        self.setWindowTitle("Правила включения и исключения")
         self.setMinimumSize(780, 640)
 
         self.excluded_files = QTextEdit()
@@ -84,19 +84,19 @@ class RulesDialog(QDialog):
         self.always_include_dirs = QTextEdit()
 
         fields = [
-            ("Exclude files / glob patterns", self.excluded_files, excluded_files),
-            ("Exclude extensions", self.excluded_extensions, excluded_extensions),
+            ("Исключить файлы / glob-шаблоны", self.excluded_files, excluded_files),
+            ("Исключить расширения", self.excluded_extensions, excluded_extensions),
             (
-                "Always include files / glob patterns",
+                "Всегда включать файлы / glob-шаблоны",
                 self.always_include_files,
                 always_include_files,
             ),
-            ("Always include directories", self.always_include_dirs, always_include_dirs),
+            ("Всегда включать директории", self.always_include_dirs, always_include_dirs),
         ]
 
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "Enter one item per line or comma-separated. Safe Export can still block risky files."
+            "Вводите по одному элементу на строку или через запятую. Правила безопасного экспорта могут по-прежнему блокировать рисковые файлы."
         )
         intro.setObjectName("PageHint")
         layout.addWidget(intro)
@@ -128,13 +128,13 @@ class RulesDialog(QDialog):
 class PromptGoalsDialog(QDialog):
     def __init__(self, selected_goals: Iterable[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Prompt Builder goals")
+        self.setWindowTitle("Цели промптов")
         self.setMinimumSize(660, 420)
         selected = set(selected_goals)
         self.checkboxes: dict[str, QCheckBox] = {}
 
         layout = QVBoxLayout(self)
-        hint = QLabel("Choose which goals should be included in AI_PROMPTS/CUSTOM_PROMPT.md.")
+        hint = QLabel("Выберите цели, которые будут включены в AI_PROMPTS/CUSTOM_PROMPT.md.")
         hint.setObjectName("PageHint")
         layout.addWidget(hint)
 
@@ -166,16 +166,16 @@ class PromptGoalsDialog(QDialog):
 class HistoryDialog(QDialog):
     def __init__(self, history: list[dict[str, object]], parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Recent exports")
+        self.setWindowTitle("История экспортов")
         self.setMinimumSize(720, 460)
         layout = QVBoxLayout(self)
-        title = QLabel("Recent export history")
+        title = QLabel("История экспортов")
         title.setObjectName("PageTitle")
         layout.addWidget(title)
         text = QPlainTextEdit()
         text.setReadOnly(True)
         if not history:
-            text.setPlainText("Export history is empty.")
+            text.setPlainText("История экспортов пуста.")
         else:
             blocks: list[str] = []
             for item in history[:15]:
@@ -183,15 +183,15 @@ class HistoryDialog(QDialog):
                     "\n".join(
                         [
                             str(item.get("generated_at", "")),
-                            f"Project: {item.get('project_name', '')}",
-                            f"Profile: {item.get('profile', '')}; Safe: {item.get('safe_export_mode', '')}; Split: {item.get('split_archives', False)}",
-                            f"Result: {item.get('result', '')}",
+                            f"Проект: {item.get('project_name', '')}",
+                            f"Профиль: {item.get('profile', '')}; Режим: {item.get('safe_export_mode', '')}; Разбивка: {item.get('split_archives', False)}",
+                            f"Результат: {item.get('result', '')}",
                         ]
                     )
                 )
             text.setPlainText("\n\n".join(blocks))
         layout.addWidget(text, 1)
-        close = QPushButton("Close")
+        close = QPushButton("Закрыть")
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
         row.addStretch(1)

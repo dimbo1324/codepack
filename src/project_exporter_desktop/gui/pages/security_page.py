@@ -19,9 +19,8 @@ from . import make_card, make_scroll_page, set_combo_value, wrap_layout
 
 
 class SecurityPage(QWidget):
-    """Page 3 — safe export mode, redaction and custom rules."""
+    """Страница 3 — режим безопасного экспорта, редактирование и пользовательские правила."""
 
-    # Emitted when a tool action button is clicked; MainWindow handles the action.
     edit_rules_requested = Signal()
     edit_prompt_goals_requested = Signal()
     create_exportignore_requested = Signal()
@@ -35,8 +34,8 @@ class SecurityPage(QWidget):
         super().__init__(parent)
 
         scroll, layout = make_scroll_page(
-            "Safety and filtering",
-            "Configure safe export policy, redaction, Git patch inclusion and custom include/exclude rules.",
+            "Безопасность и фильтрация",
+            "Настройка режима безопасного экспорта, скрытия секретов, Git-патча и пользовательских правил включения/исключения.",
         )
         card, card_layout = make_card()
         form = QFormLayout()
@@ -49,31 +48,31 @@ class SecurityPage(QWidget):
         safe_block = QVBoxLayout()
         safe_block.addWidget(self.safe_mode_combo)
         safe_block.addWidget(self.safe_hint)
-        form.addRow("Safe Export mode", wrap_layout(safe_block))
+        form.addRow("Режим безопасности", wrap_layout(safe_block))
 
-        self.redact_checkbox = QCheckBox("Redact obvious secrets in text and Git reports")
+        self.redact_checkbox = QCheckBox("Скрывать очевидные секреты в текстовых и Git-отчётах")
         self.git_patch_checkbox = QCheckBox(
-            "Include full Git patch; disabled by default because patches may contain secrets"
+            "Включить полный Git-патч (отключён по умолчанию, так как патчи могут содержать секреты)"
         )
-        self.include_project_checkbox = QCheckBox("Include copied project in final ZIP")
-        self.keep_staging_checkbox = QCheckBox("Keep staging folder after export")
-        form.addRow("Redaction", self.redact_checkbox)
-        form.addRow("Git patch", self.git_patch_checkbox)
-        form.addRow("Project files", self.include_project_checkbox)
-        form.addRow("Staging", self.keep_staging_checkbox)
+        self.include_project_checkbox = QCheckBox("Включить копию проекта в финальный ZIP")
+        self.keep_staging_checkbox = QCheckBox("Сохранять рабочую папку после экспорта")
+        form.addRow("Скрытие секретов", self.redact_checkbox)
+        form.addRow("Git-патч", self.git_patch_checkbox)
+        form.addRow("Файлы проекта", self.include_project_checkbox)
+        form.addRow("Рабочая папка", self.keep_staging_checkbox)
 
         self.extra_ignored_edit = QLineEdit()
         self.extra_ignored_edit.setPlaceholderText(".cache, tmp, vendor")
-        form.addRow("Extra ignored dirs", self.extra_ignored_edit)
+        form.addRow("Дополнительно игнорировать", self.extra_ignored_edit)
 
         card_layout.addLayout(form)
 
         actions = QHBoxLayout()
         for text, signal in [
-            ("Edit include/exclude rules", self.edit_rules_requested),
-            ("Prompt Builder", self.edit_prompt_goals_requested),
-            ("Create .exportignore", self.create_exportignore_requested),
-            ("Profiles JSON", self.open_profiles_json_requested),
+            ("Правила включения/исключения", self.edit_rules_requested),
+            ("Промпт-цели", self.edit_prompt_goals_requested),
+            ("Создать .exportignore", self.create_exportignore_requested),
+            ("Профили JSON", self.open_profiles_json_requested),
         ]:
             button = QPushButton(text)
             button.clicked.connect(signal.emit)
@@ -83,10 +82,10 @@ class SecurityPage(QWidget):
 
         settings_actions = QHBoxLayout()
         for text, signal in [
-            ("Export settings", self.export_settings_requested),
-            ("Import settings", self.import_settings_requested),
-            ("Reset settings", self.reset_settings_requested),
-            ("Recent exports", self.show_history_requested),
+            ("Экспорт настроек", self.export_settings_requested),
+            ("Импорт настроек", self.import_settings_requested),
+            ("Сбросить настройки", self.reset_settings_requested),
+            ("История экспортов", self.show_history_requested),
         ]:
             button = QPushButton(text)
             button.clicked.connect(signal.emit)

@@ -19,15 +19,15 @@ from . import make_card, make_scroll_page, set_combo_value, wrap_layout
 
 
 class SettingsPage(QWidget):
-    """Page 2 — export profile, text dump, archive and Git diff settings."""
+    """Страница 2 — профиль экспорта, текстовый дамп, архив и параметры Git diff."""
 
     def __init__(self, profile_catalog: dict[str, str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._profile_catalog = profile_catalog
 
         scroll, layout = make_scroll_page(
-            "Export settings",
-            "Control profile, text dump limits, archive size and Git/incremental file selection.",
+            "Настройки экспорта",
+            "Управление профилем, лимитами текстового дампа, размером архива и выбором файлов Git/инкрементального экспорта.",
         )
         card, card_layout = make_card()
         form = QFormLayout()
@@ -41,23 +41,23 @@ class SettingsPage(QWidget):
         profile_block = QVBoxLayout()
         profile_block.addWidget(self.profile_combo)
         profile_block.addWidget(self.profile_hint)
-        form.addRow("Export profile", wrap_layout(profile_block))
+        form.addRow("Профиль экспорта", wrap_layout(profile_block))
 
-        self.text_limit_checkbox = QCheckBox("Limit one text file in text dump")
+        self.text_limit_checkbox = QCheckBox("Ограничить размер файла в текстовом дампе")
         self.text_limit_checkbox.toggled.connect(self._sync_text_limit_state)
         self.max_text_mb_spin = QSpinBox()
         self.max_text_mb_spin.setRange(1, 4096)
-        self.max_text_mb_spin.setSuffix(" MB")
+        self.max_text_mb_spin.setSuffix(" МБ")
         text_limit_row = QHBoxLayout()
         text_limit_row.addWidget(self.text_limit_checkbox)
         text_limit_row.addWidget(self.max_text_mb_spin)
         text_limit_row.addStretch(1)
-        form.addRow("Text dump", wrap_layout(text_limit_row))
+        form.addRow("Текстовый дамп", wrap_layout(text_limit_row))
 
         self.zip_limit_spin = QSpinBox()
         self.zip_limit_spin.setRange(1, 102400)
-        self.zip_limit_spin.setSuffix(" MB")
-        form.addRow("ZIP part limit", self.zip_limit_spin)
+        self.zip_limit_spin.setSuffix(" МБ")
+        form.addRow("Лимит части ZIP", self.zip_limit_spin)
 
         self.diff_combo = QComboBox()
         self.diff_combo.addItems(list(DIFF_EXPORT_MODES.keys()))
@@ -67,23 +67,23 @@ class SettingsPage(QWidget):
         diff_block = QVBoxLayout()
         diff_block.addWidget(self.diff_combo)
         diff_block.addWidget(self.diff_hint)
-        form.addRow("Git diff export", wrap_layout(diff_block))
+        form.addRow("Режим экспорта Git", wrap_layout(diff_block))
 
         refs_row = QHBoxLayout()
         self.diff_base_edit = QLineEdit()
         self.diff_base_edit.setPlaceholderText("HEAD")
         self.diff_target_edit = QLineEdit()
-        self.diff_target_edit.setPlaceholderText("target ref")
-        refs_row.addWidget(QLabel("Base"))
+        self.diff_target_edit.setPlaceholderText("целевая ссылка")
+        refs_row.addWidget(QLabel("База"))
         refs_row.addWidget(self.diff_base_edit)
-        refs_row.addWidget(QLabel("Target"))
+        refs_row.addWidget(QLabel("Цель"))
         refs_row.addWidget(self.diff_target_edit)
-        form.addRow("Refs", wrap_layout(refs_row))
+        form.addRow("Git-ссылки", wrap_layout(refs_row))
 
         self.incremental_checkbox = QCheckBox(
-            "Export only files added/modified since previous successful baseline"
+            "Экспортировать только файлы, добавленные или изменённые с момента последнего успешного базового снимка"
         )
-        form.addRow("Incremental", self.incremental_checkbox)
+        form.addRow("Инкрементальный", self.incremental_checkbox)
 
         card_layout.addLayout(form)
         layout.addWidget(card)

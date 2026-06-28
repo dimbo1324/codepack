@@ -14,7 +14,7 @@ from . import make_card, make_scroll_page
 
 
 class _ProgressBar(QWidget):
-    """Thin wrapper that exposes a single setValue() method."""
+    """Тонкая обёртка с методом setValue()."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -30,21 +30,21 @@ class _ProgressBar(QWidget):
 
 
 class RunPage(QWidget):
-    """Page 4 — live progress bar, stage label and scrolling log view."""
+    """Страница 4 — прогресс-бар, текущий этап и прокручиваемый журнал."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         scroll, layout = make_scroll_page(
-            "Run log",
-            "The export runs in a worker thread. Progress, current stage and diagnostic messages appear here.",
+            "Журнал выполнения",
+            "Экспорт выполняется в отдельном потоке. Прогресс, текущий этап и диагностические сообщения отображаются здесь.",
         )
         card, card_layout = make_card()
 
         self._progress_bar = _ProgressBar()
         card_layout.addWidget(self._progress_bar)
 
-        self._stage_label = QLabel("Idle")
+        self._stage_label = QLabel("Ожидание")
         self._stage_label.setObjectName("PageHint")
         self._current_item_label = QLabel("")
         self._current_item_label.setObjectName("PageHint")
@@ -65,7 +65,7 @@ class RunPage(QWidget):
 
     def reset(self) -> None:
         self._progress_bar.setValue(0)
-        self._stage_label.setText("Starting export...")
+        self._stage_label.setText("Начало экспорта...")
         self._current_item_label.clear()
 
     def append_log(self, message: str) -> None:

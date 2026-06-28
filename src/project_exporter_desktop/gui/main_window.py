@@ -49,8 +49,8 @@ from .pages.settings_page import SettingsPage
 from .resources import asset_path, read_text_resource, style_path
 from .workers import ExportWorker, PlanPreviewWorker
 
-EXPORTIGNORE_TEMPLATE = """# Project Exporter rules
-# Similar to .gitignore. Use !pattern to explicitly include custom-ignored files.
+EXPORTIGNORE_TEMPLATE = """# Правила Project Exporter
+# Аналог .gitignore. Используйте !шаблон для явного включения файлов.
 
 node_modules/
 .git/
@@ -66,7 +66,7 @@ build/
 private/
 large-assets/
 
-# Examples:
+# Примеры:
 # !README.md
 # !docs/
 """
@@ -92,8 +92,8 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_ui()
         self._load_config_to_ui()
-        self._append_log(f"{APP_NAME} v{APP_VERSION} is ready.")
-        self._append_log("Select a project folder and create an export package.")
+        self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
+        self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
     # -- Construction ---------------------------------------------------------
 
@@ -103,28 +103,28 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon)))
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("File")
-        open_desktop = QAction("Open Desktop", self)
+        file_menu = self.menuBar().addMenu("Файл")
+        open_desktop = QAction("Рабочий стол", self)
         open_desktop.triggered.connect(self._open_desktop)
         file_menu.addAction(open_desktop)
-        open_result = QAction("Open last result", self)
+        open_result = QAction("Последний результат", self)
         open_result.triggered.connect(self._open_last_result)
         file_menu.addAction(open_result)
         file_menu.addSeparator()
-        exit_action = QAction("Exit", self)
+        exit_action = QAction("Выход", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        tools_menu = self.menuBar().addMenu("Tools")
-        tools_menu.addAction("Edit rules", self._edit_rules)
-        tools_menu.addAction("Prompt Builder", self._edit_prompt_goals)
-        tools_menu.addAction("Create .exportignore template", self._create_exportignore_template)
+        tools_menu = self.menuBar().addMenu("Инструменты")
+        tools_menu.addAction("Правила включения/исключения", self._edit_rules)
+        tools_menu.addAction("Промпт-цели", self._edit_prompt_goals)
+        tools_menu.addAction("Создать .exportignore", self._create_exportignore_template)
         tools_menu.addSeparator()
-        tools_menu.addAction("Export settings", self._export_settings)
-        tools_menu.addAction("Import settings", self._import_settings)
-        tools_menu.addAction("Reset settings", self._reset_settings)
+        tools_menu.addAction("Экспорт настроек", self._export_settings)
+        tools_menu.addAction("Импорт настроек", self._import_settings)
+        tools_menu.addAction("Сбросить настройки", self._reset_settings)
         tools_menu.addSeparator()
-        tools_menu.addAction("Recent exports", self._show_history)
+        tools_menu.addAction("История экспортов", self._show_history)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -175,22 +175,22 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.stack, 1)
 
         bottom = QHBoxLayout()
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("Готово")
         self.status_label.setObjectName("PageHint")
         bottom.addWidget(self.status_label, 1)
-        self.open_result_button = QPushButton("Open result")
+        self.open_result_button = QPushButton("Открыть результат")
         self.open_result_button.setEnabled(False)
         self.open_result_button.clicked.connect(self._open_last_result)
         bottom.addWidget(self.open_result_button)
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton("Отмена")
         self.cancel_button.setObjectName("DangerButton")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self._cancel_export)
         bottom.addWidget(self.cancel_button)
-        self.codex_button = QPushButton("Codex Package")
+        self.codex_button = QPushButton("Codex-пакет")
         self.codex_button.clicked.connect(lambda: self._start(codex_package=True))
         bottom.addWidget(self.codex_button)
-        self.start_button = QPushButton("Create export")
+        self.start_button = QPushButton("Создать экспорт")
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.clicked.connect(lambda: self._start(codex_package=False))
         bottom.addWidget(self.start_button)
@@ -215,9 +215,9 @@ class MainWindow(QMainWindow):
             bool(self.last_result_path and self.last_result_path.exists())
         )
         self.status_label.setText(
-            "Building Export Plan..."
+            "Строится план экспорта..."
             if preview
-            else ("Export is running..." if running else "Ready")
+            else ("Выполняется экспорт..." if running else "Готово")
         )
 
     # -- Config ---------------------------------------------------------------
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
         try:
             return validate_source_root(self.page_project.get_root())
         except Exception as exc:
-            QMessageBox.critical(self, "Invalid project root", str(exc))
+            QMessageBox.critical(self, "Неверный путь к проекту", str(exc))
             return None
 
     def _start(self, codex_package: bool = False) -> None:
@@ -307,8 +307,8 @@ class MainWindow(QMainWindow):
         self.pending_config = run_config
         self._set_page(3)
         self._append_log(
-            f"Building Export Plan... profile={run_config.normalized_export_profile()}, "
-            f"safe={run_config.normalized_safe_export_mode()}, "
+            f"Строится план экспорта... профиль={run_config.normalized_export_profile()}, "
+            f"режим={run_config.normalized_safe_export_mode()}, "
             f"diff={run_config.normalized_diff_export_mode()}"
         )
         self._set_running(True, preview=True)
@@ -321,11 +321,11 @@ class MainWindow(QMainWindow):
         self._set_running(False)
         dialog = ExportPlanDialog(preview_text, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            self._append_log("Export cancelled at Export Plan confirmation stage.")
+            self._append_log("Экспорт отменён на этапе подтверждения плана.")
             return
         if self.pending_source_root is None or self.pending_config is None:
             QMessageBox.critical(
-                self, "Export error", "Internal state was lost before export start."
+                self, "Ошибка экспорта", "Внутреннее состояние было утеряно перед запуском экспорта."
             )
             return
         self._run_export(self.pending_source_root, self.pending_config)
@@ -335,8 +335,8 @@ class MainWindow(QMainWindow):
         self._append_diagnostic(traceback_text)
         QMessageBox.critical(
             self,
-            "Export Plan failed",
-            f"Could not build the Export Plan. Technical details were written to:\n{self.log_file}",
+            "Ошибка плана экспорта",
+            f"Не удалось построить план экспорта. Технические подробности записаны в:\n{self.log_file}",
         )
 
     def _run_export(self, source_root: Path, config: Config) -> None:
@@ -347,7 +347,7 @@ class MainWindow(QMainWindow):
         self.page_run.reset()
         self._set_page(3)
         self._set_running(True)
-        self._append_log("Starting export worker...")
+        self._append_log("Запуск потока экспорта...")
         self.export_worker = ExportWorker(source_root, config, self.cancel_event, self)
         self.export_worker.log_message.connect(self._append_log)
         self.export_worker.progress_changed.connect(self._handle_progress)
@@ -360,12 +360,12 @@ class MainWindow(QMainWindow):
             return
         reply = QMessageBox.question(
             self,
-            "Cancel export",
-            "Stop the current export operation? A partial result may remain if enough data was already produced.",
+            "Отмена экспорта",
+            "Остановить текущий экспорт? Частичный результат может остаться, если достаточно данных уже было создано.",
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.cancel_event.set()
-            self._append_log("Cancellation requested...")
+            self._append_log("Запрошена отмена...")
 
     def _on_export_finished(self, result: object) -> None:
         data = result if isinstance(result, dict) else {}
@@ -381,14 +381,14 @@ class MainWindow(QMainWindow):
         if cancelled:
             self.page_result.set_cancelled()
             QMessageBox.warning(
-                self, "Stopped", "Export was stopped. Review the result and run log."
+                self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал выполнения."
             )
         else:
             self.page_result.set_success(self.last_result_path)
             QMessageBox.information(
-                self, "Export complete", "Project export was created successfully."
+                self, "Экспорт завершён", "Экспорт проекта успешно создан."
             )
-        self.status_label.setText("Ready")
+        self.status_label.setText("Готово")
 
     def _on_export_failed(self, traceback_text: str) -> None:
         self._set_running(False)
@@ -397,8 +397,8 @@ class MainWindow(QMainWindow):
         self.page_result.set_failed(str(self.log_file))
         QMessageBox.critical(
             self,
-            "Export failed",
-            f"Export failed. Technical details were written to:\n{self.log_file}",
+            "Ошибка экспорта",
+            f"Экспорт завершился с ошибкой. Технические подробности записаны в:\n{self.log_file}",
         )
 
     def _handle_progress(self, percent: int, stage: str, current: str) -> None:
@@ -409,9 +409,9 @@ class MainWindow(QMainWindow):
         self.page_run.append_log(message)
 
     def _append_diagnostic(self, traceback_text: str) -> None:
-        append_app_log("Technical traceback follows:")
+        append_app_log("Техническая трассировка:")
         append_app_log(traceback_text)
-        self._append_log(f"Technical error details were written to: {self.log_file}")
+        self._append_log(f"Технические подробности записаны в: {self.log_file}")
 
     # -- Tools ----------------------------------------------------------------
 
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
         self.config.always_include_files = values["always_include_files"]
         self.config.always_include_dirs = values["always_include_dirs"]
         self.config.save()
-        self._append_log("Custom include/exclude rules saved.")
+        self._append_log("Правила включения/исключения сохранены.")
 
     def _edit_prompt_goals(self) -> None:
         dialog = PromptGoalsDialog(self.config.prompt_goals, self)
@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
             return
         self.config.prompt_goals = dialog.goals()
         self.config.save()
-        self._append_log("Prompt Builder goals saved.")
+        self._append_log("Цели промптов сохранены.")
 
     def _create_exportignore_template(self) -> None:
         source_root = self._validate_source_root()
@@ -449,49 +449,49 @@ class MainWindow(QMainWindow):
         if target.exists():
             reply = QMessageBox.question(
                 self,
-                ".exportignore exists",
-                ".exportignore already exists. Overwrite it with the template?",
+                ".exportignore уже существует",
+                ".exportignore уже существует. Перезаписать шаблоном?",
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
         try:
             target.write_text(EXPORTIGNORE_TEMPLATE, encoding="utf-8", newline="\n")
-            self._append_log(f"Created .exportignore: {target}")
+            self._append_log(f"Создан .exportignore: {target}")
             self._open_path(target)
         except Exception as exc:
-            QMessageBox.critical(self, "Write error", f"Could not create .exportignore:\n{exc}")
+            QMessageBox.critical(self, "Ошибка записи", f"Не удалось создать .exportignore:\n{exc}")
 
     def _export_settings(self) -> None:
         self._save_config_from_ui()
         target, _ = QFileDialog.getSaveFileName(
             self,
-            "Export settings",
+            "Экспорт настроек",
             "project_exporter_settings.json",
-            "JSON files (*.json)",
+            "JSON-файлы (*.json)",
         )
         if not target:
             return
         try:
             Config.export_settings(Path(target), self.config)
-            self._append_log(f"Settings exported: {target}")
+            self._append_log(f"Настройки экспортированы: {target}")
         except Exception as exc:
-            QMessageBox.critical(self, "Export settings failed", str(exc))
+            QMessageBox.critical(self, "Ошибка экспорта настроек", str(exc))
 
     def _import_settings(self) -> None:
-        source, _ = QFileDialog.getOpenFileName(self, "Import settings", "", "JSON files (*.json)")
+        source, _ = QFileDialog.getOpenFileName(self, "Импорт настроек", "", "JSON-файлы (*.json)")
         if not source:
             return
         try:
             self.config = Config.import_settings(Path(source))
             self.config.save()
             self._load_config_to_ui()
-            self._append_log(f"Settings imported: {source}")
+            self._append_log(f"Настройки импортированы: {source}")
         except Exception as exc:
-            QMessageBox.critical(self, "Import settings failed", str(exc))
+            QMessageBox.critical(self, "Ошибка импорта настроек", str(exc))
 
     def _reset_settings(self) -> None:
         reply = QMessageBox.question(
-            self, "Reset settings", "Reset saved settings to safe defaults?"
+            self, "Сброс настроек", "Сбросить настройки к безопасным значениям по умолчанию?"
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -501,7 +501,7 @@ class MainWindow(QMainWindow):
             pass
         self.config = Config()
         self._load_config_to_ui()
-        self._append_log("Settings reset to defaults.")
+        self._append_log("Настройки сброшены к значениям по умолчанию.")
 
     def _show_history(self) -> None:
         HistoryDialog(load_export_history(), self).exec()
@@ -516,7 +516,7 @@ class MainWindow(QMainWindow):
         if self.last_result_path and self.last_result_path.exists():
             self._open_path(self.last_result_path)
         else:
-            QMessageBox.warning(self, "No result", "No generated result exists yet.")
+            QMessageBox.warning(self, "Нет результата", "Результат экспорта ещё не создавался.")
 
     def _open_path(self, path: Path) -> None:
         try:
@@ -527,7 +527,7 @@ class MainWindow(QMainWindow):
             else:
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception as exc:
-            QMessageBox.critical(self, "Open path failed", f"Could not open:\n{path}\n\n{exc}")
+            QMessageBox.critical(self, "Ошибка открытия", f"Не удалось открыть:\n{path}\n\n{exc}")
 
 
 def run_app() -> int:

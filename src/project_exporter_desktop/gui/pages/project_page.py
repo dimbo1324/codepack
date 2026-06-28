@@ -16,14 +16,14 @@ from . import make_card, make_scroll_page
 
 
 class ProjectPage(QWidget):
-    """Page 1 — project root selection."""
+    """Страница 1 — выбор корневой папки проекта."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         scroll, layout = make_scroll_page(
-            "Select project",
-            "Choose the source project folder. The original project is read-only during normal export.",
+            "Выбор проекта",
+            "Выберите корневую папку проекта. При экспорте исходный проект не изменяется.",
         )
         card, card_layout = make_card()
 
@@ -31,16 +31,21 @@ class ProjectPage(QWidget):
         form.setColumnStretch(0, 1)
         self.root_edit = QLineEdit()
         self.root_edit.setPlaceholderText(r"C:\Users\you\Desktop\my-project")
-        browse = QPushButton("Browse")
+        browse = QPushButton("Обзор")
         browse.clicked.connect(self._browse_root)
-        form.addWidget(QLabel("Project root"), 0, 0, 1, 2)
+        form.addWidget(QLabel("Папка проекта"), 0, 0, 1, 2)
         form.addWidget(self.root_edit, 1, 0)
         form.addWidget(browse, 1, 1)
         card_layout.addLayout(form)
 
+        self._stack_label = QLabel("")
+        self._stack_label.setObjectName("PageHint")
+        self._stack_label.setWordWrap(True)
+        card_layout.addWidget(self._stack_label)
+
         self.project_hint = QLabel(
-            "Safe defaults exclude .git, node_modules, virtual environments,"
-            " caches, build artefacts and obvious secrets."
+            "По умолчанию исключаются .git, node_modules, виртуальные окружения,"
+            " кэш, артефакты сборки и очевидные секреты."
         )
         self.project_hint.setObjectName("PageHint")
         self.project_hint.setWordWrap(True)
@@ -54,7 +59,7 @@ class ProjectPage(QWidget):
 
     def _browse_root(self) -> None:
         initial = self.root_edit.text().strip() or str(Path.home())
-        selected = QFileDialog.getExistingDirectory(self, "Select project root", initial)
+        selected = QFileDialog.getExistingDirectory(self, "Выберите папку проекта", initial)
         if selected:
             self.root_edit.setText(selected)
 
@@ -63,3 +68,6 @@ class ProjectPage(QWidget):
 
     def set_root(self, text: str) -> None:
         self.root_edit.setText(text)
+
+    def set_detected_stack(self, info: str) -> None:
+        self._stack_label.setText(info)
