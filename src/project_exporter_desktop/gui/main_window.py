@@ -77,7 +77,6 @@ large-assets/
 # !docs/
 """
 
-# Page indices in the stacked widget
 _PAGE_PROJECT = 0
 _PAGE_SETTINGS = 1
 _PAGE_SECURITY = 2
@@ -122,7 +121,6 @@ class MainWindow(QMainWindow):
         self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
         self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
-    # -- Construction ---------------------------------------------------------
 
     def _apply_icon(self) -> None:
         icon = asset_path("ICO.ico")
@@ -176,7 +174,7 @@ class MainWindow(QMainWindow):
         self._watch_timer.setSingleShot(True)
         self._watch_timer.timeout.connect(self._flush_watch_notification)
 
-    def closeEvent(self, event) -> None:  # noqa: ANN001, N802
+    def closeEvent(self, event) -> None:
         if self._allow_close or not self.tray_icon.isVisible():
             event.accept()
             return
@@ -303,7 +301,6 @@ class MainWindow(QMainWindow):
         self.page_history = HistoryPage()
         self.page_analytics = AnalyticsPage()
 
-        # Wire SecurityPage action signals
         sec = self.page_security
         sec.edit_rules_requested.connect(self._edit_rules)
         sec.edit_prompt_goals_requested.connect(self._edit_prompt_goals)
@@ -314,7 +311,6 @@ class MainWindow(QMainWindow):
         sec.reset_settings_requested.connect(self._reset_settings)
         sec.show_history_requested.connect(self._show_history)
 
-        # Wire ResultPage navigation signals
         self.page_result.open_result_requested.connect(self._open_last_result)
         self.page_result.open_desktop_requested.connect(self._open_desktop)
 
@@ -322,11 +318,9 @@ class MainWindow(QMainWindow):
         self.page_history.repeat_export_requested.connect(self._repeat_history_export)
         self.page_analytics.refresh_button.clicked.connect(self._refresh_analytics)
 
-        # Wire PreviewPage signals
         self.page_preview.export_confirmed.connect(self._on_preview_confirmed)
         self.page_preview.export_cancelled.connect(self._on_preview_back)
 
-        # Stack detection: update label whenever root path changes
         self.page_project.root_edit.textChanged.connect(self._on_root_changed)
 
         self.stack = QStackedWidget()
@@ -343,7 +337,6 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page)
         content_layout.addWidget(self.stack, 1)
 
-        # Bottom bar
         bottom = QHBoxLayout()
         self.status_label = QLabel("Готово")
         self.status_label.setObjectName("PageHint")
@@ -376,7 +369,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self._set_page(_PAGE_PROJECT)
 
-    # -- UI state -------------------------------------------------------------
 
     def _set_page(self, index: int) -> None:
         if hasattr(self, "stack"):
@@ -401,7 +393,6 @@ class MainWindow(QMainWindow):
             else ("Выполняется экспорт..." if running else "Готово")
         )
 
-    # -- Config ---------------------------------------------------------------
 
     def _load_config_to_ui(self) -> None:
         self.page_project.set_root(self.config.last_root)
@@ -470,7 +461,6 @@ class MainWindow(QMainWindow):
             zip_part_limit_mb=MAX_ARCHIVE_PART_MB,
         )
 
-    # -- Stack detection ------------------------------------------------------
 
     def _on_root_changed(self, text: str) -> None:
         from ..services.stack_detector import format_stack_label
@@ -479,7 +469,6 @@ class MainWindow(QMainWindow):
         label = format_stack_label(root) if root and root.is_dir() else ""
         self.page_project.set_detected_stack(label)
 
-    # -- Export flow ----------------------------------------------------------
 
     def _validate_source_root(self) -> Path | None:
         try:
@@ -503,7 +492,6 @@ class MainWindow(QMainWindow):
         self.pending_source_root = source_root
         self.pending_config = run_config
 
-        # Navigate to PreviewPage while plan builds
         self.page_preview.reset()
         self._set_page(_PAGE_PREVIEW)
         self._append_log(
@@ -652,7 +640,6 @@ class MainWindow(QMainWindow):
         append_app_log(traceback_text)
         self._append_log(f"Технические подробности записаны в: {self.log_file}")
 
-    # -- Clipboard export -----------------------------------------------------
 
     def _start_clipboard_export(self) -> None:
         if self.clipboard_worker and self.clipboard_worker.isRunning():
@@ -712,7 +699,6 @@ class MainWindow(QMainWindow):
             f"Не удалось подготовить дамп. Технические подробности записаны в:\n{self.log_file}",
         )
 
-    # -- Tools ----------------------------------------------------------------
 
     def _edit_rules(self) -> None:
         dialog = RulesDialog(
@@ -859,7 +845,7 @@ class MainWindow(QMainWindow):
     def _open_path(self, path: Path) -> None:
         try:
             if os.name == "nt":
-                os.startfile(str(path))  # type: ignore[attr-defined]
+                os.startfile(str(path))
             elif sys.platform == "darwin":
                 subprocess.Popen(["open", str(path)])
             else:

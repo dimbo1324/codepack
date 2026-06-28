@@ -13,7 +13,7 @@ from project_exporter_desktop.services.diff_service import (
 
 def test_last_export_detects_added_modified_and_deleted(
     tmp_path: Path, monkeypatch
-) -> None:  # noqa: ANN001
+) -> None:
     root = tmp_path / "project"
     root.mkdir()
     history_file = tmp_path / "history.json"

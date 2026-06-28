@@ -9,18 +9,18 @@ class ExportPaths:
     desktop: Path
     source_root: Path
     project_name: str
-    bundle_name: str  # "{project}_export_{timestamp}"
-    staging_dir: Path  # ~/Desktop/{bundle_name}
-    final_zip: Path  # ~/Desktop/{bundle_name}.zip for a single archive
-    archive_set_dir: Path  # ~/Desktop/{bundle_name}_archives for split archives
-    project_dir: Path  # {staging_dir}/{project_name}
-    reports_dir: Path  # {staging_dir}/reports
-    insights_dir: Path  # {staging_dir}/reports/insights
-    manifest_file: Path  # {staging_dir}/manifest.json
-    project_profile_file: Path  # {staging_dir}/PROJECT_PROFILE.json
-    index_file: Path  # {staging_dir}/INDEX.md
-    structure_report: Path  # {reports_dir}/01_structure.txt
-    git_report: Path  # {reports_dir}/02_git.txt
+    bundle_name: str
+    staging_dir: Path
+    final_zip: Path
+    archive_set_dir: Path
+    project_dir: Path
+    reports_dir: Path
+    insights_dir: Path
+    manifest_file: Path
+    project_profile_file: Path
+    index_file: Path
+    structure_report: Path
+    git_report: Path
     text_dump: Path
 
 

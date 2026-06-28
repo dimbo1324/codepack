@@ -132,7 +132,6 @@ class Config:
         return cls(**migrated)
 
 
-# -- Legacy settings ---------------------------------------------------------
 
 
 def _migrate_legacy_settings(data: dict[str, Any]) -> dict[str, Any]:

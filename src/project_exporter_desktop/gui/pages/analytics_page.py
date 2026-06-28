@@ -30,7 +30,7 @@ class _LanguageChart(QFrame):
         self._items = items[:8]
         self.update()
 
-    def paintEvent(self, _event) -> None:  # noqa: ANN001, N802
+    def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         rect = self.rect().adjusted(8, 8, -8, -8)

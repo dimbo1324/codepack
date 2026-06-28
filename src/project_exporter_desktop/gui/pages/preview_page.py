@@ -19,13 +19,12 @@ from ...utils.text_utils import format_bytes
 from ...utils.token_counter import context_fit_rows, format_tokens
 from . import make_card
 
-# ── Colour scheme ────────────────────────────────────────────────────────────
-_COLOR_INCLUDED = QColor("#4caf50")        # green
-_COLOR_EXCLUDED_HIGH = QColor("#f44336")   # red
-_COLOR_EXCLUDED_MEDIUM = QColor("#ff9800") # orange
-_COLOR_EXCLUDED_INFO = QColor("#9e9e9e")   # gray
-_COLOR_OVERRIDE_INC = QColor("#00bcd4")    # cyan  – user forced include
-_COLOR_OVERRIDE_EXC = QColor("#e91e63")    # pink  – user forced exclude
+_COLOR_INCLUDED = QColor("#4caf50")
+_COLOR_EXCLUDED_HIGH = QColor("#f44336")
+_COLOR_EXCLUDED_MEDIUM = QColor("#ff9800")
+_COLOR_EXCLUDED_INFO = QColor("#9e9e9e")
+_COLOR_OVERRIDE_INC = QColor("#00bcd4")
+_COLOR_OVERRIDE_EXC = QColor("#e91e63")
 
 _SEVERITY_COLOR = {
     "critical": _COLOR_EXCLUDED_HIGH,
@@ -50,22 +49,19 @@ class PreviewPage(QWidget):
     are connected by MainWindow.
     """
 
-    export_confirmed = Signal(object)   # dict[str, bool] overrides
+    export_confirmed = Signal(object)
     export_cancelled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        # Runtime state
-        self._overrides: dict[str, bool] = {}   # rel_path → True=force-include, False=force-exclude
+        self._overrides: dict[str, bool] = {}
         self._plan: Any = None
 
-        # ── Outer layout ────────────────────────────────────────────────────
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(14)
 
-        # Title
         title = QLabel("Предпросмотр экспорта")
         title.setObjectName("PageTitle")
         outer.addWidget(title)
@@ -79,7 +75,6 @@ class PreviewPage(QWidget):
         hint.setWordWrap(True)
         outer.addWidget(hint)
 
-        # ── Stats card ──────────────────────────────────────────────────────
         stats_card, stats_layout = make_card()
         stats_layout.setSpacing(6)
 
@@ -92,7 +87,6 @@ class PreviewPage(QWidget):
         self._token_label.setWordWrap(True)
         stats_layout.addWidget(self._token_label)
 
-        # Per-model context fit bar
         self._model_rows: list[QLabel] = []
         model_frame = QHBoxLayout()
         model_frame.setSpacing(16)
@@ -106,7 +100,6 @@ class PreviewPage(QWidget):
 
         outer.addWidget(stats_card)
 
-        # ── Tree card ───────────────────────────────────────────────────────
         tree_card, tree_layout = make_card()
 
         toolbar = QHBoxLayout()
@@ -137,7 +130,6 @@ class PreviewPage(QWidget):
 
         outer.addWidget(tree_card, 1)
 
-        # ── Confirm / cancel buttons ────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         cancel_btn = QPushButton("Назад к настройкам")
@@ -150,7 +142,6 @@ class PreviewPage(QWidget):
         btn_row.addWidget(self._confirm_btn)
         outer.addLayout(btn_row)
 
-    # ── Public API ───────────────────────────────────────────────────────────
 
     def populate(self, plan: Any) -> None:
         """Fill the tree from an ExportPlan object (duck-typed to avoid service import)."""
@@ -171,7 +162,7 @@ class PreviewPage(QWidget):
             self._tree.addTopLevelItem(item)
 
         self._tree.setSortingEnabled(True)
-        self._tree.sortByColumn(2, Qt.SortOrder.AscendingOrder)  # status column
+        self._tree.sortByColumn(2, Qt.SortOrder.AscendingOrder)
 
         self._refresh_stats()
         self._confirm_btn.setEnabled(True)
@@ -190,7 +181,6 @@ class PreviewPage(QWidget):
     def get_overrides(self) -> dict[str, bool]:
         return dict(self._overrides)
 
-    # ── Private helpers ──────────────────────────────────────────────────────
 
     def _make_item(self, pf: Any, *, included: bool) -> QTreeWidgetItem:
         rel = getattr(pf, "relative_path", "")
@@ -201,7 +191,7 @@ class PreviewPage(QWidget):
         status_text = "Включён" if included else "Исключён"
         item = QTreeWidgetItem([rel, format_bytes(size), status_text, reason])
         item.setData(0, Qt.ItemDataRole.UserRole, rel)
-        item.setData(2, Qt.ItemDataRole.UserRole, included)   # original decision
+        item.setData(2, Qt.ItemDataRole.UserRole, included)
 
         color = _COLOR_INCLUDED if included else _SEVERITY_COLOR.get(severity, _COLOR_EXCLUDED_INFO)
         for col in range(4):
@@ -215,7 +205,6 @@ class PreviewPage(QWidget):
         original_included: bool = item.data(2, Qt.ItemDataRole.UserRole)
 
         if rel in self._overrides:
-            # Remove override → restore original
             del self._overrides[rel]
             currently_included = original_included
             color = (
@@ -226,7 +215,6 @@ class PreviewPage(QWidget):
                 )
             )
         else:
-            # Apply override: flip the decision
             new_decision = not original_included
             self._overrides[rel] = new_decision
             currently_included = new_decision
@@ -265,7 +253,6 @@ class PreviewPage(QWidget):
         included_files = getattr(self._plan, "included_files", [])
         excluded_files = getattr(self._plan, "excluded_files", [])
 
-        # Compute effective counts after overrides
         inc_set = {getattr(pf, "relative_path", "") for pf in included_files}
         exc_set = {getattr(pf, "relative_path", "") for pf in excluded_files}
         for rel, decision in self._overrides.items():
@@ -301,7 +288,6 @@ class PreviewPage(QWidget):
         else:
             self._token_label.setText("")
 
-        # Per-model fit indicators
         rows = context_fit_rows(inc_bytes)
         for i, lbl in enumerate(self._model_rows):
             if i < len(rows):

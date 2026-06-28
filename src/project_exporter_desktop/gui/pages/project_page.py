@@ -27,7 +27,6 @@ class ProjectPage(QWidget):
             "Выберите корневую папку проекта. При экспорте исходный проект не изменяется.",
         )
 
-        # ── Карточка выбора папки ────────────────────────────────────────────
         card, card_layout = make_card()
 
         form = QGridLayout()
@@ -55,7 +54,6 @@ class ProjectPage(QWidget):
         card_layout.addWidget(self.project_hint)
         layout.addWidget(card)
 
-        # ── Карточка контекста разработчика ─────────────────────────────────
         ctx_card, ctx_layout = make_card()
         ctx_title = QLabel("Контекст для ИИ")
         ctx_title.setObjectName("PageTitle")
@@ -84,7 +82,6 @@ class ProjectPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
-    # ── Folder selection ─────────────────────────────────────────────────────
 
     def _browse_root(self) -> None:
         initial = self.root_edit.text().strip() or str(Path.home())
@@ -92,7 +89,6 @@ class ProjectPage(QWidget):
         if selected:
             self.root_edit.setText(selected)
 
-    # ── Getters / setters ────────────────────────────────────────────────────
 
     def get_root(self) -> str:
         return self.root_edit.text().strip()

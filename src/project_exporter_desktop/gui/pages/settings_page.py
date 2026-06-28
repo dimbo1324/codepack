@@ -33,7 +33,6 @@ class SettingsPage(QWidget):
             "Выберите AI-пресет для быстрой конфигурации, либо настройте профиль и параметры вручную.",
         )
 
-        # ── AI Presets card ─────────────────────────────────────────────────
         preset_card, preset_layout = make_card()
         preset_title = QLabel("AI-пресет")
         preset_title.setObjectName("PageTitle")
@@ -54,7 +53,6 @@ class SettingsPage(QWidget):
         preset_layout.addLayout(preset_form)
         layout.addWidget(preset_card)
 
-        # ── Main settings card ──────────────────────────────────────────────
         card, card_layout = make_card()
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -130,7 +128,6 @@ class SettingsPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
-    # ── Sync helpers ─────────────────────────────────────────────────────────
 
     def _on_preset_changed(self, preset_name: str) -> None:
         if preset_name == _NO_PRESET or self._applying_preset:
@@ -152,7 +149,7 @@ class SettingsPage(QWidget):
             if "text_file_size_limit_enabled" in preset:
                 self.text_limit_checkbox.setChecked(bool(preset["text_file_size_limit_enabled"]))
             if "max_text_file_mb" in preset:
-                self.max_text_mb_spin.setValue(int(preset["max_text_file_mb"]))  # type: ignore[arg-type]
+                self.max_text_mb_spin.setValue(int(preset["max_text_file_mb"]))
         finally:
             self._applying_preset = False
         self._sync_text_limit_state()
@@ -175,10 +172,9 @@ class SettingsPage(QWidget):
     def _sync_text_limit_state(self) -> None:
         self.max_text_mb_spin.setEnabled(self.text_limit_checkbox.isChecked())
 
-    # ── Config I/O ───────────────────────────────────────────────────────────
 
     def load_from_config(self, config: Config) -> None:
-        self.preset_combo.setCurrentIndex(0)  # — без пресета —
+        self.preset_combo.setCurrentIndex(0)
         self.text_limit_checkbox.setChecked(config.text_file_size_limit_enabled)
         self.max_text_mb_spin.setValue(max(1, int(config.max_text_file_mb)))
         self.zip_limit_spin.setValue(max(1, int(config.zip_part_limit_mb or MAX_ARCHIVE_PART_MB)))

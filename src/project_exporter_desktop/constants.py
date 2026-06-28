@@ -13,7 +13,6 @@ USER_EXPORT_PROFILES_FILE = Path.home() / ".project_exporter_profiles.json"
 
 MAX_ARCHIVE_PART_MB = 512
 MAX_ARCHIVE_PART_BYTES = MAX_ARCHIVE_PART_MB * 1024 * 1024
-# Planning below the hard limit leaves room for ZIP headers and incompressible files.
 ARCHIVE_PART_TARGET_BYTES = 500 * 1024 * 1024
 
 IGNORED_DIR_NAMES: frozenset[str] = frozenset(

@@ -1,35 +1,27 @@
-# Python cache / bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environments
 .venv/
 venv/
 env/
 ENV/
 
-# Test / lint caches
 .coverage
 htmlcov/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 
-# Build / packaging outputs
 /dist/
-# PyInstaller creates build/{AppName}/ as its work directory
 /build/ProjectExporterDesktop/
-# Keep tracked build config files but ignore generated caches inside them
 /build/pyinstaller/__pycache__/
 *.egg-info/
 
-# Runtime logs and local settings
 *.log
 .project_exporter_desktop.json
 .project_exporter_profiles.json
 
-# Secrets and local environment files
 .env
 .env.*
 !.env.example
@@ -38,21 +30,17 @@ htmlcov/
 *.p12
 *.pfx
 
-# IDE / editor
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS files
 .DS_Store
 Thumbs.db
 
-# Generated export bundles, if created inside the project by mistake
 *_export_*.zip
 *_export_*/
 *_export_*_archives/
 
-# Temporary test data and build scratch
 .tmp/
 exports/

@@ -9,7 +9,6 @@ def _clean_rule(line: str) -> str:
     line = line.strip()
     if not line or line.startswith("#"):
         return ""
-    # Inline comments are treated as comments only when separated by whitespace.
     if " #" in line:
         line = line.split(" #", 1)[0].strip()
     return line.replace("\\", "/")
@@ -60,7 +59,6 @@ class ExportIgnoreRules:
                     ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
                 )
             except Exception:
-                # A malformed/locked .exportignore must not break the export.
                 pass
 
         for item in excluded_files or []:

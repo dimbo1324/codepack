@@ -9,7 +9,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "project_exporter_desktop"
 
 def test_page_utilities_importable() -> None:
     """Page shared utilities should be importable without a live QApplication."""
-    from project_exporter_desktop.gui.pages import (  # noqa: F401
+    from project_exporter_desktop.gui.pages import (
         make_card,
         make_scroll_page,
         set_combo_value,

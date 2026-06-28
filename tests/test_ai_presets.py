@@ -10,7 +10,6 @@ import pytest
 from project_exporter_desktop.config import Config
 from project_exporter_desktop.constants import AI_PRESETS, EXPORT_PROFILES, SAFE_EXPORT_MODES
 
-# ── AI_PRESETS structure ─────────────────────────────────────────────────────
 
 def test_presets_not_empty() -> None:
     assert len(AI_PRESETS) >= 5
@@ -47,7 +46,6 @@ def test_required_presets_exist() -> None:
     assert expected == set(AI_PRESETS.keys())
 
 
-# ── Config.developer_context ──────────────────────────────────────────────────
 
 def test_developer_context_default_empty() -> None:
     cfg = Config()
@@ -82,7 +80,6 @@ def test_config_roundtrip_with_developer_context(tmp_path: Path, monkeypatch: py
     assert loaded.developer_context == "Это тестовый контекст."
 
 
-# ── Preset redact_secrets / include_git_patch consistency ─────────────────────
 
 def test_claude_code_preset_uses_ai_review() -> None:
     preset = AI_PRESETS["Claude Code"]

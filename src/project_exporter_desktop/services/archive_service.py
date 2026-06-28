@@ -182,8 +182,6 @@ def _plan_logical_parts(entries: list[ArchiveEntry], target_bytes: int) -> list[
 
     for group in sorted(grouped):
         for entry in grouped[group]:
-            # Oversized individual files become their own logical part. The ZIP
-            # may still exceed the hard limit; the manifest calls that out.
             if current_entries and (
                 current_group != group or current_size + entry.size > target_bytes
             ):
@@ -385,9 +383,6 @@ def build_final_archives(
     except Exception as exc:
         log(f"Не удалось обновить REPORT_DASHBOARD.html перед архивацией: {exc}")
 
-    # Rebuild after writing archive-plan/dashboard files so the archive contains
-    # those generated files too. Rewriting the plan once more keeps size/count
-    # estimates close to the final archive input set.
     plan = build_archive_plan(paths, include_project, part_limit_bytes)
     write_archive_plan_report(plan, paths.insights_dir / "27_archive_plan.md")
     try:
@@ -399,8 +394,6 @@ def build_final_archives(
     plan = build_archive_plan(paths, include_project, part_limit_bytes)
     if pre_archive_hook is not None and not cancel.is_set():
         pre_archive_hook(_predicted_result_for_plan(paths, plan))
-        # Metadata files can change slightly when manifest/dashboard are refreshed.
-        # Rebuild the plan once more so the archive input list contains the latest files.
         plan = build_archive_plan(paths, include_project, part_limit_bytes)
 
     if plan.skipped_project_files:
@@ -425,7 +418,6 @@ def build_final_archives(
             return ArchiveBuildResult(
                 [paths.final_zip], None, False, count, plan.skipped_project_files
             )
-        # Very rare, but possible due to ZIP overhead/incompressible data.
         log(
             f"Одиночный ZIP превысил лимит после записи ({format_bytes(compressed_size)} > {format_bytes(plan.limit_bytes)}). Пересобираю частями."
         )
@@ -492,7 +484,6 @@ def build_final_archives(
     return result
 
 
-# Backwards-compatible wrapper for older imports/tests.
 def build_final_zip(
     paths: ExportPaths,
     include_project: bool,

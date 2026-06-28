@@ -25,7 +25,7 @@ class _ProgressBar(QWidget):
         self._bar.setTextVisible(True)
         layout.addWidget(self._bar)
 
-    def setValue(self, value: int) -> None:  # noqa: N802
+    def setValue(self, value: int) -> None:
         self._bar.setValue(value)
 
 

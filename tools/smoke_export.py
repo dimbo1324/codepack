@@ -10,7 +10,6 @@ from __future__ import annotations
 import io
 import sys
 
-# Ensure stdout/stderr support Unicode (e.g. on Windows cp1251 consoles)
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "buffer"):
@@ -22,12 +21,12 @@ from queue import Queue
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))  # noqa: E402
+    sys.path.insert(0, str(SRC))
 
-from project_exporter_desktop.config import Config  # noqa: E402
-from project_exporter_desktop.models import ExportPaths  # noqa: E402
-from project_exporter_desktop.services.exporter import ProjectExporter  # noqa: E402
-from project_exporter_desktop.utils.time_utils import now_stamp  # noqa: E402
+from project_exporter_desktop.config import Config
+from project_exporter_desktop.models import ExportPaths
+from project_exporter_desktop.services.exporter import ProjectExporter
+from project_exporter_desktop.utils.time_utils import now_stamp
 
 
 def _make_export_paths(source_root: Path, output_dir: Path) -> ExportPaths:
@@ -84,7 +83,6 @@ def run_smoke() -> int:
     log_queue: Queue[str] = Queue()
     cancel = threading.Event()
 
-    # Monkey-patch build_export_paths to redirect output to .tmp/smoke_output
     import project_exporter_desktop.services.exporter as exporter_mod
     import project_exporter_desktop.utils.path_utils as pu_mod
 
@@ -93,7 +91,7 @@ def run_smoke() -> int:
     def patched_build(source_root: Path) -> ExportPaths:
         return _make_export_paths(source_root, output_dir)
 
-    exporter_mod.build_export_paths = patched_build  # type: ignore[attr-defined]
+    exporter_mod.build_export_paths = patched_build
 
     try:
         exporter = ProjectExporter(
@@ -104,9 +102,8 @@ def run_smoke() -> int:
         )
         paths = exporter.run()
     finally:
-        exporter_mod.build_export_paths = original_build  # type: ignore[attr-defined]
+        exporter_mod.build_export_paths = original_build
 
-    # Drain log queue
     messages = []
     while not log_queue.empty():
         messages.append(log_queue.get_nowait())
@@ -124,7 +121,6 @@ def run_smoke() -> int:
         size_kb = paths.final_zip.stat().st_size // 1024
         print(f"  ZIP size    : {size_kb} KB")
 
-    # Verify by inspecting the ZIP (staging may have been cleaned up)
     import zipfile as zf
 
     zip_ok = paths.final_zip.exists()

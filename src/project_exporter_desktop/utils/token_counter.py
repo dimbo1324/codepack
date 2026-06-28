@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-# Approximate token-count estimators for common LLM context windows.
-# Token estimation uses ~3.5 chars per token (empirical average for mixed
-# source code and prose; real tokenizers vary by 10-20%).
 
 _CHARS_PER_TOKEN: float = 3.5
 

@@ -40,10 +40,10 @@ class QtLogQueue:
 
 class PlanPreviewWorker(QThread):
     finished_preview = Signal(str)
-    finished_plan = Signal(object)   # emits ExportPlan for PreviewPage
+    finished_plan = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
+    def __init__(self, source_root: Path, config: Config, parent=None) -> None:
         super().__init__(parent)
         self.source_root = source_root
         self.config = replace(config)
@@ -95,7 +95,7 @@ class ExportWorker(QThread):
         source_root: Path,
         config: Config,
         cancel_event: threading.Event,
-        parent=None,  # noqa: ANN001
+        parent=None,
         file_overrides: dict[str, bool] | None = None,
     ) -> None:
         super().__init__(parent)
@@ -147,13 +147,12 @@ class ClipboardExportWorker(QThread):
     clipboard. Does NOT archive or write to disk.
     """
 
-    # (full_text, byte_count, token_summary_line)
     finished = Signal(str, int, str)
     failed = Signal(str)
 
-    _MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024  # 20 MB hard cap for clipboard sanity
+    _MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024
 
-    def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
+    def __init__(self, source_root: Path, config: Config, parent=None) -> None:
         super().__init__(parent)
         self.source_root = source_root
         self.config = replace(config)
@@ -192,7 +191,6 @@ class ClipboardExportWorker(QThread):
             parts: list[str] = []
             total_bytes = 0
 
-            # Prepend developer context if set
             ctx = (self.config.developer_context or "").strip()
             if ctx:
                 header = (
@@ -238,7 +236,6 @@ class ClipboardExportWorker(QThread):
 
             full_text = "".join(parts)
             summary = context_summary_line(total_bytes)
-            # Clipboard write must happen on the main thread — emit text back
             self.finished.emit(full_text, total_bytes, summary)
         except Exception:
             self.failed.emit(traceback.format_exc())
@@ -248,7 +245,7 @@ class AnalyticsWorker(QThread):
     finished_report = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
+    def __init__(self, source_root: Path, config: Config, parent=None) -> None:
         super().__init__(parent)
         self.source_root = source_root
         self.config = replace(config)

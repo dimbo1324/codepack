@@ -73,7 +73,6 @@ class ProjectExporter:
             always_include_dirs=self.config.always_include_dirs,
         )
 
-        # Apply user overrides from PreviewPage: True=force-include, False=force-exclude
         for rel_path, include in self.file_overrides.items():
             norm = rel_path.replace("\\", "/")
             if include:
