@@ -44,6 +44,7 @@ class Config:
     theme: str = "system"
     watch_enabled: bool = False
     watch_clipboard_auto_update: bool = False
+    ui_zoom: float = 1.0
     prompt_goals: list[str] = field(
         default_factory=lambda: [
             "architecture_review",
@@ -104,6 +105,13 @@ class Config:
 
     def normalized_theme(self) -> str:
         return self.theme if self.theme in {"system", "light", "dark"} else "system"
+
+    def normalized_ui_zoom(self) -> float:
+        try:
+            z = float(self.ui_zoom)
+        except (TypeError, ValueError):
+            return 1.0
+        return max(0.7, min(1.5, z))
 
     def effective_max_text_file_bytes(self) -> int | None:
         if not self.text_file_size_limit_enabled:

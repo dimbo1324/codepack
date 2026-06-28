@@ -28,13 +28,13 @@ class Sidebar(QFrame):
     def __init__(self, parent: QFrame | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("Sidebar")
-        self.setFixedWidth(250)
+        self.setFixedWidth(200)
 
         self._nav_buttons: list[QPushButton] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 24, 18, 18)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 20, 12, 14)
+        layout.setSpacing(6)
 
         title = QLabel("Project\nExporter")
         title.setObjectName("SidebarTitle")

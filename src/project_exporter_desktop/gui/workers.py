@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import threading
 import traceback
 from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
+
+_log = logging.getLogger(__name__)
 
 from ..config import Config
 from ..constants import TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION
@@ -80,7 +83,9 @@ class PlanPreviewWorker(QThread):
                 format_export_plan_for_user(plan, self.config.effective_zip_part_bytes())
             )
         except Exception:
-            self.failed.emit(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log.error("PlanPreviewWorker failed:\n%s", tb)
+            self.failed.emit(tb)
 
 
 class ExportWorker(QThread):
@@ -133,7 +138,9 @@ class ExportWorker(QThread):
                 }
             )
         except Exception:
-            self.failed.emit(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log.error("ExportWorker failed:\n%s", tb)
+            self.failed.emit(tb)
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -232,7 +239,9 @@ class ClipboardExportWorker(QThread):
             summary = context_summary_line(total_bytes)
             self.finished.emit(full_text, total_bytes, summary)
         except Exception:
-            self.failed.emit(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log.error("ClipboardExportWorker failed:\n%s", tb)
+            self.failed.emit(tb)
 
 
 class AnalyticsWorker(QThread):
@@ -251,4 +260,6 @@ class AnalyticsWorker(QThread):
             )
             self.finished_report.emit(analyze_project(self.source_root, ignored))
         except Exception:
-            self.failed.emit(traceback.format_exc())
+            tb = traceback.format_exc()
+            _log.error("AnalyticsWorker failed:\n%s", tb)
+            self.failed.emit(tb)
