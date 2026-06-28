@@ -55,10 +55,10 @@ The developer build scripts are intended for Windows PowerShell.
 The easiest way to install the application is to use the GitHub Release installer.
 
 1. Open the release page:
-   - https://github.com/dimbo1324/codepack/releases/tag/v1.0.0
+   - https://github.com/dimbo1324/codepack/releases/tag/v1.0.1
 
 2. Download:
-   - `ProjectExporterDesktopSetup-1.0.0.exe`
+   - `ProjectExporterDesktopSetup-1.0.1.exe`
 
 3. Double-click the downloaded installer.
 
@@ -92,7 +92,7 @@ The release includes:
 To verify a downloaded file in PowerShell:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 .\ProjectExporterDesktopSetup-1.0.0.exe
+Get-FileHash -Algorithm SHA256 .\ProjectExporterDesktopSetup-1.0.1.exe
 ```
 
 Compare the printed hash with the matching line in `SHA256SUMS.txt`.
@@ -391,7 +391,7 @@ tools\build_setup.bat
 Output:
 
 ```text
-dist\installer\ProjectExporterDesktopSetup-1.0.0.exe
+dist\installer\ProjectExporterDesktopSetup-1.0.1.exe
 ```
 
 ## Build and Start Installer With One Script
@@ -573,11 +573,11 @@ dist                              Local build output
 
 ## Release Artifacts
 
-The v1.0.0 release publishes:
+The v1.0.1 release publishes:
 
 ```text
 ProjectExporterDesktop.exe
-ProjectExporterDesktopSetup-1.0.0.exe
+ProjectExporterDesktopSetup-1.0.1.exe
 SHA256SUMS.txt
 ```
 
