@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-APP_NAME = "Project Exporter Desktop"
+from .version import APP_VERSION as _APP_VERSION
 
-APP_VERSION = "5.1.0"
+APP_NAME = "Project Exporter Desktop"
+APP_VERSION = _APP_VERSION
 
 SETTINGS_FILE = Path.home() / ".project_exporter_desktop.json"
 

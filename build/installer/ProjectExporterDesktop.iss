@@ -1,7 +1,7 @@
 ; Inno Setup installer script for packaging the PyInstaller executable into a user installer.
 
 #define MyAppName "Project Exporter Desktop"
-#define MyAppVersion "5.1.0"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "Project Exporter Desktop"
 #define MyAppExeName "ProjectExporterDesktop.exe"
 
@@ -25,17 +25,17 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 SetupIconFile=..\..\assets\ICO.ico
 
 [Languages]
-Name: "english"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "..\..\dist\{#MyAppExeName}"
+Source: "..\..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"
-Name: "{autodesktop}\{#MyAppName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
