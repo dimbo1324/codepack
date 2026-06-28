@@ -19,7 +19,6 @@ from ..services.stack_detector import merged_extra_ignored_dirs
 
 
 class QtLogQueue:
-    """Queue-compatible adapter used by core services inside a Qt worker thread."""
 
     def __init__(self, worker: ExportWorker) -> None:
         self.worker = worker
@@ -141,11 +140,6 @@ class ExportWorker(QThread):
 
 
 class ClipboardExportWorker(QThread):
-    """Generates a text dump of included project files for the clipboard.
-
-    Emits the text via finished() so the main thread can paste it into the
-    clipboard. Does NOT archive or write to disk.
-    """
 
     finished = Signal(str, int, str)
     failed = Signal(str)

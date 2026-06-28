@@ -108,28 +108,6 @@ def write_ai_context_folder(
         "# Refactoring Targets\n\nSee `../23_refactoring_opportunities.md` and `../17_code_quality_report.md`.\n",
     )
 
-    prompt = f"""# Prompt for Codex / ChatGPT
-
-You are working on the exported project `{copied_root.name}`.
-
-First read these generated files in order:
-1. `PROJECT_PROFILE.json`
-2. `INDEX.md`
-3. `reports/insights/01_summary.txt`
-4. `reports/insights/13_runbook.md`
-5. `reports/insights/15_architecture_report.md`
-6. `reports/insights/16_key_files_report.md`
-7. `reports/insights/14_dependency_graph.md`
-8. `reports/insights/17_code_quality_report.md`
-9. `reports/insights/23_refactoring_opportunities.md`
-
-Working rules:
-- preserve existing behaviour unless explicitly asked to change it;
-- keep the architecture modular and readable;
-- avoid committing secrets or generated caches;
-- update reports/docs if architecture changes;
-- run available checks/tests before declaring completion.
-"""
     _write(output_dir / "09_PROMPT_FOR_CODEX.md", prompt)
 
     scripts_lines = ["# Scripts", ""]

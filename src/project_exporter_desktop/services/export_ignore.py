@@ -21,17 +21,6 @@ def _normalise_path(path: Path | str) -> str:
 
 @dataclass(slots=True)
 class ExportIgnoreRules:
-    """Rules loaded from .exportignore and GUI settings.
-
-    The syntax intentionally mirrors the common subset of .gitignore:
-    - blank lines and # comments are ignored;
-    - trailing slash means directory rule;
-    - wildcard rules use fnmatch;
-    - leading ! creates an explicit include override for custom ignore rules.
-
-    Built-in safety exclusions are deliberately applied outside this class so an
-    "always include" rule cannot silently leak secrets in Safe Export mode.
-    """
 
     excluded_dirs: set[str] = field(default_factory=set)
     excluded_files: list[str] = field(default_factory=list)

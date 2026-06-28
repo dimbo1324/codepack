@@ -1,4 +1,3 @@
-"""Tests for the stack detection service."""
 
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ from project_exporter_desktop.services.stack_detector import (
 
 
 def _make_files(tmp_path: Path, *names: str) -> Path:
-    """Create empty marker files in tmp_path and return the path."""
     for name in names:
         (tmp_path / name).touch()
     return tmp_path
@@ -82,7 +80,6 @@ def test_detect_unknown_stack(tmp_path: Path) -> None:
 
 
 def test_detect_monorepo(tmp_path: Path) -> None:
-    """A project with both package.json and requirements.txt detects multiple stacks."""
     _make_files(tmp_path, "package.json", "requirements.txt")
     stacks = detect_stack(tmp_path)
     names = {s.name for s in stacks}

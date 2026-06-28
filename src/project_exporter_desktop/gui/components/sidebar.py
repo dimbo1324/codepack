@@ -21,7 +21,6 @@ _NAV_LABELS = [
 
 
 class Sidebar(QFrame):
-    """Fixed-width left navigation panel."""
 
     page_requested = Signal(int)
     open_desktop_requested = Signal()

@@ -17,7 +17,6 @@ from . import make_card, make_scroll_page
 
 
 class ProjectPage(QWidget):
-    """Страница 1 — выбор корневой папки проекта и контекст для ИИ."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

@@ -55,27 +55,6 @@ from .pages.settings_page import SettingsPage
 from .resources import asset_path, read_text_resource, style_path
 from .workers import AnalyticsWorker, ClipboardExportWorker, ExportWorker, PlanPreviewWorker
 
-EXPORTIGNORE_TEMPLATE = """# Правила Project Exporter
-# Аналог .gitignore. Используйте !шаблон для явного включения файлов.
-
-node_modules/
-.git/
-dist/
-build/
-*.log
-*.zip
-*.rar
-*.7z
-*.db
-*.sqlite
-.env*
-private/
-large-assets/
-
-# Примеры:
-# !README.md
-# !docs/
-"""
 
 _PAGE_PROJECT = 0
 _PAGE_SETTINGS = 1

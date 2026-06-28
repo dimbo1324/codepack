@@ -5,7 +5,6 @@ from pathlib import Path
 
 
 def project_root() -> Path:
-    """Return the project/resource root both in source and frozen builds."""
     frozen_root = getattr(sys, "_MEIPASS", None)
     if frozen_root:
         return Path(frozen_root)

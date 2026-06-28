@@ -1,4 +1,3 @@
-"""Tests for AI presets and developer_context config field."""
 
 from __future__ import annotations
 

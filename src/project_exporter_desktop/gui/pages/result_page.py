@@ -16,7 +16,6 @@ from . import make_card, make_scroll_page
 
 
 class ResultPage(QWidget):
-    """Страница 5 — итог экспорта с путём к архиву и кнопками быстрого доступа."""
 
     open_result_requested = Signal()
     open_desktop_requested = Signal()

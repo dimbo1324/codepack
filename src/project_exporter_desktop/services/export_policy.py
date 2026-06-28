@@ -36,12 +36,6 @@ def is_env_example(name: str) -> bool:
 
 
 def classify_sensitive_file(path: Path) -> SafetyDecision:
-    """Classify credential-like, database-like and archive-like files by name.
-
-    This classifier is conservative and intentionally filename based. Content
-    scanning happens separately in the security report; copy-time filtering must
-    be fast and deterministic.
-    """
     name = path.name.casefold()
     suffix = path.suffix.casefold().lstrip(".")
 

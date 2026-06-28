@@ -18,11 +18,6 @@ from .constants import (
 
 @dataclass(slots=True)
 class Config:
-    """Persisted user configuration for the desktop exporter.
-
-    The defaults intentionally favour safe sharing: no text-size limit, secret
-    redaction enabled, Safe Export mode enabled, and 512 MB archive parts.
-    """
 
     last_root: str = str(Path.home())
     text_file_size_limit_enabled: bool = False
@@ -77,7 +72,6 @@ class Config:
             pass
 
     def effective_ignored_dirs(self) -> frozenset[str]:
-        """Defaults are always present; user values are additive only."""
         extras = {name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()}
         defaults = {name.casefold() for name in IGNORED_DIR_NAMES}
         return frozenset(defaults | extras)
@@ -135,12 +129,6 @@ class Config:
 
 
 def _migrate_legacy_settings(data: dict[str, Any]) -> dict[str, Any]:
-    """Tolerate settings files created by older app versions.
-
-    Older versions always had a text-file size limit. Version 4 defaults to no
-    limit, but if the old settings file contains a non-default value, we preserve
-    the user's likely intention by enabling the limit.
-    """
     if "text_file_size_limit_enabled" not in data and "max_text_file_mb" in data:
         try:
             data["text_file_size_limit_enabled"] = int(data["max_text_file_mb"]) != 5

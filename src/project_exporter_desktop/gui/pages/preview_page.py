@@ -41,13 +41,6 @@ _COL_REASON = 3
 
 
 class PreviewPage(QWidget):
-    """Page 4 — interactive file-tree preview of the export plan.
-
-    Receives an ExportPlan via populate() and lets the user review and
-    optionally override individual file include/exclude decisions before
-    the actual export runs.  Signals export_confirmed / export_cancelled
-    are connected by MainWindow.
-    """
 
     export_confirmed = Signal(object)
     export_cancelled = Signal()
@@ -144,7 +137,6 @@ class PreviewPage(QWidget):
 
 
     def populate(self, plan: Any) -> None:
-        """Fill the tree from an ExportPlan object (duck-typed to avoid service import)."""
         self._plan = plan
         self._overrides.clear()
         self._tree.setSortingEnabled(False)
@@ -168,7 +160,6 @@ class PreviewPage(QWidget):
         self._confirm_btn.setEnabled(True)
 
     def reset(self) -> None:
-        """Clear tree and stats — called when a new plan build starts."""
         self._plan = None
         self._overrides.clear()
         self._tree.clear()

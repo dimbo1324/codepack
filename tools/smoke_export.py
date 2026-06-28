@@ -1,9 +1,3 @@
-"""Minimal export smoke script.
-
-Calls ProjectExporter directly (no GUI) on a tiny sample project.
-Run: .venv\\Scripts\\python.exe tools\\smoke_export.py
-Output goes to .tmp\\smoke_output\\ to stay inside the project (ignored by .gitignore).
-"""
 
 from __future__ import annotations
 
@@ -30,7 +24,6 @@ from project_exporter_desktop.utils.time_utils import now_stamp
 
 
 def _make_export_paths(source_root: Path, output_dir: Path) -> ExportPaths:
-    """Return ExportPaths rooted in output_dir instead of Desktop."""
     from project_exporter_desktop.utils.path_utils import sanitize_name
 
     project_name = sanitize_name(source_root.name)

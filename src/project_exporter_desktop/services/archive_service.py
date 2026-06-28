@@ -261,32 +261,6 @@ def _write_restore_files(
         newline="\n",
     )
     (result.output_dir / "restore_archives.py").write_text(
-        """from __future__ import annotations
-
-import sys
-import zipfile
-from pathlib import Path
-
-
-def main() -> int:
-    source_dir = Path(__file__).resolve().parent
-    destination = Path(sys.argv[1]).expanduser().resolve() if len(sys.argv) > 1 else source_dir / 'restored'
-    destination.mkdir(parents=True, exist_ok=True)
-    archives = sorted(source_dir.glob('*.zip'))
-    if not archives:
-        print('No .zip archives found next to restore_archives.py')
-        return 1
-    for archive_path in archives:
-        print(f'Extracting {archive_path.name} -> {destination}')
-        with zipfile.ZipFile(archive_path) as archive:
-            archive.extractall(destination)
-    print(f'Done: {destination}')
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
-""",
         encoding="utf-8",
         newline="\n",
     )
@@ -367,13 +341,6 @@ def build_final_archives(
     progress: Callable[[int, str, str], None] | None = None,
     pre_archive_hook: Callable[[ArchiveBuildResult], None] | None = None,
 ) -> ArchiveBuildResult:
-    """Create one ZIP or a logical archive set without first creating a huge ZIP.
-
-    The decision is based on an uncompressed-size planning target below the hard
-    limit. This avoids writing a giant temporary archive for large projects. If a
-    planned single archive unexpectedly compresses above the limit, the function
-    falls back to logical split archives.
-    """
     plan = build_archive_plan(paths, include_project, part_limit_bytes)
     write_archive_plan_report(plan, paths.insights_dir / "27_archive_plan.md")
     try:

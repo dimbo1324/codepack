@@ -45,7 +45,6 @@ def validate_source_root(path_text: str) -> Path:
 
 
 def build_export_paths(source_root: Path) -> ExportPaths:
-    """Allocate a unique bundle path. If a collision is detected, suffix it."""
     desktop = desktop_path()
     project_name = sanitize_name(source_root.name)
 

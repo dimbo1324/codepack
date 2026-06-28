@@ -46,7 +46,6 @@ def resolve_diff_selection(
     base_ref: str = "HEAD",
     target_ref: str = "",
 ) -> DiffSelection:
-    """Return a Git-limited file set or ``paths=None`` for a full export."""
     if mode == "all":
         return DiffSelection(mode=mode, paths=None)
 

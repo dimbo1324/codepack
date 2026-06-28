@@ -1,4 +1,3 @@
-"""Verify structural invariants introduced by GUI decomposition."""
 
 from __future__ import annotations
 
@@ -8,7 +7,6 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "project_exporter_desktop"
 
 
 def test_page_utilities_importable() -> None:
-    """Page shared utilities should be importable without a live QApplication."""
     from project_exporter_desktop.gui.pages import (
         make_card,
         make_scroll_page,
@@ -18,7 +16,6 @@ def test_page_utilities_importable() -> None:
 
 
 def test_services_do_not_import_gui() -> None:
-    """No service or report source file should contain a GUI import."""
     gui_patterns = ("from ..gui", "from .gui", "import gui", "from gui")
     violations: list[str] = []
     for directory in [SRC / "services", SRC / "reports"]:
@@ -30,7 +27,6 @@ def test_services_do_not_import_gui() -> None:
 
 
 def test_pages_do_not_import_export_services() -> None:
-    """Page modules should not directly import the export service layer."""
     forbidden = ("from ...services", "from ..services", "from project_exporter_desktop.services")
     violations: list[str] = []
     pages_dir = SRC / "gui" / "pages"

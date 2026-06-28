@@ -21,7 +21,6 @@ _NO_PRESET = "— без пресета —"
 
 
 class SettingsPage(QWidget):
-    """Страница 2 — профиль экспорта, AI-пресеты, текстовый дамп, архив и параметры Git diff."""
 
     def __init__(self, profile_catalog: dict[str, str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -191,6 +190,5 @@ class SettingsPage(QWidget):
         self._sync_diff_hint()
 
     def get_preset_name(self) -> str:
-        """Return the currently selected preset name, or '' if none."""
         text = self.preset_combo.currentText()
         return "" if text == _NO_PRESET else text

@@ -12,15 +12,10 @@ MODEL_CONTEXT_LIMITS: dict[str, int] = {
 
 
 def estimate_tokens(byte_count: int) -> int:
-    """Estimate token count from raw byte size.
-
-    Assumes UTF-8 average ~1 byte/char for typical source code.
-    """
     return max(1, round(byte_count / _CHARS_PER_TOKEN))
 
 
 def format_tokens(n: int) -> str:
-    """Human-readable token count: '685K', '1.2M', '500'."""
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
     if n >= 1_000:
@@ -29,10 +24,6 @@ def format_tokens(n: int) -> str:
 
 
 def context_fit_rows(byte_count: int) -> list[tuple[str, int, int, bool]]:
-    """Return per-model fit information sorted by context limit ascending.
-
-    Each tuple: (model_name, estimated_tokens, model_limit, fits).
-    """
     tokens = estimate_tokens(byte_count)
     rows = [
         (name, tokens, limit, tokens <= limit)
@@ -42,7 +33,6 @@ def context_fit_rows(byte_count: int) -> list[tuple[str, int, int, bool]]:
 
 
 def context_summary_line(byte_count: int) -> str:
-    """One-line summary of model fit, e.g. '~685K токенов  ✓ Gemini  ✗ GPT-4'."""
     tokens = estimate_tokens(byte_count)
     tok_str = format_tokens(tokens)
     fits = [name.split(" ")[0] for name, _, limit, ok in context_fit_rows(byte_count) if ok]

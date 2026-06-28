@@ -7,12 +7,6 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class ReportPlugin:
-    """Descriptor for one generated insight report.
-
-    The current built-in reports are registered as plugins. New reports only need
-    to provide filename, supported profiles and a writer callback. This keeps the
-    orchestration layer flat while still making report addition/removal explicit.
-    """
 
     filename: str
     profiles: set[str]

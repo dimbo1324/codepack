@@ -6,12 +6,6 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class ProgressReporter:
-    """Small UI-agnostic progress adapter.
-
-    Tkinter receives plain log messages through the existing queue. Messages
-    starting with PROGRESS\t are parsed by the UI; all other consumers can ignore
-    them safely.
-    """
 
     log: Callable[[str], None]
     total_steps: int = 8

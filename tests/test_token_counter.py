@@ -1,4 +1,3 @@
-"""Tests for the token counter utility."""
 
 from __future__ import annotations
 

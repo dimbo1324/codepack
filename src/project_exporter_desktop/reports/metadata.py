@@ -36,7 +36,6 @@ def write_manifest(
     archive_result: ArchiveBuildResult | None = None,
     diff_selection: DiffSelection | None = None,
 ) -> None:
-    """Write a machine-readable description of the bundle."""
     effective_ignored = {name.casefold() for name in IGNORED_DIR_NAMES} | set(extra_ignored_dirs)
     user_extras = set(extra_ignored_dirs) - {name.casefold() for name in IGNORED_DIR_NAMES}
     text_limit = config.effective_max_text_file_bytes()
@@ -113,7 +112,6 @@ def write_index_md(
     config: Config,
     extra_ignored_dirs: frozenset[str] | set[str],
 ) -> None:
-    """Write a human-readable bundle table of contents."""
     ignored_effective = sorted(
         {name.casefold() for name in IGNORED_DIR_NAMES} | set(extra_ignored_dirs)
     )

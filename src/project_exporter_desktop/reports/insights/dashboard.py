@@ -79,42 +79,6 @@ def write_html_dashboard(reports_dir: Path, output_file: Path) -> None:
     export_plan_excerpt = html.escape(_read_text(export_plan, 6000))
     health_excerpt = html.escape(_read_text(health, 6000))
     output_file.write_text(
-        f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Project Export Dashboard</title>
-<style>
-:root {{ color-scheme: dark light; font-family: Inter, Segoe UI, Arial, sans-serif; }}
-body {{ margin: 0; padding: 32px; background: #101214; color: #ece7dc; }}
-header {{ max-width: 1120px; margin: 0 auto 24px; }}
-h1 {{ margin: 0 0 8px; font-size: 32px; }}
-.muted {{ color: #a9aa9f; }}
-.grid {{ max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; }}
-.card {{ border: 1px solid #3a3d37; border-radius: 16px; padding: 18px; background: #171a1d; box-shadow: 0 10px 30px rgba(0,0,0,.2); }}
-.label {{ color: #a9aa9f; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }}
-.value {{ font-size: 34px; font-weight: 800; margin: 8px 0; }}
-.panel {{ max-width: 1120px; margin: 18px auto; border: 1px solid #3a3d37; border-radius: 16px; padding: 18px; background: #171a1d; }}
-a {{ color: #b8d49b; }}
-pre {{ overflow: auto; white-space: pre-wrap; background: #0c0e10; padding: 14px; border-radius: 12px; }}
-@media (prefers-color-scheme: light) {{ body {{ background:#f7f4ed; color:#181a1d; }} .card,.panel {{ background:#fffaf0; border-color:#d7d0c2; }} pre {{ background:#f0eadf; }} }}
-</style>
-</head>
-<body>
-<header>
-<h1>Project Export Dashboard</h1>
-<p class="muted">Generated: {html.escape(human_now())}. Open this file locally after export to navigate the package quickly.</p>
-</header>
-<main>
-<div class="grid">{card_html}</div>
-<section class="panel"><h2>Quick links</h2><ul>{link_html}</ul></section>
-<section class="panel"><h2>Export plan excerpt</h2><pre>{export_plan_excerpt}</pre></section>
-<section class="panel"><h2>Health report excerpt</h2><pre>{health_excerpt}</pre></section>
-</main>
-</body>
-</html>
-""",
         encoding="utf-8",
         newline="\n",
     )

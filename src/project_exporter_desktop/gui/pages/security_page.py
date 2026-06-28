@@ -19,7 +19,6 @@ from . import make_card, make_scroll_page, set_combo_value, wrap_layout
 
 
 class SecurityPage(QWidget):
-    """Страница 3 — режим безопасного экспорта, редактирование и пользовательские правила."""
 
     edit_rules_requested = Signal()
     edit_prompt_goals_requested = Signal()

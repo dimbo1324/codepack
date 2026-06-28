@@ -6,14 +6,12 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class StackInfo:
-    """Описание обнаруженного стека проекта."""
 
     name: str
     markers_found: tuple[str, ...]
     extra_ignored_dirs: frozenset[str] = field(default_factory=frozenset)
 
     def display_label(self) -> str:
-        """Строка для отображения в UI."""
         found = ", ".join(self.markers_found[:3])
         return f"Обнаружен стек: {self.name}  ({found})"
 
@@ -107,12 +105,6 @@ _STACK_RULES: list[dict] = [
 
 
 def detect_stack(root: Path) -> list[StackInfo]:
-    """
-    Определяет стек(и) проекта по маркерным файлам в корневой папке.
-
-    Возвращает список StackInfo от наиболее к наименее очевидному.
-    Пустой список означает неизвестный стек.
-    """
     if not root.is_dir():
         return []
 
@@ -151,13 +143,11 @@ def detect_stack(root: Path) -> list[StackInfo]:
 
 
 def primary_stack(root: Path) -> StackInfo | None:
-    """Возвращает основной (наиболее очевидный) стек или None."""
     stacks = detect_stack(root)
     return stacks[0] if stacks else None
 
 
 def merged_extra_ignored_dirs(root: Path) -> frozenset[str]:
-    """Объединяет ignore-директории всех обнаруженных стеков."""
     result: set[str] = set()
     for info in detect_stack(root):
         result |= info.extra_ignored_dirs
@@ -165,7 +155,6 @@ def merged_extra_ignored_dirs(root: Path) -> frozenset[str]:
 
 
 def format_stack_label(root: Path) -> str:
-    """Строка для отображения в UI страницы проекта."""
     stacks = detect_stack(root)
     if not stacks:
         return ""

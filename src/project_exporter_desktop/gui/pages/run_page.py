@@ -14,7 +14,6 @@ from . import make_card, make_scroll_page
 
 
 class _ProgressBar(QWidget):
-    """Тонкая обёртка с методом setValue()."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -30,7 +29,6 @@ class _ProgressBar(QWidget):
 
 
 class RunPage(QWidget):
-    """Страница 4 — прогресс-бар, текущий этап и прокручиваемый журнал."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
