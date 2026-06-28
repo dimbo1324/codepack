@@ -43,6 +43,7 @@ class Config:
     always_include_files: list[str] = field(default_factory=list)
     always_include_dirs: list[str] = field(default_factory=list)
     incremental_export_enabled: bool = False
+    developer_context: str = ""
     prompt_goals: list[str] = field(
         default_factory=lambda: [
             "architecture_review",

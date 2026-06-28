@@ -27,6 +27,7 @@ from ..config import Config
 from ..constants import (
     APP_NAME,
     APP_VERSION,
+    AI_PRESETS,
     DIFF_EXPORT_MODES,
     SAFE_EXPORT_MODES,
     SETTINGS_FILE,
@@ -37,18 +38,18 @@ from ..services.export_profiles import (
     ensure_user_profiles_file,
     load_profile_catalog,
 )
-from ..services.stack_detector import format_stack_label
 from ..utils.path_utils import desktop_path, validate_source_root
 from .components.sidebar import Sidebar
 from .dialogs import ExportPlanDialog, HistoryDialog, PromptGoalsDialog, RulesDialog
 from .logging import app_log_file, append_app_log
 from .pages.project_page import ProjectPage
+from .pages.preview_page import PreviewPage
 from .pages.result_page import ResultPage
 from .pages.run_page import RunPage
 from .pages.security_page import SecurityPage
 from .pages.settings_page import SettingsPage
 from .resources import asset_path, read_text_resource, style_path
-from .workers import ExportWorker, PlanPreviewWorker
+from .workers import ClipboardExportWorker, ExportWorker, PlanPreviewWorker
 
 EXPORTIGNORE_TEMPLATE = """# Правила Project Exporter
 # Аналог .gitignore. Используйте !шаблон для явного включения файлов.
@@ -72,6 +73,14 @@ large-assets/
 # !docs/
 """
 
+# Page indices in the stacked widget
+_PAGE_PROJECT = 0
+_PAGE_SETTINGS = 1
+_PAGE_SECURITY = 2
+_PAGE_PREVIEW = 3
+_PAGE_RUN = 4
+_PAGE_RESULT = 5
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -81,10 +90,12 @@ class MainWindow(QMainWindow):
         self.cancel_event = threading.Event()
         self.preview_worker: PlanPreviewWorker | None = None
         self.export_worker: ExportWorker | None = None
+        self.clipboard_worker: ClipboardExportWorker | None = None
         self.pending_source_root: Path | None = None
         self.pending_config: Config | None = None
         self.last_result_path: Path | None = None
         self.log_file = app_log_file()
+        self._last_preview_text: str = ""
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1280, 840)
@@ -146,10 +157,11 @@ class MainWindow(QMainWindow):
         self.page_project = ProjectPage()
         self.page_settings = SettingsPage(self.profile_catalog)
         self.page_security = SecurityPage()
+        self.page_preview = PreviewPage()
         self.page_run = RunPage()
         self.page_result = ResultPage()
 
-        # Wire SecurityPage action signals to MainWindow handlers
+        # Wire SecurityPage action signals
         sec = self.page_security
         sec.edit_rules_requested.connect(self._edit_rules)
         sec.edit_prompt_goals_requested.connect(self._edit_prompt_goals)
@@ -164,7 +176,11 @@ class MainWindow(QMainWindow):
         self.page_result.open_result_requested.connect(self._open_last_result)
         self.page_result.open_desktop_requested.connect(self._open_desktop)
 
-        # Update stack label whenever the project root path changes
+        # Wire PreviewPage signals
+        self.page_preview.export_confirmed.connect(self._on_preview_confirmed)
+        self.page_preview.export_cancelled.connect(self._on_preview_back)
+
+        # Stack detection: update label whenever root path changes
         self.page_project.root_edit.textChanged.connect(self._on_root_changed)
 
         self.stack = QStackedWidget()
@@ -172,12 +188,14 @@ class MainWindow(QMainWindow):
             self.page_project,
             self.page_settings,
             self.page_security,
+            self.page_preview,
             self.page_run,
             self.page_result,
         ]:
             self.stack.addWidget(page)
         content_layout.addWidget(self.stack, 1)
 
+        # Bottom bar
         bottom = QHBoxLayout()
         self.status_label = QLabel("Готово")
         self.status_label.setObjectName("PageHint")
@@ -191,6 +209,12 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self._cancel_export)
         bottom.addWidget(self.cancel_button)
+        self.clipboard_button = QPushButton("Скопировать дамп")
+        self.clipboard_button.setToolTip(
+            "Скопировать текст всех включённых файлов в буфер обмена (без создания архива)"
+        )
+        self.clipboard_button.clicked.connect(self._start_clipboard_export)
+        bottom.addWidget(self.clipboard_button)
         self.codex_button = QPushButton("Codex-пакет")
         self.codex_button.clicked.connect(lambda: self._start(codex_package=True))
         bottom.addWidget(self.codex_button)
@@ -202,7 +226,7 @@ class MainWindow(QMainWindow):
 
         root.addWidget(content_host, 1)
         self.setCentralWidget(central)
-        self._set_page(0)
+        self._set_page(_PAGE_PROJECT)
 
     # -- UI state -------------------------------------------------------------
 
@@ -214,6 +238,7 @@ class MainWindow(QMainWindow):
     def _set_running(self, running: bool, preview: bool = False) -> None:
         self.start_button.setEnabled(not running)
         self.codex_button.setEnabled(not running)
+        self.clipboard_button.setEnabled(not running)
         self.cancel_button.setEnabled(running and not preview)
         self.open_result_button.setEnabled(
             bool(self.last_result_path and self.last_result_path.exists())
@@ -228,12 +253,14 @@ class MainWindow(QMainWindow):
 
     def _load_config_to_ui(self) -> None:
         self.page_project.set_root(self.config.last_root)
+        self.page_project.set_developer_context(self.config.developer_context)
         self.page_settings.load_from_config(self.config)
         self.page_security.load_from_config(self.config)
 
     def _config_from_ui(self, save: bool = False) -> Config:
         cfg = self.config if save else replace(self.config)
         cfg.last_root = self.page_project.get_root() or str(Path.home())
+        cfg.developer_context = self.page_project.get_developer_context()
 
         sp = self.page_settings
         cfg.text_file_size_limit_enabled = sp.text_limit_checkbox.isChecked()
@@ -286,6 +313,15 @@ class MainWindow(QMainWindow):
             zip_part_limit_mb=MAX_ARCHIVE_PART_MB,
         )
 
+    # -- Stack detection ------------------------------------------------------
+
+    def _on_root_changed(self, text: str) -> None:
+        from ..services.stack_detector import format_stack_label
+
+        root = Path(text.strip()) if text.strip() else None
+        label = format_stack_label(root) if root and root.is_dir() else ""
+        self.page_project.set_detected_stack(label)
+
     # -- Export flow ----------------------------------------------------------
 
     def _validate_source_root(self) -> Path | None:
@@ -309,7 +345,10 @@ class MainWindow(QMainWindow):
         run_config = self._codex_config(self.config) if codex_package else replace(self.config)
         self.pending_source_root = source_root
         self.pending_config = run_config
-        self._set_page(3)
+
+        # Navigate to PreviewPage while plan builds
+        self.page_preview.reset()
+        self._set_page(_PAGE_PREVIEW)
         self._append_log(
             f"Строится план экспорта... профиль={run_config.normalized_export_profile()}, "
             f"режим={run_config.normalized_safe_export_mode()}, "
@@ -317,22 +356,29 @@ class MainWindow(QMainWindow):
         )
         self._set_running(True, preview=True)
         self.preview_worker = PlanPreviewWorker(source_root, run_config, self)
-        self.preview_worker.finished_preview.connect(self._on_preview_ready)
+        self.preview_worker.finished_plan.connect(self._on_plan_ready)
+        self.preview_worker.finished_preview.connect(self._on_preview_text_ready)
         self.preview_worker.failed.connect(self._on_preview_failed)
         self.preview_worker.start()
 
-    def _on_preview_ready(self, preview_text: str) -> None:
+    def _on_plan_ready(self, plan: object) -> None:
         self._set_running(False)
-        dialog = ExportPlanDialog(preview_text, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            self._append_log("Экспорт отменён на этапе подтверждения плана.")
-            return
+        self.page_preview.populate(plan)
+
+    def _on_preview_text_ready(self, preview_text: str) -> None:
+        self._last_preview_text = preview_text
+
+    def _on_preview_confirmed(self, overrides: object) -> None:
+        file_overrides: dict[str, bool] = overrides if isinstance(overrides, dict) else {}
         if self.pending_source_root is None or self.pending_config is None:
             QMessageBox.critical(
-                self, "Ошибка экспорта", "Внутреннее состояние было утеряно перед запуском экспорта."
+                self, "Ошибка экспорта", "Внутреннее состояние было утеряно перед запуском."
             )
             return
-        self._run_export(self.pending_source_root, self.pending_config)
+        self._run_export(self.pending_source_root, self.pending_config, file_overrides)
+
+    def _on_preview_back(self) -> None:
+        self._set_page(_PAGE_SETTINGS)
 
     def _on_preview_failed(self, traceback_text: str) -> None:
         self._set_running(False)
@@ -343,16 +389,24 @@ class MainWindow(QMainWindow):
             f"Не удалось построить план экспорта. Технические подробности записаны в:\n{self.log_file}",
         )
 
-    def _run_export(self, source_root: Path, config: Config) -> None:
+    def _run_export(
+        self,
+        source_root: Path,
+        config: Config,
+        file_overrides: dict[str, bool] | None = None,
+    ) -> None:
         self.cancel_event.clear()
         self.last_result_path = None
         self.open_result_button.setEnabled(False)
         self.page_result.set_running()
         self.page_run.reset()
-        self._set_page(3)
+        self._set_page(_PAGE_RUN)
         self._set_running(True)
         self._append_log("Запуск потока экспорта...")
-        self.export_worker = ExportWorker(source_root, config, self.cancel_event, self)
+        self.export_worker = ExportWorker(
+            source_root, config, self.cancel_event, self,
+            file_overrides=file_overrides,
+        )
         self.export_worker.log_message.connect(self._append_log)
         self.export_worker.progress_changed.connect(self._handle_progress)
         self.export_worker.finished_success.connect(self._on_export_finished)
@@ -365,7 +419,7 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "Отмена экспорта",
-            "Остановить текущий экспорт? Частичный результат может остаться, если достаточно данных уже было создано.",
+            "Остановить текущий экспорт? Частичный результат может остаться.",
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.cancel_event.set()
@@ -381,23 +435,21 @@ class MainWindow(QMainWindow):
         self.open_result_button.setEnabled(
             bool(self.last_result_path and self.last_result_path.exists())
         )
-        self._set_page(4)
+        self._set_page(_PAGE_RESULT)
         if cancelled:
             self.page_result.set_cancelled()
             QMessageBox.warning(
-                self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал выполнения."
+                self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал."
             )
         else:
             self.page_result.set_success(self.last_result_path)
-            QMessageBox.information(
-                self, "Экспорт завершён", "Экспорт проекта успешно создан."
-            )
+            QMessageBox.information(self, "Экспорт завершён", "Экспорт проекта успешно создан.")
         self.status_label.setText("Готово")
 
     def _on_export_failed(self, traceback_text: str) -> None:
         self._set_running(False)
         self._append_diagnostic(traceback_text)
-        self._set_page(4)
+        self._set_page(_PAGE_RESULT)
         self.page_result.set_failed(str(self.log_file))
         QMessageBox.critical(
             self,
@@ -416,6 +468,47 @@ class MainWindow(QMainWindow):
         append_app_log("Техническая трассировка:")
         append_app_log(traceback_text)
         self._append_log(f"Технические подробности записаны в: {self.log_file}")
+
+    # -- Clipboard export -----------------------------------------------------
+
+    def _start_clipboard_export(self) -> None:
+        if self.clipboard_worker and self.clipboard_worker.isRunning():
+            return
+        source_root = self._validate_source_root()
+        if source_root is None:
+            return
+        self._save_config_from_ui()
+        self.clipboard_button.setEnabled(False)
+        self.status_label.setText("Подготовка дампа для буфера обмена...")
+        self.clipboard_worker = ClipboardExportWorker(source_root, self.config, self)
+        self.clipboard_worker.finished.connect(self._on_clipboard_ready)
+        self.clipboard_worker.failed.connect(self._on_clipboard_failed)
+        self.clipboard_worker.start()
+
+    def _on_clipboard_ready(self, text: str, byte_count: int, summary: str) -> None:
+        QApplication.clipboard().setText(text)
+        self.clipboard_button.setEnabled(True)
+        self.status_label.setText("Готово")
+        from ..utils.text_utils import format_bytes
+
+        QMessageBox.information(
+            self,
+            "Дамп скопирован",
+            f"Текстовый дамп скопирован в буфер обмена.\n\n"
+            f"Размер: {format_bytes(byte_count)}\n"
+            f"Оценка токенов: {summary}\n\n"
+            "Вставьте текст в чат с ИИ-ассистентом.",
+        )
+
+    def _on_clipboard_failed(self, traceback_text: str) -> None:
+        self.clipboard_button.setEnabled(True)
+        self.status_label.setText("Готово")
+        self._append_diagnostic(traceback_text)
+        QMessageBox.critical(
+            self,
+            "Ошибка копирования",
+            f"Не удалось подготовить дамп. Технические подробности записаны в:\n{self.log_file}",
+        )
 
     # -- Tools ----------------------------------------------------------------
 
@@ -509,11 +602,6 @@ class MainWindow(QMainWindow):
 
     def _show_history(self) -> None:
         HistoryDialog(load_export_history(), self).exec()
-
-    def _on_root_changed(self, text: str) -> None:
-        root = Path(text.strip()) if text.strip() else None
-        label = format_stack_label(root) if root and root.is_dir() else ""
-        self.page_project.set_detected_stack(label)
 
     def _open_profiles_json(self) -> None:
         self._open_path(ensure_user_profiles_file())

@@ -40,11 +40,13 @@ class ProjectExporter:
         config: Config,
         log_queue: Queue[str],
         cancel_event: threading.Event,
+        file_overrides: dict[str, bool] | None = None,
     ):
         self.source_root = source_root
         self.config = config
         self.log_queue = log_queue
         self.cancel_event = cancel_event
+        self.file_overrides: dict[str, bool] = file_overrides or {}
         self.archive_result: ArchiveBuildResult | None = None
 
     def log(self, message: str) -> None:
@@ -68,6 +70,16 @@ class ProjectExporter:
             always_include_files=self.config.always_include_files,
             always_include_dirs=self.config.always_include_dirs,
         )
+
+        # Apply user overrides from PreviewPage: True=force-include, False=force-exclude
+        for rel_path, include in self.file_overrides.items():
+            norm = rel_path.replace("\\", "/")
+            if include:
+                export_rules.add_always_include_file(norm)
+            else:
+                export_rules.add_file_rule(norm)
+        if self.file_overrides:
+            self.log(f"Применено пользовательских переопределений: {len(self.file_overrides)}")
 
         diff_selection = resolve_diff_selection(
             paths.source_root,
@@ -205,6 +217,21 @@ class ProjectExporter:
                 f"not_text={text_stats.skipped_not_text:,}, "
                 f"decode_errors={text_stats.skipped_decode:,}"
             )
+            ctx = (self.config.developer_context or "").strip()
+            if ctx and paths.text_dump.exists():
+                header = (
+                    "# ══════════════════════════════════════════════════\n"
+                    "# ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА\n"
+                    "# ══════════════════════════════════════════════════\n\n"
+                    + ctx
+                    + "\n\n# ══════════════════════════════════════════════════\n\n"
+                ).encode("utf-8")
+                try:
+                    existing = paths.text_dump.read_bytes()
+                    paths.text_dump.write_bytes(header + existing)
+                    self.log("Контекст разработчика добавлен в начало текстового дампа.")
+                except Exception:
+                    pass
 
         if not cancelled and not self.cancel_event.is_set():
             progress.step("Шаг 6/8: расширенная аналитика проекта")
