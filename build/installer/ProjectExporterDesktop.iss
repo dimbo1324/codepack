@@ -1,7 +1,7 @@
 ; Inno Setup installer script for packaging the PyInstaller executable into a user installer.
 
 #define MyAppName "Project Exporter Desktop"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Project Exporter Desktop"
 #define MyAppExeName "ProjectExporterDesktop.exe"
 
