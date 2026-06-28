@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..constants import IGNORED_DIR_NAMES, MONTHS
+from ..i18n import t
 from ..models import ExportPaths
 from .time_utils import now_stamp
 
@@ -29,19 +30,20 @@ def is_relative_to(child: Path, parent: Path) -> bool:
 
 
 def validate_source_root(path_text: str) -> Path:
+    # Error messages use t() so the active UI language is reflected in dialogs/tray.
     if not path_text.strip():
-        raise ValueError("Укажите корневую папку проекта.")
+        raise ValueError(t("error.path.empty"))
 
     root = Path(path_text).expanduser().resolve()
 
     if not root.exists():
-        raise ValueError("Указанная папка не существует.")
+        raise ValueError(t("error.path.not_exist"))
     if not root.is_dir():
-        raise ValueError("Указанный путь не является папкой.")
+        raise ValueError(t("error.path.not_dir"))
     if root.parent == root:
-        raise ValueError("Нельзя выбирать корень диска.")
+        raise ValueError(t("error.path.drive_root"))
     if root == Path.home().resolve():
-        raise ValueError("Не выбирайте всю домашнюю папку целиком. Укажите конкретный проект.")
+        raise ValueError(t("error.path.home"))
 
     return root
 

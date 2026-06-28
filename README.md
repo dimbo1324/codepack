@@ -197,6 +197,9 @@ This is useful for:
 - sharing only text files
 - avoiding ZIP uploads
 
+When secret redaction is enabled, the clipboard dump masks credentials exactly
+like the ZIP text dump, so the quick-paste path does not leak secrets either.
+
 ### 6. Run Export
 
 When you run the export, the app creates an export folder and usually a ZIP archive.
@@ -258,14 +261,18 @@ You can change the UI zoom from the View menu or with keyboard shortcuts.
 Shortcuts:
 
 ```text
-Ctrl++      Zoom in
-Ctrl+=      Zoom in
-Ctrl+-      Zoom out
-Ctrl+_      Zoom out on some keyboard layouts
-Ctrl+0      Reset zoom
+Ctrl++       Zoom in
+Ctrl+=       Zoom in
+Ctrl+Num++   Zoom in (numpad)
+Ctrl+-       Zoom out
+Ctrl+Num+-   Zoom out (numpad)
+Ctrl+0       Reset zoom
+Ctrl+Num+0   Reset zoom (numpad)
 ```
 
-The selected zoom level is saved in the app settings.
+The zoom shortcuts are bound directly to the View-menu actions, so they keep
+working after switching the interface language. The selected zoom level is
+saved in the app settings.
 
 ## Change Language
 
@@ -281,7 +288,18 @@ or, in Russian:
 Вид -> Переключить на английский
 ```
 
-The interface updates without restarting the app.
+The interface updates without restarting the app. The selected language is
+applied consistently across menus, page labels, buttons, dialog boxes, standard
+confirmation buttons (Yes/No/OK), file-dialog filters, validation messages, the
+history viewer, and the clipboard-dump headers — so the interactive interface
+never mixes the two languages. The choice is saved and restored on the next
+launch.
+
+Note: the streaming progress lines shown on the Log page during an export, and
+the contents of the generated report files inside the export, are produced by
+the export pipeline and are kept in Russian regardless of the interface
+language. They are export artifacts and progress diagnostics rather than
+interface text.
 
 ## Build From Source
 
@@ -504,14 +522,13 @@ If the app is actually still running, use the full cleanup script:
 Use:
 
 ```text
-Ctrl++
-Ctrl+=
-Ctrl+-
-Ctrl+_
-Ctrl+0
+Ctrl++   or  Ctrl+Num++   Zoom in
+Ctrl+-   or  Ctrl+Num+-   Zoom out
+Ctrl+0   or  Ctrl+Num+0   Reset zoom
 ```
 
-You can also use the View menu.
+You can also use the View menu. The shortcuts and the menu actions share the
+same bindings, so both paths always produce the same result.
 
 ### The installer cannot be built
 
