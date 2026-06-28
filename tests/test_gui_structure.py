@@ -41,3 +41,21 @@ def test_pages_do_not_import_export_services() -> None:
         if any(pat in text for pat in forbidden):
             violations.append(py_file.name)
     assert violations == [], f"Page modules import export services directly: {violations}"
+
+
+def test_tray_menu_has_explicit_selected_styles() -> None:
+    styles_dir = SRC / "gui" / "styles"
+    for qss_file in ("app_dark.qss", "app_light.qss"):
+        text = (styles_dir / qss_file).read_text(encoding="utf-8")
+        assert "QMenu#TrayMenu" in text
+        assert "QMenu#TrayMenu::item:selected" in text
+        assert "background: #2563eb" in text
+
+
+def test_build_and_install_script_runs_full_interactive_packaging_flow() -> None:
+    script = SRC.parents[1] / "build_and_install.bat"
+    text = script.read_text(encoding="utf-8")
+    assert "call tools\\build_exe.bat" in text
+    assert "call tools\\build_setup.bat" in text
+    assert "ProjectExporterDesktopSetup-*.exe" in text
+    assert 'start "" "%SETUP_EXE%"' in text

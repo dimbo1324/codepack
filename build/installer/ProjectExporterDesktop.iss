@@ -12,6 +12,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Project Exporter Desktop
 DefaultGroupName={#MyAppName}
+DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir=..\..\dist\installer
 OutputBaseFilename=ProjectExporterDesktopSetup-{#MyAppVersion}

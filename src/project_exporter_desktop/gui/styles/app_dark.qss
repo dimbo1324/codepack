@@ -131,3 +131,28 @@ QProgressBar::chunk {
 QCheckBox {
     spacing: 8px;
 }
+
+QMenu#TrayMenu {
+    background: #0b1220;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px;
+    color: #f8fafc;
+}
+
+QMenu#TrayMenu::item {
+    min-width: 150px;
+    padding: 8px 18px;
+    border-radius: 6px;
+}
+
+QMenu#TrayMenu::item:selected {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+QMenu#TrayMenu::separator {
+    height: 1px;
+    background: #1e293b;
+    margin: 5px 8px;
+}

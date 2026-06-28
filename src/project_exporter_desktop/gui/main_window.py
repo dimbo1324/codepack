@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QCursor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -92,6 +92,10 @@ class MainWindow(QMainWindow):
         self._zoom_in_action: QAction | None = None
         self._zoom_out_action: QAction | None = None
         self._lang_action: QAction | None = None
+        self.tray_menu: QMenu | None = None
+        self.tray_quick_action: QAction | None = None
+        self.tray_open_action: QAction | None = None
+        self.tray_exit_action: QAction | None = None
 
         # Apply saved language before building UI (no signal — widgets not yet created)
         lang = getattr(self.config, "language", "ru")
@@ -188,10 +192,13 @@ class MainWindow(QMainWindow):
         self.tray_icon.setIcon(icon)
         self.tray_icon.setToolTip(APP_NAME)
         menu = QMenu(self)
-        menu.addAction(t("tray.menu_quick"), self._quick_export_from_tray)
-        menu.addAction(t("tray.menu_open"), self._show_from_tray)
+        menu.setObjectName("TrayMenu")
+        self.tray_quick_action = menu.addAction(t("tray.menu_quick"), self._quick_export_from_tray)
+        self.tray_open_action = menu.addAction(t("tray.menu_open"), self._show_from_tray)
         menu.addSeparator()
-        menu.addAction(t("tray.menu_exit"), self._exit_from_tray)
+        self.tray_exit_action = menu.addAction(t("tray.menu_exit"), self._exit_from_tray)
+        menu.hovered.connect(self._on_tray_menu_hovered)
+        self.tray_menu = menu
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(self._on_tray_activated)
         self.tray_icon.show()
@@ -219,6 +226,13 @@ class MainWindow(QMainWindow):
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._show_from_tray()
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            if self.tray_menu is not None:
+                self.tray_menu.popup(QCursor.pos())
+
+    def _on_tray_menu_hovered(self, action: QAction) -> None:
+        if action.text():
+            self.statusBar().showMessage(action.text(), 1500)
 
     def _show_from_tray(self) -> None:
         self.showNormal()
@@ -226,7 +240,10 @@ class MainWindow(QMainWindow):
 
     def _exit_from_tray(self) -> None:
         self._allow_close = True
+        if self.tray_icon.isVisible():
+            self.tray_icon.hide()
         self.close()
+        QApplication.quit()
 
     def _quick_export_from_tray(self) -> None:
         if self.export_worker and self.export_worker.isRunning():
@@ -415,6 +432,12 @@ class MainWindow(QMainWindow):
         # Update language toggle action label
         if self._lang_action is not None:
             self._lang_action.setText(t("menu.view.language"))
+        if self.tray_quick_action is not None:
+            self.tray_quick_action.setText(t("tray.menu_quick"))
+        if self.tray_open_action is not None:
+            self.tray_open_action.setText(t("tray.menu_open"))
+        if self.tray_exit_action is not None:
+            self.tray_exit_action.setText(t("tray.menu_exit"))
 
         # Update bottom bar buttons
         self.open_result_button.setText(t("btn.open_result"))
