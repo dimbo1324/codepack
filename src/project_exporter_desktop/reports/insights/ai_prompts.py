@@ -1,3 +1,9 @@
+"""AI Prompt files report: writes ready-made prompt templates into the AI_PROMPTS/ folder.
+
+PROMPTS maps output filename to Markdown prompt content; an empty dict means no prompt
+files are generated, which is intentional while the prompt library is under construction.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

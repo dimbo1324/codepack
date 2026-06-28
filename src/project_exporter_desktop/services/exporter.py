@@ -1,3 +1,7 @@
+# Orchestrates the full 8-step export pipeline: plan, copy, structure report, Git report,
+# text dump, insight reports, manifest, and ZIP archiving.
+# Runs inside a background thread; progress and log messages flow through a Queue.
+
 from __future__ import annotations
 
 import shutil
@@ -58,6 +62,7 @@ class ProjectExporter:
         paths = build_export_paths(self.source_root)
         progress = ProgressReporter(self.log, total_steps=8)
         stack_dirs = merged_extra_ignored_dirs(self.source_root)
+        # extra_ignored is used for analytics; IGNORED_DIR_NAMES are already in the base set
         extra_ignored = (self.config.effective_ignored_dirs() | stack_dirs) - {
             name.casefold() for name in IGNORED_DIR_NAMES
         }
@@ -101,14 +106,14 @@ class ProjectExporter:
             if incremental_selection.paths is not None:
                 selected_sets.append(incremental_selection.paths)
             if not selected_sets:
-                return None
+                return None  # no active filter → include everything
             result = set(selected_sets[0])
             for selected in selected_sets[1:]:
-                result &= set(selected)
+                result &= set(selected)  # intersection: a file must be selected by every active mode
             for rel_path, include in self.file_overrides.items():
                 rel_key = rel_path.replace("/", "\\")
                 if include:
-                    result.add(rel_key)
+                    result.add(rel_key)  # user-forced inclusions override the diff/incremental sets
                 else:
                     result.discard(rel_key)
             return frozenset(result)
@@ -304,6 +309,8 @@ class ProjectExporter:
 
         result_path = self.archive_result.primary_result if self.archive_result else paths.final_zip
         successful = not cancelled and not self.cancel_event.is_set() and copy_stats.errors == 0
+        # Only capture the post-export snapshot when the run was successful; cancelled or errored
+        # exports must not overwrite the baseline used by diff_service next time.
         snapshot = (
             history_snapshot_payload(paths.source_root, ignored_for_walk) if successful else {}
         )

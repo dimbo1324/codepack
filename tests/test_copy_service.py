@@ -1,3 +1,5 @@
+"""Tests for the copy service: safe-mode filtering, diff-based selection, and always-include rules."""
+
 from __future__ import annotations
 
 import tempfile

@@ -1,3 +1,6 @@
+# Loads and applies named export-profile presets, merging built-in profiles with
+# any user-defined profiles from the editable JSON profiles file.
+
 from __future__ import annotations
 
 import json
@@ -107,6 +110,7 @@ def apply_custom_profile_if_needed(profile_key: str, config: Config) -> Config:
 
     updated = replace(config)
     base_profile = str(profile.get("base_profile") or profile.get("export_profile") or "full")
+    # Fall back to "full" if the declared base profile key no longer exists in built-in profiles
     updated.export_profile = base_profile if base_profile in EXPORT_PROFILES else "full"
     for field, value in profile.items():
         if field not in ALLOWED_PROFILE_OVERRIDE_FIELDS or field == "export_profile":
@@ -115,5 +119,5 @@ def apply_custom_profile_if_needed(profile_key: str, config: Config) -> Config:
             try:
                 setattr(updated, field, value)
             except Exception:
-                pass
+                pass  # silently ignore type mismatches so a bad profile entry doesn't abort the export
     return updated

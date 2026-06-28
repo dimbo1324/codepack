@@ -1,3 +1,6 @@
+# Parses .exportignore files and programmatic exclusion rules into ExportIgnoreRules.
+# Provides should_skip_dir / should_skip_file predicates consumed by copy_service and export_plan.
+
 from __future__ import annotations
 
 import fnmatch
@@ -99,7 +102,7 @@ class ExportIgnoreRules:
             if not rule:
                 continue
             self.loaded_rules.append(rule)
-            include = rule.startswith("!")
+            include = rule.startswith("!")  # '!' prefix means "never exclude this" (gitignore-style negation)
             if include:
                 rule = rule[1:].strip()
             if not rule:
@@ -160,7 +163,7 @@ class ExportIgnoreRules:
     def has_always_included_file_descendant(self, relative_dir: Path) -> bool:
         rel = _normalise_path(relative_dir)
         if not rel:
-            return bool(self.always_include_files)
+            return bool(self.always_include_files)  # root dir always has descendants if any file is forced-in
         prefix = rel + "/"
         return any(
             pattern == rel or pattern.startswith(prefix) for pattern in self.always_include_files

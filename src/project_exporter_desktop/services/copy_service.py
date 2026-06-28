@@ -1,3 +1,6 @@
+# Copies the source project tree into the staging directory, applying safety policy,
+# .exportignore rules, and an optional diff-driven file allowlist.
+
 from __future__ import annotations
 
 import os
@@ -56,6 +59,7 @@ def copy_project(
                 except ValueError:
                     rel_dir = ""
                 prefix = rel_dir + "\\"
+                # Prune the entire subtree if none of the selected paths live under this dir
                 if not any(
                     path == rel_dir or path.startswith(prefix) for path in include_relative_paths
                 ):
@@ -133,7 +137,7 @@ def copy_project(
             try:
                 shutil.copy2(src_file, dst_file)
                 stats.files_copied += 1
-                if stats.files_copied % 250 == 0:
+                if stats.files_copied % 250 == 0:  # log progress every 250 files to avoid flooding the queue
                     log(f"Скопировано файлов: {stats.files_copied:,}")
                     if progress is not None:
                         progress(20, "Копирование файлов", rel_display(src_file, source_root))

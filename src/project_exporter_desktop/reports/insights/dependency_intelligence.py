@@ -1,3 +1,9 @@
+"""Dependency intelligence report: extends the basic dependency report with hygiene checks.
+
+Aggregates JS/TS, Python, Go, and Rust dependency metadata, checks for missing lockfiles,
+and writes actionable recommendations to 26_dependency_intelligence.md.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -99,6 +105,7 @@ def write_dependency_intelligence_report(copied_root: Path, output_file: Path) -
             out.write("go.mod not detected.\n")
 
         _section(out, "Hygiene checks")
+        # Flag projects that declare JS dependencies but have not committed a lockfile.
         if package_json and not any(
             (copied_root / name).exists()
             for name in (

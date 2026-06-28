@@ -1,3 +1,5 @@
+"""Edge-case tests for ExportIgnoreRules covering globs, unicode paths, backslashes, and extensions."""
+
 from __future__ import annotations
 
 from pathlib import Path

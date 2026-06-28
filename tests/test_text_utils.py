@@ -1,3 +1,5 @@
+"""Tests for text_utils: safe file reading with byte limits and secret redaction."""
+
 from __future__ import annotations
 
 import tempfile

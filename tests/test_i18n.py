@@ -1,3 +1,5 @@
+"""Tests for the i18n service: language switching, key completeness, and string formatting."""
+
 from __future__ import annotations
 
 import pytest

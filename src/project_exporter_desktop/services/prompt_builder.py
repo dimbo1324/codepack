@@ -1,3 +1,6 @@
+# Builds the CUSTOM_PROMPT.md AI instruction file included in every export bundle.
+# Goal keys are validated against PROMPT_GOALS and default to a sensible review set.
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +21,7 @@ def normalise_prompt_goals(goals: list[str] | None) -> list[str]:
         goal = goal.strip()
         if goal in PROMPT_GOALS and goal not in cleaned:
             cleaned.append(goal)
-    return cleaned or ["architecture_review", "bug_hunt", "write_tests"]
+    return cleaned or ["architecture_review", "bug_hunt", "write_tests"]  # default goals when none are specified or all are invalid
 
 
 def build_custom_prompt(project_name: str, goals: list[str] | None = None) -> str:

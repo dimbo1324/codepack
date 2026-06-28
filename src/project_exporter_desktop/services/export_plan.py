@@ -1,3 +1,6 @@
+# Walks the project tree before the copy step and builds an ExportPlan that lists every file
+# as included or excluded together with the reason, enabling pre-export user confirmation.
+
 from __future__ import annotations
 
 import json
@@ -104,8 +107,8 @@ def _selected_by_diff_and_incremental(
     if incremental.paths is not None:
         selected_sets.append(incremental.paths)
     if not selected_sets:
-        return True
-    return all(rel_key in selected for selected in selected_sets)
+        return True  # no active filter means "include everything"
+    return all(rel_key in selected for selected in selected_sets)  # file must appear in every active set
 
 
 def build_export_plan(

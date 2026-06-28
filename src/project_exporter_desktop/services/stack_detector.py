@@ -1,3 +1,6 @@
+# Detects the technology stack of a project by checking for known marker files in the root.
+# Results drive the set of extra directories to exclude from the walk (e.g. node_modules for Node.js).
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -109,6 +112,7 @@ def detect_stack(root: Path) -> list[StackInfo]:
         return []
 
     try:
+        # Two passes over root entries: one for names (e.g. package.json), one for extensions (e.g. .csproj)
         root_names_with_dot = {entry.name for entry in root.iterdir()}
         root_suffixes = {entry.suffix for entry in root.iterdir() if entry.is_file()}
     except PermissionError:
@@ -138,7 +142,7 @@ def detect_stack(root: Path) -> list[StackInfo]:
                 )
             )
 
-    results.sort(key=lambda s: len(s.markers_found), reverse=True)
+    results.sort(key=lambda s: len(s.markers_found), reverse=True)  # stack with the most matched markers is treated as the primary one
     return results
 
 

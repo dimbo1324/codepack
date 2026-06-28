@@ -132,10 +132,13 @@ class Config:
 
     @classmethod
     def import_settings(cls, path: Path) -> Config:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        migrated = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
-        return cls(**migrated)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            known = {f.name for f in cls.__dataclass_fields__.values()}
+            migrated = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
+            return cls(**migrated)
+        except Exception as exc:
+            raise ValueError(f"Cannot import settings from {path}: {exc}") from exc
 
 
 def _migrate_legacy_settings(data: dict[str, Any]) -> dict[str, Any]:

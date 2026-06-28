@@ -1,3 +1,6 @@
+# Persists a rolling log of completed exports to a JSON file in the user settings directory.
+# Used by diff_service to locate the snapshot from the previous successful export.
+
 from __future__ import annotations
 
 import json
@@ -18,7 +21,7 @@ def append_export_history(entry: dict[str, Any]) -> None:
         )
         if not isinstance(history, list):
             history = []
-        history.insert(0, entry)
+        history.insert(0, entry)  # newest entry first so callers can short-circuit on the first match
         del history[MAX_HISTORY_ITEMS:]
         HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:

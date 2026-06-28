@@ -1,3 +1,5 @@
+"""Tests for write_manifest: verifies diff metadata, archive info, and ignored dirs are recorded."""
+
 from __future__ import annotations
 
 import json

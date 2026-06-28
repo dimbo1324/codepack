@@ -1,3 +1,9 @@
+"""API Surface report: extracts backend routes and frontend HTTP calls using regex heuristics.
+
+Scans Python (FastAPI/Flask), JavaScript/TypeScript (Express), and Go (net/http) source
+files plus any OpenAPI/Swagger specs to produce 18_api_surface_report.md.
+"""
+
 from __future__ import annotations
 
 import re
@@ -20,6 +26,7 @@ _EXPRESS_RE = re.compile(
 )
 _GO_RE = re.compile(r"(?:http\.)?HandleFunc\(\s*['\"]([^'\"]+)")
 _FETCH_RE = re.compile(
+    # Matches fetch(), axios calls, and generic client calls; backtick-quoted URLs are included for template literals.
     r"(?:fetch|axios\.(?:get|post|put|patch|delete)|client\.(?:get|post|put|patch|delete))\(\s*`?['\"]?([^'\"`)]+)"
 )
 _OPENAPI_NAMES = {
@@ -62,6 +69,7 @@ def write_api_surface_report(
             for method, route in _EXPRESS_RE.findall(text):
                 backend_routes.append((path, method.upper(), route))
             for call in _FETCH_RE.findall(text):
+                # Only keep calls that look like real API paths; plain string values would produce noise.
                 if call.startswith(("http", "/", "api", "${")) or "/api" in call:
                     frontend_calls.append((path, call))
         elif ext == "go":

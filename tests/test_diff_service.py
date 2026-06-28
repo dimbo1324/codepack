@@ -1,3 +1,5 @@
+"""Tests for the diff service: last-export, uncommitted, and git-ref selection modes."""
+
 from __future__ import annotations
 
 import json

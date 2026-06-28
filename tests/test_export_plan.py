@@ -1,3 +1,5 @@
+"""Tests for build_export_plan: verifies that safe-mode exclusions and file inclusion are correct."""
+
 from __future__ import annotations
 
 import tempfile

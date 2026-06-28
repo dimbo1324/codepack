@@ -225,6 +225,14 @@ _RU: dict[str, str] = {
         "архив с кодом, текстовый дамп, отчёты по структуре и аналитике.\n\n"
         "Поддерживаемые ИИ: Claude Code, ChatGPT, Gemini, Copilot и другие."
     ),
+    "dialog.plan.title": "Подтверждение плана экспорта",
+    "dialog.plan.header": "Проверьте план экспорта перед копированием",
+    "dialog.plan.hint": (
+        "Проект не будет скопирован до подтверждения плана. "
+        "Правила безопасного экспорта остаются активными, даже если заданы пользовательские правила включения."
+    ),
+    "dialog.plan.ok": "Начать экспорт",
+    "dialog.plan.cancel": "Отмена",
     # MessageBoxes
     "msg.cancel_export.title": "Отмена экспорта",
     "msg.cancel_export.body": "Остановить текущий экспорт? Частичный результат может остаться.",
@@ -286,8 +294,6 @@ _RU: dict[str, str] = {
     "preset.Code Review.desc": "Полный снимок кода с Git-патчем. Идеально для детального ревью.",
     "preset.Security Audit.desc": "Акцент на безопасности: конфигурация, зависимости и анализ рисков.",
     "preset.Онбординг.desc": "Краткий обзор для быстрого введения нового разработчика в проект.",
-    # HelpDialog content (Russian version in dialogs.py)
-    "help.page_content": "ru",
 }
 
 _EN: dict[str, str] = {
@@ -496,6 +502,14 @@ _EN: dict[str, str] = {
         "code archive, text dump, structure and analytics reports.\n\n"
         "Supported AI: Claude Code, ChatGPT, Gemini, Copilot and others."
     ),
+    "dialog.plan.title": "Export Plan Confirmation",
+    "dialog.plan.header": "Review the export plan before copying",
+    "dialog.plan.hint": (
+        "The project will not be copied until the plan is confirmed. "
+        "Safe export rules remain active even when custom include rules are set."
+    ),
+    "dialog.plan.ok": "Start Export",
+    "dialog.plan.cancel": "Cancel",
     "msg.cancel_export.title": "Cancel Export",
     "msg.cancel_export.body": "Stop the current export? A partial result may remain.",
     "msg.export_done.title": "Export Complete",
@@ -552,14 +566,115 @@ _EN: dict[str, str] = {
     "preset.Code Review.desc": "Full code snapshot with Git patch. Ideal for detailed review.",
     "preset.Security Audit.desc": "Security-focused: configuration, dependencies, and risk analysis.",
     "preset.Онбординг.desc": "Brief overview for quickly onboarding a new developer to the project.",
-    "help.page_content": "en",
 }
 
 _STRINGS: dict[str, dict[str, str]] = {"ru": _RU, "en": _EN}
 
 # ---------------------------------------------------------------------------
-# English help HTML
+# Help HTML: both language variants are stored here to avoid circular imports
+# with gui.dialogs (which itself imports from i18n).
 # ---------------------------------------------------------------------------
+
+_HELP_HTML_RU = """
+<html><body style="font-family:sans-serif;font-size:10pt;line-height:1.6;">
+<h2>Project Exporter Desktop — Руководство пользователя</h2>
+
+<h3>Назначение приложения</h3>
+<p>Project Exporter Desktop создаёт <b>снимок вашего проекта</b> в удобном для ИИ-ассистентов формате:
+ZIP-архив с кодом, текстовый дамп всех файлов, отчёты по структуре, Git-истории и аналитике.
+Готовый пакет загружается в Claude Code, ChatGPT, Gemini или другой ИИ.</p>
+
+<h3>1. Страница «Проект»</h3>
+<ul>
+<li><b>Папка проекта</b> — укажите корень вашего проекта (кнопка «Обзор» или вставьте путь вручную).</li>
+<li><b>Определённый стек</b> — приложение автоматически определяет технологии и исключает тяжёлые папки
+(node_modules, .venv, target и т.д.).</li>
+<li><b>Задача / контекст разработчика</b> — опциональный текст, который будет вставлен в самое начало
+текстового дампа. Используйте это поле, чтобы указать ИИ, что нужно сделать с кодом.</li>
+</ul>
+
+<h3>2. Страница «Настройки»</h3>
+<ul>
+<li><b>Пресеты</b> — быстрые конфигурации для популярных ИИ-ассистентов (Claude Code, ChatGPT, Code Review,
+Security Audit, Онбординг). Выберите пресет — настройки подберутся автоматически.</li>
+<li><b>Профиль экспорта</b> — определяет набор включаемых файлов (ai_review, quick, minimal, security, full).</li>
+<li><b>Режим экспорта</b> — <em>safe</em> исключает секреты и бинарники; <em>permissive</em> снимает большинство ограничений.</li>
+<li><b>Режим diff</b> — экспортировать все файлы или только изменённые (относительно ветки / коммита).</li>
+<li><b>Тема</b> — системная, светлая или тёмная.</li>
+<li><b>Режим наблюдения</b> — автоматически отслеживает изменения в папке проекта и уведомляет через трей.</li>
+<li><b>Лимит текстового файла</b> — ограничение на размер одного файла в текстовом дампе (МБ).</li>
+</ul>
+
+<h3>3. Страница «Безопасность»</h3>
+<ul>
+<li><b>Редактировать секреты</b> — маскирует API-ключи, пароли и токены в текстовых файлах.</li>
+<li><b>Включить Git-патч</b> — добавляет git diff в экспорт-пакет.</li>
+<li><b>Дополнительные игнорируемые папки</b> — укажите папки через запятую.</li>
+<li><b>Правила включения/исключения</b> — детальные glob-правила для отдельных файлов и расширений.</li>
+<li><b>.exportignore</b> — файл в корне проекта (аналог .gitignore) для тонкой настройки исключений.</li>
+</ul>
+
+<h3>4. Страница «Предпросмотр»</h3>
+<p>Перед экспортом отображается дерево файлов с цветовой кодировкой:</p>
+<ul>
+<li><span style="color:#4caf50;">■ Зелёный</span> — файл будет включён</li>
+<li><span style="color:#f44336;">■ Красный</span> — исключён по соображениям безопасности</li>
+<li><span style="color:#ff9800;">■ Оранжевый</span> — исключён (средний приоритет)</li>
+<li><span style="color:#9e9e9e;">■ Серый</span> — исключён (информация)</li>
+<li><span style="color:#00bcd4;">■ Голубой</span> — принудительно включён вами</li>
+<li><span style="color:#e91e63;">■ Розовый</span> — принудительно исключён вами</span></li>
+</ul>
+<p><b>Двойной клик</b> по файлу переключает его включение/исключение. Кнопка «Скопировать дамп»
+копирует текст всех включённых файлов в буфер обмена (без создания архива).</p>
+
+<h3>5. Страница «Журнал»</h3>
+<p>Отображает прогресс экспорта в реальном времени. 8 шагов: план → копирование → структура →
+Git-отчёт → текстовый дамп → аналитика → манифест → архивирование.</p>
+
+<h3>6. Страница «Результат»</h3>
+<p>Показывает итоговый ZIP-файл. Кнопка «Открыть результат» открывает папку с архивом в Проводнике.</p>
+
+<h3>7. Страница «История»</h3>
+<p>Список всех выполненных экспортов с метаданными: дата, профиль, количество токенов, путь к результату.</p>
+
+<h3>8. Страница «Аналитика»</h3>
+<p>Статистика по проекту: количество файлов, языки, размеры, топ-файлы по объёму.</p>
+
+<h3>Масштабирование интерфейса</h3>
+<p>Меню <b>Вид → Увеличить / Уменьшить / Сбросить масштаб</b> (или Ctrl++/Ctrl+−/Ctrl+0)
+изменяет размер шрифта в интерфейсе от 70% до 150%.</p>
+
+<h3>Системный трей</h3>
+<p>При закрытии окна приложение сворачивается в трей. Двойной клик по иконке возвращает окно.
+Правая кнопка мыши на иконке открывает меню с опцией <em>Быстрый экспорт</em> и <em>Выход</em>.</p>
+
+<h3>Инструменты (меню)</h3>
+<ul>
+<li><b>Правила включения/исключения</b> — диалог glob-правил.</li>
+<li><b>Промпт-цели</b> — выбор разделов CUSTOM_PROMPT.md.</li>
+<li><b>Создать .exportignore</b> — создаёт шаблон файла исключений в корне проекта.</li>
+<li><b>Экспорт / Импорт настроек</b> — сохранение и загрузка конфигурации в JSON.</li>
+<li><b>Сбросить настройки</b> — возврат к заводским настройкам.</li>
+</ul>
+
+<h3>Горячие клавиши</h3>
+<table border="0" cellpadding="4">
+<tr><td><b>Ctrl++</b></td><td>Увеличить масштаб</td></tr>
+<tr><td><b>Ctrl+−</b></td><td>Уменьшить масштаб</td></tr>
+<tr><td><b>Ctrl+0</b></td><td>Сбросить масштаб (100%)</td></tr>
+<tr><td><b>F1</b></td><td>Открыть справку</td></tr>
+</table>
+
+<h3>Советы</h3>
+<ul>
+<li>Используйте поле <em>Задача / контекст</em>, чтобы ИИ сразу понял, что вы хотите.</li>
+<li>Пресет <em>Claude Code</em> — оптимален для работы с Anthropic Claude; снимает лимит размера файла.</li>
+<li>Пресет <em>ChatGPT</em> — ограничивает файлы до 1 МБ, чтобы уложиться в 128K контекст.</li>
+<li>Режим <em>Быстрый экспорт</em> из трея использует текущие настройки без открытия окна.</li>
+<li>Лог-файл приложения находится в <code>%LOCALAPPDATA%/project_exporter_desktop/</code>.</li>
+</ul>
+</body></html>
+"""
 
 _HELP_HTML_EN = """
 <html><body style="font-family:sans-serif;font-size:10pt;line-height:1.6;">
@@ -693,11 +808,13 @@ class I18n(QObject):
             return table[key]
         return _RU.get(key, key)
 
+    def init_language(self, lang: str) -> None:
+        """Set language at startup without emitting language_changed signal."""
+        if lang in _STRINGS:
+            self._lang = lang
+
     def help_html(self) -> str:
-        if self._lang == "en":
-            return _HELP_HTML_EN
-        from .gui.dialogs import _HELP_HTML
-        return _HELP_HTML
+        return _HELP_HTML_EN if self._lang == "en" else _HELP_HTML_RU
 
 
 _i18n = I18n()

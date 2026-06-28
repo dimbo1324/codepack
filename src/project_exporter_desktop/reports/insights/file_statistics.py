@@ -1,3 +1,9 @@
+"""File statistics report: extension breakdown, largest/deepest files, and portability risks.
+
+Writes 02_file_statistics.txt with tables that highlight empty files, spaces-in-names,
+non-ASCII paths, and Windows long-path candidates (>= 240 characters).
+"""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -23,6 +29,7 @@ def write_file_statistics_report(
     non_ascii = [p for p in files if is_non_ascii(str(p.relative_to(copied_root)))]
     deepest = sorted(files, key=lambda p: path_depth(p, copied_root), reverse=True)[:25]
     largest = sorted(sizes, key=lambda item: item[1], reverse=True)[:25]
+    # 240 is a conservative threshold; Windows MAX_PATH is 260, but tools like robocopy fail earlier.
     long_paths = [p for p in files if len(str(p)) >= 240]
 
     with output_file.open("w", encoding="utf-8", newline="\n", errors="replace") as out:

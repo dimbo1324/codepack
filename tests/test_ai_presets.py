@@ -1,4 +1,6 @@
 
+"""Tests for AI preset definitions and developer-context config fields in the codepack app."""
+
 from __future__ import annotations
 
 import json

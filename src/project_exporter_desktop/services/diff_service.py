@@ -1,3 +1,7 @@
+# Resolves which files should be included in a differential export.
+# Supports Git-based modes (committed range, uncommitted working-tree changes) and
+# a snapshot-based fallback that compares against the last successful export history entry.
+
 from __future__ import annotations
 
 import hashlib
@@ -73,6 +77,7 @@ def _run_git_records(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
             encoding="utf-8",
             errors="replace",
         )
+        # NUL-delimited output from --porcelain -z avoids splitting on filenames that contain spaces
         records = [item for item in completed.stdout.split("\0") if item]
         return completed.returncode, records, completed.stderr.strip()
     except FileNotFoundError:
@@ -84,7 +89,7 @@ def _run_git_records(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):  # 1 MB chunks keep memory use flat for large files
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -140,7 +145,7 @@ def _last_history_snapshot(root: Path) -> dict[str, dict[str, Any]] | None:
     for entry in load_export_history():
         if str(entry.get("source_root", "")) != project_key:
             continue
-        if bool(entry.get("cancelled")):
+        if bool(entry.get("cancelled")):  # skip partial exports so the baseline is always complete
             continue
         snapshot = entry.get("snapshot")
         if isinstance(snapshot, dict):

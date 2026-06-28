@@ -1,3 +1,5 @@
+"""Tests for the archive service: single-ZIP creation, split archives, and reports-only mode."""
+
 from __future__ import annotations
 
 import tempfile

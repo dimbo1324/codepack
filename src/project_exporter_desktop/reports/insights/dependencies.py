@@ -1,3 +1,9 @@
+"""Dependency report: extracts package lists from package.json, requirements*.txt, go.mod, and Cargo.toml.
+
+Writes 03_dependencies.txt with a plain-text summary suitable for quick scanning.
+parse_go_mod() is also reused by dependency_intelligence.py.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,6 +21,8 @@ def parse_go_mod(path: Path) -> tuple[str, list[str]]:
     except Exception:
         return module_name, requirements
 
+    # Hand-rolled parser avoids importing a TOML/Go-module library; handles both
+    # single-line `require pkg v1.0` and block `require ( ... )` syntax.
     in_require_block = False
     for line in lines:
         stripped = line.strip()
@@ -104,6 +112,7 @@ def write_dependency_report(copied_root: Path, output_file: Path) -> None:
 
         if (copied_root / "Cargo.toml").exists():
             out.write("\n--- Rust Cargo ---\n")
+            # Full Cargo.toml parsing is skipped on purpose to keep the codebase stdlib-only.
             out.write(
                 "Cargo.toml detected. Full TOML parsing is intentionally not performed without external dependencies.\n"
             )

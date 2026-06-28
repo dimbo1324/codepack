@@ -1,3 +1,10 @@
+"""Frontend and backend report generators: two separate report writers in one module.
+
+write_frontend_report() detects framework libraries, component/hook candidates, and UI
+directory conventions.  write_backend_report() maps backend directories and Python symbols.
+Writes 19_frontend_report.md and 20_backend_report.md.
+"""
+
 from __future__ import annotations
 
 import re
@@ -8,6 +15,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely, safe_read_json, should_consider_text_file
 from ...utils.time_utils import human_now
 
+# PascalCase function/const names are the conventional React/Vue component naming pattern.
 _COMPONENT_RE = re.compile(
     r"\b(?:export\s+default\s+)?function\s+([A-Z][A-Za-z0-9_]*)|\bconst\s+([A-Z][A-Za-z0-9_]*)\s*=\s*(?:\(|React\.)"
 )
@@ -174,6 +182,7 @@ def write_backend_report(
         rel_lower = str(path.relative_to(copied_root)).lower().replace("\\", "/")
         if ext == "go":
             go_files.append(path)
+        # Prisma schema files and SQL migration files are treated as database artefacts.
         if ext in {"sql", "prisma"} or "migration" in rel_lower:
             db_files.append(path)
         if any(token in path.name.lower() for token in ("config", "settings")):

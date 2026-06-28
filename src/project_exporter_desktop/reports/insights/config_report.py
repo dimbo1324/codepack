@@ -1,3 +1,9 @@
+"""Configuration report: locates known config files and produces a capability checklist.
+
+find_config_files() is also imported by other report modules that need to list config
+files without writing a full report.  Writes 09_config.txt.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,12 +24,14 @@ def find_config_files(copied_root: Path) -> list[Path]:
         if name in CONFIG_FILES or lower_name in {item.lower() for item in CONFIG_FILES}:
             known.append(path)
             continue
+        # Workflow YAML files are config even though yml is not in CONFIG_FILES by default.
         if rel.startswith(".github/workflows/") and path.suffix.lower() in {
             ".yml",
             ".yaml",
         }:
             known.append(path)
             continue
+        # Dockerfile variants (Dockerfile.prod, etc.) are matched by prefix.
         if lower_name.startswith("dockerfile"):
             known.append(path)
             continue

@@ -1,3 +1,4 @@
+"""Tests for the token counter utility: estimation, formatting, and per-model context-fit checks."""
 
 from __future__ import annotations
 

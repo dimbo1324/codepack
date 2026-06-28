@@ -1,3 +1,5 @@
+"""Tests for ExportIgnoreRules: .exportignore parsing, negation patterns, and always-include logic."""
+
 from __future__ import annotations
 
 import tempfile

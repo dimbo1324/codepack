@@ -1,3 +1,5 @@
+"""Tests for the incremental export service that detects added and modified files since last baseline."""
+
 from __future__ import annotations
 
 import tempfile

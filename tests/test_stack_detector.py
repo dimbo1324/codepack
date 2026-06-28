@@ -1,3 +1,4 @@
+"""Tests for the stack detector: identifies project technology stacks from marker files."""
 
 from __future__ import annotations
 

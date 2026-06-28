@@ -1,3 +1,7 @@
+# Scans a project directory and produces an AnalyticsReport covering language stats,
+# dependencies, Git history, and potential credential/secret risks.
+# Called in the insight-report pipeline before the archive step.
+
 from __future__ import annotations
 
 import json
@@ -110,7 +114,7 @@ def _dependency_warning(version: str) -> str:
         return "версия не указана"
     if value in {"*", "latest"} or "latest" in value.casefold():
         return "плавающая версия"
-    if value.startswith((">", ">=", "~", "^")):
+    if value.startswith((">", ">=", "~", "^")):  # semver range operators signal non-pinned deps
         return "диапазон версии"
     return ""
 
@@ -197,7 +201,7 @@ def _git_lines(args: list[str], cwd: Path) -> tuple[int, list[str]]:
             cwd=str(cwd),
             text=True,
             capture_output=True,
-            timeout=20,
+            timeout=20,  # short timeout; analytics is best-effort and must not stall the UI
             encoding="utf-8",
             errors="replace",
         )
@@ -272,10 +276,10 @@ def analyze_project(root: Path, ignored_dirs: frozenset[str] | set[str]) -> Anal
             report.total_bytes += size
             report.total_loc += loc
             risk = _risk_for_file(root, path)
-            if risk is not None and len(report.risks) < 100:
+            if risk is not None and len(report.risks) < 100:  # cap at 100 to avoid huge reports
                 report.risks.append(risk)
 
-    report.languages = sorted(by_language.values(), key=lambda item: item.loc, reverse=True)
+    report.languages = sorted(by_language.values(), key=lambda item: item.loc, reverse=True)  # sort by LOC so dominant language appears first
     report.dependencies = (
         _read_package_json(root)
         + _read_requirements(root)

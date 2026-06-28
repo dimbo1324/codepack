@@ -1,3 +1,9 @@
+"""Architecture map report: classifies every file into a coarse architectural layer.
+
+Produces 24_architecture_map.md with a per-layer file listing and a Mermaid flowchart
+showing the canonical dependency direction between layers.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -9,6 +15,7 @@ from ...utils.time_utils import human_now
 
 
 def _layer_for_path(path: Path) -> str:
+    # Rules are evaluated top-to-bottom; more specific checks (entrypoints) come first.
     parts = {part.casefold() for part in path.parts}
     name = path.name.casefold()
     suffix = extension_key(path)

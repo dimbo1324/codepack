@@ -8,8 +8,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-_log = logging.getLogger(__name__)
-
 from ..config import Config
 from ..constants import TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION
 from ..services.analytics_service import analyze_project
@@ -19,6 +17,8 @@ from ..services.export_plan import build_export_plan, format_export_plan_for_use
 from ..services.exporter import ProjectExporter
 from ..services.incremental import IncrementalSelection
 from ..services.stack_detector import merged_extra_ignored_dirs
+
+_log = logging.getLogger(__name__)
 
 
 class QtLogQueue:

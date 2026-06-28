@@ -1,3 +1,5 @@
+"""Edge-case tests for build_export_plan: empty projects, diff modes, unicode, and size accounting."""
+
 from __future__ import annotations
 
 from pathlib import Path

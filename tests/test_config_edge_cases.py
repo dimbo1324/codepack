@@ -1,3 +1,5 @@
+"""Edge-case tests for Config loading, normalisation, migration, and import/export in codepack."""
+
 from __future__ import annotations
 
 import json

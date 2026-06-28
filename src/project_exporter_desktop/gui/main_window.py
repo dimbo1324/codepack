@@ -91,10 +91,9 @@ class MainWindow(QMainWindow):
         self._zoom_out_action: QAction | None = None
         self._lang_action: QAction | None = None
 
-        # Apply saved language before building UI
+        # Apply saved language before building UI (no signal — widgets not yet created)
         lang = getattr(self.config, "language", "ru")
-        if lang in ("ru", "en"):
-            get_i18n()._lang = lang
+        get_i18n().init_language(lang)
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1100, 780)
@@ -988,10 +987,9 @@ def run_app() -> int:
     app.setWindowIcon(QIcon(str(asset_path("ICO.ico"))))
     startup_config = Config.load()
 
-    # Apply saved language before first render
+    # Apply saved language before first render (no signal — window not yet created)
     lang = getattr(startup_config, "language", "ru")
-    if lang in ("ru", "en"):
-        get_i18n()._lang = lang
+    get_i18n().init_language(lang)
 
     startup_theme = startup_config.normalized_theme()
     if startup_theme == "system":

@@ -1,10 +1,10 @@
+"""Edge-case tests for the token counter: boundary values, model limits, and summary line formatting."""
+
 from __future__ import annotations
 
-import pytest
-
 from project_exporter_desktop.utils.token_counter import (
-    MODEL_CONTEXT_LIMITS,
     _CHARS_PER_TOKEN,
+    MODEL_CONTEXT_LIMITS,
     context_fit_rows,
     context_summary_line,
     estimate_tokens,

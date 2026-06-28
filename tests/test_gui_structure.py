@@ -1,3 +1,5 @@
+"""Tests that verify the GUI module structure: page utilities exist and service/GUI layers stay separate."""
+
 from __future__ import annotations
 
 from pathlib import Path

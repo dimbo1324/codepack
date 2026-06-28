@@ -1,3 +1,5 @@
+"""Tests that the pre-archive hook runs before the ZIP is written in the archive service."""
+
 from __future__ import annotations
 
 import tempfile

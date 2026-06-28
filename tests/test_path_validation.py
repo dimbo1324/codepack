@@ -1,3 +1,5 @@
+"""Tests for validate_source_root: rejects blank paths and files, accepts valid project directories."""
+
 from __future__ import annotations
 
 import tempfile

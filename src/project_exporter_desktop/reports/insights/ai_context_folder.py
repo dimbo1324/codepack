@@ -1,3 +1,10 @@
+"""AI Context Folder report: writes a multi-file AI_CONTEXT/ directory inside the export.
+
+Each file in the folder covers a distinct aspect of the project (overview, architecture,
+file tree, entrypoints, dependencies, security notes, scripts, prompts) so that an AI
+assistant can be given only the relevant context files rather than the entire export.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -63,6 +70,7 @@ def write_ai_context_folder(
     )
 
     tree_lines = ["# File Tree Snapshot", ""]
+    # Cap at 1 000 entries so the file stays readable inside a chat context window.
     for path in sorted(iter_project_files(copied_root), key=lambda p: str(p).lower())[:1000]:
         tree_lines.append(f"- `{rel_display(path, copied_root)}`")
     _write(output_dir / "02_FILE_TREE.md", "\n".join(tree_lines) + "\n")

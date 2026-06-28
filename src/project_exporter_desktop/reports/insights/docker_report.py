@@ -1,3 +1,9 @@
+"""Docker / infrastructure report: lists Dockerfiles and parses docker-compose service definitions.
+
+Uses a hand-written indent-sensitive parser so no PyYAML dependency is required.
+Writes 10_docker.txt.  Environment values are redacted before being written.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -25,6 +31,7 @@ def parse_compose_services(text: str) -> dict[str, dict[str, list[str]]]:
             in_services = True
             current_service = ""
             continue
+        # Any top-level key after "services:" signals the end of the services block.
         if indent == 0 and in_services and not stripped.startswith("services:"):
             break
         if not in_services:

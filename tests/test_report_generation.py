@@ -1,3 +1,5 @@
+"""Tests for report generators: custom prompt builder, HTML dashboard, and AI context folder output."""
+
 from __future__ import annotations
 
 from pathlib import Path

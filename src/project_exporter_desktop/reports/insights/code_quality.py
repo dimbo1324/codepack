@@ -1,3 +1,9 @@
+"""Code quality report: identifies large files, long Python functions, mixed-responsibility files,
+and duplicate filenames using static heuristics.
+
+Writes 17_code_quality_report.md to help reviewers prioritise refactoring targets.
+"""
+
 from __future__ import annotations
 
 import ast
@@ -11,6 +17,7 @@ from ...utils.path_utils import rel_display
 from ...utils.text_utils import read_text_safely, should_consider_text_file
 from ...utils.time_utils import human_now
 
+# Presence of 4+ distinct concerns from this list in a medium-large file is a mixed-responsibility signal.
 _DANGEROUS_MIX_RE = re.compile(
     r"\b(tkinter|subprocess|requests|fetch|sql|database|threading|Queue|open\(|write_text|read_text)\b"
 )
@@ -71,6 +78,7 @@ def write_code_quality_report(
         if signals:
             mixed_responsibility.append((path, signals))
 
+    # Threshold of 3+ identical names avoids flagging normal index/init patterns.
     duplicate_groups = {
         name: paths
         for name, paths in duplicate_names.items()

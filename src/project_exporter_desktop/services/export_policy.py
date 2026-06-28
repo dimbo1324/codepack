@@ -1,3 +1,6 @@
+# Decides whether a file should be excluded based on the chosen safe-export mode.
+# Three modes: 'safe' (strict), 'balanced' (only hard credentials), 'full' (no filtering).
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -40,7 +43,7 @@ def classify_sensitive_file(path: Path) -> SafetyDecision:
     suffix = path.suffix.casefold().lstrip(".")
 
     if name in HIGH_RISK_FILENAMES or (name.startswith(".env") and not is_env_example(name)):
-        return SafetyDecision(True, "high-risk credential filename", "critical")
+        return SafetyDecision(True, "high-risk credential filename", "critical")  # .env examples are safe to share, real .env files are not
     if "secret" in name or "credential" in name or "private" in name:
         return SafetyDecision(True, "secret-like filename", "high")
     if suffix in SAFE_MODE_EXCLUDED_SUFFIXES:

@@ -1,3 +1,9 @@
+"""Basic Git report: runs a small set of read-only git commands and writes their output.
+
+Used as step 5 of the export pipeline to give consumers a quick status snapshot of
+the source project without including the .git directory itself.
+"""
+
 from __future__ import annotations
 
 import subprocess
@@ -25,6 +31,7 @@ def run_git_command(
         )
         return completed.returncode, completed.stdout, completed.stderr
     except subprocess.TimeoutExpired as exc:
+        # exc.stdout/stderr may be bytes when text=True fails mid-stream; guard accordingly.
         stdout = exc.stdout if isinstance(exc.stdout, str) else ""
         stderr = exc.stderr if isinstance(exc.stderr, str) else ""
         return None, stdout, stderr + f"\nTIMEOUT after {timeout_seconds} seconds."
@@ -48,6 +55,7 @@ def write_git_report(
 ) -> None:
     log(f"Формирую Git-отчёт: {output_file.name}")
 
+    # The command list is intentionally minimal: only safe, fast, read-only commands.
     commands: list[list[str]] = [
         ["git", "status", "--short", "--branch"],
         ["git", "branch", "--show-current"],

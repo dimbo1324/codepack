@@ -1,3 +1,9 @@
+"""HTML dashboard report: generates REPORT_DASHBOARD.html with key metric cards and report links.
+
+Reads the health report and security JSON that were already written to the reports directory,
+then assembles a self-contained HTML page with inline CSS for light/dark mode support.
+"""
+
 from __future__ import annotations
 
 import html
@@ -17,6 +23,7 @@ def _read_text(path: Path, limit: int = 30_000) -> str:
 
 
 def _extract_overall_score(health_report: Path) -> str:
+    # Parse only the first 5 000 bytes because the score always appears near the top.
     text = _read_text(health_report, 5_000)
     match = re.search(r"Overall score:\s*\*\*(\d+/100)\*\*", text)
     return match.group(1) if match else "n/a"

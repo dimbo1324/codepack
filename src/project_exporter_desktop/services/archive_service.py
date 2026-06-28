@@ -1,3 +1,7 @@
+# Builds the final ZIP output(s) from the staging directory.
+# Handles single-file and multi-part archive plans, writes restore scripts for split sets,
+# and reports an ArchiveBuildResult back to the exporter pipeline.
+
 from __future__ import annotations
 
 import json
@@ -199,6 +203,7 @@ def build_archive_plan(
     paths: ExportPaths, include_project: bool, part_limit_bytes: int = MAX_ARCHIVE_PART_BYTES
 ) -> ArchivePlan:
     limit_bytes = max(1, int(part_limit_bytes))
+    # Leave an 8 MB headroom below the hard limit to absorb compression overhead and ZIP metadata
     target_bytes = min(ARCHIVE_PART_TARGET_BYTES, max(1, limit_bytes - 8 * 1024 * 1024))
     entries, skipped_project_files = _iter_archive_entries(paths, include_project)
     estimated_total = sum(entry.size for entry in entries)
@@ -218,7 +223,7 @@ def build_archive_plan(
 def _write_zip(archive_path: Path, entries: Iterable[ArchiveEntry], cancel: threading.Event) -> int:
     count = 0
     with zipfile.ZipFile(
-        archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+        archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6  # level 6 balances speed vs. size reduction
     ) as archive:
         for entry in entries:
             if cancel.is_set():
@@ -409,7 +414,7 @@ def build_final_archives(
             f"Одиночный ZIP превысил лимит после записи ({format_bytes(compressed_size)} > {format_bytes(plan.limit_bytes)}). Пересобираю частями."
         )
         try:
-            paths.final_zip.unlink(missing_ok=True)
+            paths.final_zip.unlink(missing_ok=True)  # discard the oversized single archive before splitting
         except Exception:
             pass
         plan.split = True

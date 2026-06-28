@@ -1,3 +1,6 @@
+# Implements incremental export by comparing the current file tree against a persisted
+# mtime/size baseline stored per project root. Only added or modified files are selected.
+
 from __future__ import annotations
 
 import json
@@ -92,7 +95,7 @@ def resolve_incremental_selection(
             old = previous.get(rel)
             if not isinstance(old, dict):
                 added.append(rel)
-            elif old.get("size") != meta.get("size") or old.get("mtime_ns") != meta.get("mtime_ns"):
+            elif old.get("size") != meta.get("size") or old.get("mtime_ns") != meta.get("mtime_ns"):  # mtime_ns is nanosecond precision; size cross-check catches touch-only edits that reset mtime
                 modified.append(rel)
             else:
                 unchanged += 1

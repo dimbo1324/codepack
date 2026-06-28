@@ -1,3 +1,10 @@
+"""Dependency graph report: builds an internal import graph without third-party libraries.
+
+Resolves Python relative/absolute imports via AST, JavaScript/TypeScript relative imports
+via regex, and Go intra-module imports via go.mod.  Writes 14_dependency_graph.md and
+14_dependency_graph.mmd (Mermaid source).
+"""
+
 from __future__ import annotations
 
 import ast
@@ -30,6 +37,7 @@ def _resolve_python_import(
 ) -> Path | None:
     base = current.parent
     if level:
+        # level=1 means "current package"; level=2 means "one package up"; etc.
         for _ in range(max(0, level - 1)):
             base = base.parent
         if module:
@@ -202,6 +210,7 @@ def write_dependency_graph_reports(
                     f'  {_node_id(source, copied_root)}["{rel_display(source, copied_root)}"] --> {_node_id(target, copied_root)}["{rel_display(target, copied_root)}"]\n'
                 )
                 emitted += 1
+                # Mermaid renders slowly above ~250 edges; truncate to keep the diagram usable.
                 if emitted >= 250:
                     out.write("  %% Mermaid output truncated after 250 edges.\n")
                     return

@@ -1,3 +1,5 @@
+"""Tests for the analytics service that collects stack, language, dependency, and risk data."""
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,7 @@
+# Lightweight Git-based diff resolver used by the risk-preview step.
+# Returns the set of changed file paths for 'uncommitted', 'changed_since_ref',
+# or 'between_refs' modes; falls back to 'all' (no filter) when Git is unavailable.
+
 from __future__ import annotations
 
 import subprocess
@@ -28,6 +32,7 @@ def _run_git(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
             encoding="utf-8",
             errors="replace",
         )
+        # Normalise to backslashes so paths match keys produced by os.walk on Windows
         lines = [
             line.strip().replace("/", "\\")
             for line in completed.stdout.splitlines()
@@ -61,6 +66,7 @@ def resolve_diff_selection(
     warning: str | None = None
 
     if mode == "uncommitted":
+        # Two commands needed: diff HEAD for tracked changes, ls-files for untracked new files
         commands = [
             ["diff", "--name-only", "--diff-filter=ACMRTUXB", "HEAD", "--"],
             ["ls-files", "--others", "--exclude-standard"],

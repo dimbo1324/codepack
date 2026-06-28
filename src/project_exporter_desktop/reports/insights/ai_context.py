@@ -1,3 +1,9 @@
+"""AI Context Pack report: a single Markdown file designed to be pasted into an AI assistant.
+
+Combines project summary, detected stack, language counts, scripts, config files and
+suggested review order into one concise handoff document (12_ai_context_pack.md).
+"""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -16,6 +22,7 @@ def write_ai_context_pack(
     files: list[Path] = inventory["files"]
     dirs: list[Path] = inventory["dirs"]
     stack: dict[str, list[str]] = inventory["stack"]
+    # Limit to top 10 so the AI context stays concise rather than overwhelming.
     largest = sorted(inventory["sizes"], key=lambda item: item[1], reverse=True)[:10]
     language_count: Counter[str] = inventory["language_count"]
     configs = find_config_files(copied_root)
@@ -49,6 +56,7 @@ def write_ai_context_pack(
 
         out.write("\n## Scripts / commands\n\n")
         if isinstance(scripts, dict) and scripts:
+            # Prefer pnpm over npm when the lockfile signals that pnpm is in use.
             manager = "pnpm" if (copied_root / "pnpm-lock.yaml").exists() else "npm"
             for name, command in sorted(scripts.items(), key=lambda item: item[0].lower()):
                 out.write(f"- `{manager} run {name}` — `{command}`\n")

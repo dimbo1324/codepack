@@ -1,3 +1,9 @@
+"""Architecture report: maps project directories to conceptual layers and identifies entrypoints.
+
+Uses well-known folder-name conventions to classify directories into UI, services, domain,
+data, API, config, tests, and utility layers, then writes 15_architecture_report.md.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -53,6 +59,7 @@ def _group_dirs_by_layer(root: Path) -> dict[str, list[Path]]:
     for directory in iter_project_dirs(root):
         parts = {part.lower() for part in directory.relative_to(root).parts}
         for layer, hints in _LAYER_HINTS.items():
+            # Assign to the first matching layer only; layers are ordered from outermost to innermost.
             if parts.intersection(hints):
                 groups[layer].append(directory)
                 break
