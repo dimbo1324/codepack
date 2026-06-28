@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...services.prompt_builder import build_custom_prompt
 from ...utils.inventory import iter_project_files
 from ...utils.path_utils import rel_display
 from ...utils.text_utils import format_bytes, safe_read_json
@@ -108,7 +109,7 @@ def write_ai_context_folder(
         "# Refactoring Targets\n\nSee `../23_refactoring_opportunities.md` and `../17_code_quality_report.md`.\n",
     )
 
-    _write(output_dir / "09_PROMPT_FOR_CODEX.md", prompt)
+    _write(output_dir / "09_PROMPT_FOR_CODEX.md", build_custom_prompt(copied_root.name))
 
     scripts_lines = ["# Scripts", ""]
     if isinstance(scripts, dict) and scripts:

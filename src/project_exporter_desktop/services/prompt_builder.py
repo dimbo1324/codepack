@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..utils.time_utils import human_now
-
 PROMPT_GOALS: dict[str, str] = {
-    "bug_hunt": "Find likely bugs and broken edge cases.",
-    "security_review": "Review security, secret handling and unsafe patterns.",
-    "architecture_review": "Review architecture, layering, modularity and coupling.",
-    "refactor_plan": "Create a safe step-by-step refactoring plan.",
-    "write_tests": "Identify missing tests and write a practical test plan.",
-    "codex_task": "Prepare a Codex-ready implementation task prompt.",
+    "bug_hunt": "Найти вероятные ошибки, сломанные крайние случаи и логические несоответствия.",
+    "security_review": "Проверить безопасность, обработку секретов и опасные паттерны.",
+    "architecture_review": "Оценить архитектуру, слои, модульность и связность.",
+    "refactor_plan": "Составить безопасный пошаговый план рефакторинга.",
+    "write_tests": "Выявить недостающие тесты и предложить практичный тест-план.",
+    "codex_task": "Подготовить задачу для Codex с понятными критериями реализации.",
 }
 
 
@@ -26,6 +24,18 @@ def normalise_prompt_goals(goals: list[str] | None) -> list[str]:
 def build_custom_prompt(project_name: str, goals: list[str] | None = None) -> str:
     selected = normalise_prompt_goals(goals)
     goal_lines = "\n".join(f"- {PROMPT_GOALS[key]}" for key in selected)
+    return (
+        f"# Промпт для анализа проекта: {project_name}\n\n"
+        "Ты работаешь с экспортом проекта. Сначала изучи структуру, manifest, профиль проекта, "
+        "план экспорта и отчёты безопасности. Затем выполни задачи ниже.\n\n"
+        "## Цели\n\n"
+        f"{goal_lines}\n\n"
+        "## Формат ответа\n\n"
+        "- Сначала перечисли критичные проблемы с файлами и причинами.\n"
+        "- Затем предложи небольшие улучшения с низким риском внедрения.\n"
+        "- Отдельно отметь тесты, которые нужно добавить или обновить.\n"
+        "- Не переписывай проект целиком без необходимости.\n"
+    )
 
 
 def write_custom_prompt(

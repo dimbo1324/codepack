@@ -136,7 +136,7 @@ def copy_project(
                 if stats.files_copied % 250 == 0:
                     log(f"Скопировано файлов: {stats.files_copied:,}")
                     if progress is not None:
-                        progress(20, "Copying files", rel_display(src_file, source_root))
+                        progress(20, "Копирование файлов", rel_display(src_file, source_root))
             except Exception as exc:
                 stats.errors += 1
                 log(f"Ошибка копирования {rel_display(src_file, source_root)}: {exc}")

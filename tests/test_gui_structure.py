@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,6 +12,11 @@ def test_page_utilities_importable() -> None:
         set_combo_value,
         wrap_layout,
     )
+
+    assert callable(make_card)
+    assert callable(make_scroll_page)
+    assert callable(set_combo_value)
+    assert callable(wrap_layout)
 
 
 def test_services_do_not_import_gui() -> None:

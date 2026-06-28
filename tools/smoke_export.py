@@ -1,30 +1,38 @@
-
 from __future__ import annotations
 
 import io
 import sys
+import threading
+from pathlib import Path
+from queue import Queue
 
 if hasattr(sys.stdout, "buffer"):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-import threading
-from pathlib import Path
-from queue import Queue
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from project_exporter_desktop.config import Config
-from project_exporter_desktop.models import ExportPaths
-from project_exporter_desktop.services.exporter import ProjectExporter
-from project_exporter_desktop.utils.time_utils import now_stamp
+
+def _prepare_sample_project(sample: Path) -> None:
+    sample.mkdir(parents=True, exist_ok=True)
+    (sample / "src").mkdir(exist_ok=True)
+    (sample / "node_modules" / "left-pad").mkdir(parents=True, exist_ok=True)
+    (sample / "src" / "main.py").write_text("print('hello smoke')\n", encoding="utf-8")
+    (sample / "README.md").write_text("# Smoke sample\n", encoding="utf-8")
+    (sample / ".env").write_text("SECRET_TOKEN=unsafe\n", encoding="utf-8")
+    (sample / "node_modules" / "left-pad" / "index.js").write_text(
+        "module.exports = 1;\n", encoding="utf-8"
+    )
 
 
-def _make_export_paths(source_root: Path, output_dir: Path) -> ExportPaths:
+def _make_export_paths(source_root: Path, output_dir: Path) -> object:
+    from project_exporter_desktop.models import ExportPaths
     from project_exporter_desktop.utils.path_utils import sanitize_name
+    from project_exporter_desktop.utils.time_utils import now_stamp
 
     project_name = sanitize_name(source_root.name)
     stamp = now_stamp()
@@ -55,13 +63,13 @@ def _make_export_paths(source_root: Path, output_dir: Path) -> ExportPaths:
 
 
 def run_smoke() -> int:
+    from project_exporter_desktop.config import Config
+    from project_exporter_desktop.services.exporter import ProjectExporter
+
     sample = ROOT / ".tmp" / "packaging_smoke_sample"
     output_dir = ROOT / ".tmp" / "smoke_output"
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    if not sample.exists():
-        print(f"ERROR: sample project not found at {sample}", file=sys.stderr)
-        return 1
+    _prepare_sample_project(sample)
 
     cfg = Config(
         safe_export_mode="safe",
@@ -81,7 +89,7 @@ def run_smoke() -> int:
 
     original_build = pu_mod.build_export_paths
 
-    def patched_build(source_root: Path) -> ExportPaths:
+    def patched_build(source_root: Path) -> object:
         return _make_export_paths(source_root, output_dir)
 
     exporter_mod.build_export_paths = patched_build

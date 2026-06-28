@@ -35,6 +35,7 @@ from ..constants import (
     SETTINGS_FILE,
 )
 from ..services.export_history import load_export_history
+from ..services.export_ignore import EXPORTIGNORE_TEMPLATE
 from ..services.export_profiles import (
     apply_custom_profile_if_needed,
     ensure_user_profiles_file,
@@ -54,7 +55,6 @@ from .pages.security_page import SecurityPage
 from .pages.settings_page import SettingsPage
 from .resources import asset_path, read_text_resource, style_path
 from .workers import AnalyticsWorker, ClipboardExportWorker, ExportWorker, PlanPreviewWorker
-
 
 _PAGE_PROJECT = 0
 _PAGE_SETTINGS = 1
@@ -100,7 +100,6 @@ class MainWindow(QMainWindow):
         self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
         self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
-
     def _apply_icon(self) -> None:
         icon = asset_path("ICO.ico")
         if icon.exists():
@@ -116,7 +115,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(open_result)
         file_menu.addSeparator()
         exit_action = QAction("Выход", self)
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self._exit_from_tray)
         file_menu.addAction(exit_action)
 
         tools_menu = self.menuBar().addMenu("Инструменты")
@@ -190,7 +189,9 @@ class MainWindow(QMainWindow):
         try:
             source_root = validate_source_root(self.config.last_root)
         except Exception as exc:
-            self.tray_icon.showMessage(APP_NAME, str(exc), QSystemTrayIcon.MessageIcon.Warning, 3500)
+            self.tray_icon.showMessage(
+                APP_NAME, str(exc), QSystemTrayIcon.MessageIcon.Warning, 3500
+            )
             return
         self._tray_quick_mode = True
         self._run_export(source_root, replace(self.config), {})
@@ -213,7 +214,9 @@ class MainWindow(QMainWindow):
             self.project_watcher.removePaths(paths)
         if not self.config.watch_enabled:
             return
-        root_text = self.page_project.get_root() if hasattr(self, "page_project") else self.config.last_root
+        root_text = (
+            self.page_project.get_root() if hasattr(self, "page_project") else self.config.last_root
+        )
         try:
             root = validate_source_root(root_text)
         except Exception:
@@ -348,7 +351,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         self._set_page(_PAGE_PROJECT)
 
-
     def _set_page(self, index: int) -> None:
         if hasattr(self, "stack"):
             self.stack.setCurrentIndex(index)
@@ -371,7 +373,6 @@ class MainWindow(QMainWindow):
             if preview
             else ("Выполняется экспорт..." if running else "Готово")
         )
-
 
     def _load_config_to_ui(self) -> None:
         self.page_project.set_root(self.config.last_root)
@@ -440,14 +441,12 @@ class MainWindow(QMainWindow):
             zip_part_limit_mb=MAX_ARCHIVE_PART_MB,
         )
 
-
     def _on_root_changed(self, text: str) -> None:
         from ..services.stack_detector import format_stack_label
 
         root = Path(text.strip()) if text.strip() else None
         label = format_stack_label(root) if root and root.is_dir() else ""
         self.page_project.set_detected_stack(label)
-
 
     def _validate_source_root(self) -> Path | None:
         try:
@@ -528,7 +527,10 @@ class MainWindow(QMainWindow):
         self._set_running(True)
         self._append_log("Запуск потока экспорта...")
         self.export_worker = ExportWorker(
-            source_root, config, self.cancel_event, self,
+            source_root,
+            config,
+            self.cancel_event,
+            self,
             file_overrides=file_overrides,
         )
         self.export_worker.log_message.connect(self._append_log)
@@ -619,7 +621,6 @@ class MainWindow(QMainWindow):
         append_app_log(traceback_text)
         self._append_log(f"Технические подробности записаны в: {self.log_file}")
 
-
     def _start_clipboard_export(self) -> None:
         if self.clipboard_worker and self.clipboard_worker.isRunning():
             return
@@ -677,7 +678,6 @@ class MainWindow(QMainWindow):
             "Ошибка копирования",
             f"Не удалось подготовить дамп. Технические подробности записаны в:\n{self.log_file}",
         )
-
 
     def _edit_rules(self) -> None:
         dialog = RulesDialog(
@@ -807,7 +807,9 @@ class MainWindow(QMainWindow):
 
     def _on_analytics_failed(self, traceback_text: str) -> None:
         self._append_diagnostic(traceback_text)
-        self.page_analytics.set_error("Не удалось собрать аналитику. Подробности записаны в журнал.")
+        self.page_analytics.set_error(
+            "Не удалось собрать аналитику. Подробности записаны в журнал."
+        )
 
     def _open_profiles_json(self) -> None:
         self._open_path(ensure_user_profiles_file())

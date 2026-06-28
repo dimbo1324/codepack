@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 _CHARS_PER_TOKEN: float = 3.5
 
 MODEL_CONTEXT_LIMITS: dict[str, int] = {

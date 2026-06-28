@@ -261,6 +261,35 @@ def _write_restore_files(
         newline="\n",
     )
     (result.output_dir / "restore_archives.py").write_text(
+        """from __future__ import annotations
+
+import sys
+import zipfile
+from pathlib import Path
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("Использование: python restore_archives.py <папка-назначения>")
+        return 2
+    current = Path(__file__).resolve().parent
+    destination = Path(sys.argv[1]).expanduser().resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    archives = sorted(current.glob("*.zip"))
+    if not archives:
+        print("ZIP-части не найдены.")
+        return 1
+    for archive_path in archives:
+        print(f"Распаковка: {archive_path.name}")
+        with zipfile.ZipFile(archive_path) as archive:
+            archive.extractall(destination)
+    print(f"Готово: {destination}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+""",
         encoding="utf-8",
         newline="\n",
     )
@@ -349,15 +378,6 @@ def build_final_archives(
         write_html_dashboard(paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html")
     except Exception as exc:
         log(f"Не удалось обновить REPORT_DASHBOARD.html перед архивацией: {exc}")
-
-    plan = build_archive_plan(paths, include_project, part_limit_bytes)
-    write_archive_plan_report(plan, paths.insights_dir / "27_archive_plan.md")
-    try:
-        from ..reports.insights.dashboard import write_html_dashboard
-
-        write_html_dashboard(paths.insights_dir, paths.insights_dir / "REPORT_DASHBOARD.html")
-    except Exception as exc:
-        log(f"Не удалось обновить REPORT_DASHBOARD.html перед архивацией: {exc}")
     plan = build_archive_plan(paths, include_project, part_limit_bytes)
     if pre_archive_hook is not None and not cancel.is_set():
         pre_archive_hook(_predicted_result_for_plan(paths, plan))
@@ -381,7 +401,7 @@ def build_final_archives(
         if compressed_size <= plan.limit_bytes:
             log(f"ZIP готов: {count:,} файлов, {format_bytes(compressed_size)} → {paths.final_zip}")
             if progress:
-                progress(100, "Archive ready", str(paths.final_zip))
+                progress(100, "Архив готов", str(paths.final_zip))
             return ArchiveBuildResult(
                 [paths.final_zip], None, False, count, plan.skipped_project_files
             )
@@ -417,7 +437,7 @@ def build_final_archives(
         archive_path = paths.archive_set_dir / archive_name
         if progress:
             percent = 85 + int((part.index - 1) / total_parts * 14)
-            progress(percent, "Creating archive parts", archive_name)
+            progress(percent, "Создание частей архива", archive_name)
         count = _write_zip(archive_path, part.entries, cancel)
         result.archives.append(archive_path)
         result.file_count += count
@@ -447,7 +467,7 @@ def build_final_archives(
     _write_restore_files(paths, result, part_map, plan.limit_bytes)
     log(f"Архивы готовы: {len(result.archives):,} ZIP → {paths.archive_set_dir}")
     if progress:
-        progress(100, "Archive set ready", str(paths.archive_set_dir))
+        progress(100, "Набор архивов готов", str(paths.archive_set_dir))
     return result
 
 

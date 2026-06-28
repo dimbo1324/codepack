@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -15,10 +16,11 @@ from .constants import (
     SETTINGS_FILE,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(slots=True)
 class Config:
-
     last_root: str = str(Path.home())
     text_file_size_limit_enabled: bool = False
     max_text_file_mb: int = 5
@@ -58,7 +60,8 @@ class Config:
                 known = {f.name for f in cls.__dataclass_fields__.values()}
                 data = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
                 return cls(**data)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Не удалось загрузить настройки: %s", exc)
             return cls()
         return cls()
 
@@ -68,8 +71,8 @@ class Config:
                 json.dumps(asdict(self), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Не удалось сохранить настройки: %s", exc)
 
     def effective_ignored_dirs(self) -> frozenset[str]:
         extras = {name.strip().casefold() for name in self.extra_ignored_dirs if name.strip()}
@@ -124,8 +127,6 @@ class Config:
         known = {f.name for f in cls.__dataclass_fields__.values()}
         migrated = _migrate_legacy_settings({k: v for k, v in data.items() if k in known})
         return cls(**migrated)
-
-
 
 
 def _migrate_legacy_settings(data: dict[str, Any]) -> dict[str, Any]:

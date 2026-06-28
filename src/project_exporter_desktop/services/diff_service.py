@@ -61,6 +61,26 @@ def _run_git(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
         return 1, [], f"{type(exc).__name__}: {exc}"
 
 
+def _run_git_records(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            text=True,
+            capture_output=True,
+            timeout=90,
+            shell=False,
+            encoding="utf-8",
+            errors="replace",
+        )
+        records = [item for item in completed.stdout.split("\0") if item]
+        return completed.returncode, records, completed.stderr.strip()
+    except FileNotFoundError:
+        return 127, [], "Git не найден в системе."
+    except Exception as exc:
+        return 1, [], f"{type(exc).__name__}: {exc}"
+
+
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -71,7 +91,10 @@ def _hash_file(path: Path) -> str:
 
 def _count_loc(path: Path) -> int:
     suffix = path.suffix.casefold().lstrip(".")
-    if suffix not in TEXT_EXTENSIONS and path.name.casefold() not in TEXT_FILENAMES_WITHOUT_EXTENSION:
+    if (
+        suffix not in TEXT_EXTENSIONS
+        and path.name.casefold() not in TEXT_FILENAMES_WITHOUT_EXTENSION
+    ):
         return 0
     try:
         return sum(
@@ -83,7 +106,9 @@ def _count_loc(path: Path) -> int:
         return 0
 
 
-def snapshot_project(root: Path, ignored_dirs: frozenset[str] | set[str]) -> dict[str, dict[str, Any]]:
+def snapshot_project(
+    root: Path, ignored_dirs: frozenset[str] | set[str]
+) -> dict[str, dict[str, Any]]:
     snapshot: dict[str, dict[str, Any]] = {}
     for current_dir, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
         current = Path(current_dir)
@@ -190,16 +215,21 @@ def _parse_name_status(lines: list[str]) -> tuple[DiffFile, ...]:
     return tuple(files)
 
 
-def _parse_porcelain(lines: list[str]) -> tuple[DiffFile, ...]:
+def _parse_porcelain_records(records: list[str]) -> tuple[DiffFile, ...]:
     files: list[DiffFile] = []
-    for line in lines:
-        if len(line) < 4:
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if len(record) < 4:
             continue
-        status = line[:2]
-        raw_path = line[3:].strip()
-        if " -> " in raw_path:
-            old_path, new_path = raw_path.split(" -> ", 1)
-            files.append(DiffFile(_normalise_rel(new_path), "renamed", _normalise_rel(old_path)))
+        status = record[:2]
+        raw_path = record[3:]
+        if "R" in status or "C" in status:
+            old_path = records[index] if index < len(records) else ""
+            if old_path:
+                index += 1
+            files.append(DiffFile(_normalise_rel(raw_path), "renamed", _normalise_rel(old_path)))
             continue
         rel = _normalise_rel(raw_path)
         if "D" in status:
@@ -226,15 +256,17 @@ def _git_selection(source_root: Path, mode: str, base_ref: str) -> DiffSelection
         return _disabled_by_git_error(err or "это не Git-репозиторий")
 
     if mode == "uncommitted":
-        rc, lines, err = _run_git(["status", "--porcelain"], source_root)
+        rc, records, err = _run_git_records(["status", "--porcelain=v1", "-z"], source_root)
         if rc != 0:
             return _disabled_by_git_error(err or "git status завершился ошибкой")
-        files = _parse_porcelain(lines)
+        files = _parse_porcelain_records(records)
         selected = frozenset(item.relative_path for item in files if item.status != "deleted")
         return DiffSelection(mode, "незакоммиченные изменения", selected, files)
 
     base = (base_ref or "HEAD").strip()
-    rc, lines, err = _run_git(["diff", "--name-status", "--find-renames", base, "--"], source_root)
+    rc, lines, err = _run_git(
+        ["diff", "--name-status", "--find-renames", f"{base}..HEAD", "--"], source_root
+    )
     if rc != 0:
         return _disabled_by_git_error(err or "git diff завершился ошибкой")
     files = _parse_name_status(lines)

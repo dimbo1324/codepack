@@ -79,6 +79,137 @@ def write_html_dashboard(reports_dir: Path, output_file: Path) -> None:
     export_plan_excerpt = html.escape(_read_text(export_plan, 6000))
     health_excerpt = html.escape(_read_text(health, 6000))
     output_file.write_text(
+        f"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Панель отчётов проекта</title>
+<style>
+:root {{
+  color-scheme: light dark;
+  --bg: #f6f7fb;
+  --fg: #1f2937;
+  --muted: #667085;
+  --card: #ffffff;
+  --border: #d9dee8;
+  --accent: #0f766e;
+}}
+@media (prefers-color-scheme: dark) {{
+  :root {{
+    --bg: #111827;
+    --fg: #e5e7eb;
+    --muted: #a3aab8;
+    --card: #182033;
+    --border: #2b364d;
+    --accent: #5eead4;
+  }}
+}}
+* {{ box-sizing: border-box; }}
+body {{
+  margin: 0;
+  padding: 32px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", Arial, sans-serif;
+  line-height: 1.5;
+}}
+main {{
+  max-width: 1180px;
+  margin: 0 auto;
+}}
+h1 {{
+  margin: 0 0 6px;
+  font-size: 30px;
+}}
+.meta {{
+  margin: 0 0 24px;
+  color: var(--muted);
+}}
+.cards {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}}
+.card {{
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--card);
+}}
+.label {{
+  color: var(--muted);
+  font-size: 13px;
+}}
+.value {{
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 700;
+}}
+.card p {{
+  margin: 8px 0 0;
+  color: var(--muted);
+}}
+.grid {{
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 20px;
+}}
+nav, section.panel {{
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--card);
+}}
+nav ul {{
+  margin: 0;
+  padding-left: 20px;
+}}
+nav li {{
+  margin: 7px 0;
+}}
+a {{
+  color: var(--accent);
+}}
+pre {{
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.12);
+  white-space: pre-wrap;
+}}
+@media (max-width: 760px) {{
+  body {{ padding: 18px; }}
+  .grid {{ grid-template-columns: 1fr; }}
+}}
+</style>
+</head>
+<body>
+<main>
+<h1>Панель отчётов проекта</h1>
+<p class="meta">Сформировано: {html.escape(human_now())}</p>
+<div class="cards">
+{card_html}
+</div>
+<div class="grid">
+<nav>
+<h2>Отчёты</h2>
+<ul>
+{link_html}
+</ul>
+</nav>
+<section class="panel">
+<h2>План экспорта</h2>
+<pre>{export_plan_excerpt or "Отчёт ещё не создан."}</pre>
+<h2>Здоровье проекта</h2>
+<pre>{health_excerpt or "Отчёт ещё не создан."}</pre>
+</section>
+</div>
+</main>
+</body>
+</html>
+""",
         encoding="utf-8",
         newline="\n",
     )

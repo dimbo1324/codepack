@@ -4,6 +4,40 @@ import fnmatch
 from dataclasses import dataclass, field
 from pathlib import Path
 
+EXPORTIGNORE_TEMPLATE = """node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+dist/
+build/
+.next/
+.nuxt/
+.turbo/
+.parcel-cache/
+coverage/
+*.log
+*.tmp
+*.bak
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+.env
+.env.local
+.env.development
+.env.production
+"""
+
 
 def _clean_rule(line: str) -> str:
     line = line.strip()
@@ -21,7 +55,6 @@ def _normalise_path(path: Path | str) -> str:
 
 @dataclass(slots=True)
 class ExportIgnoreRules:
-
     excluded_dirs: set[str] = field(default_factory=set)
     excluded_files: list[str] = field(default_factory=list)
     excluded_extensions: set[str] = field(default_factory=set)

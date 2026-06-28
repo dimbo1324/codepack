@@ -49,6 +49,26 @@ class ArchiveServiceTests(unittest.TestCase):
             self.assertTrue(paths.final_zip.exists())
             self.assertEqual(len(result.archives), 1)
 
+    def test_split_archive_writes_restore_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self._paths(root)
+            paths.project_dir.mkdir(parents=True)
+            paths.reports_dir.mkdir(parents=True)
+            (paths.staging_dir / "INDEX.md").write_text("index", encoding="utf-8")
+            (paths.project_dir / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            logs: list[str] = []
+
+            result = build_final_archives(
+                paths, True, logs.append, threading.Event(), part_limit_bytes=1
+            )
+
+            self.assertTrue(result.split)
+            self.assertTrue((paths.archive_set_dir / "ARCHIVE_SET_MANIFEST.json").exists())
+            restore_script = paths.archive_set_dir / "restore_archives.py"
+            self.assertTrue(restore_script.exists())
+            self.assertIn("def main()", restore_script.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

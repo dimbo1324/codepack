@@ -105,6 +105,12 @@ class ProjectExporter:
             result = set(selected_sets[0])
             for selected in selected_sets[1:]:
                 result &= set(selected)
+            for rel_path, include in self.file_overrides.items():
+                rel_key = rel_path.replace("/", "\\")
+                if include:
+                    result.add(rel_key)
+                else:
+                    result.discard(rel_key)
             return frozenset(result)
 
         include_relative_paths = combined_selected_paths()
@@ -298,8 +304,12 @@ class ProjectExporter:
 
         result_path = self.archive_result.primary_result if self.archive_result else paths.final_zip
         successful = not cancelled and not self.cancel_event.is_set() and copy_stats.errors == 0
-        snapshot = history_snapshot_payload(paths.source_root, ignored_for_walk) if successful else {}
-        token_count = estimate_tokens(paths.text_dump.stat().st_size) if paths.text_dump.exists() else 0
+        snapshot = (
+            history_snapshot_payload(paths.source_root, ignored_for_walk) if successful else {}
+        )
+        token_count = (
+            estimate_tokens(paths.text_dump.stat().st_size) if paths.text_dump.exists() else 0
+        )
         append_export_history(
             {
                 "generated_at": human_now(),

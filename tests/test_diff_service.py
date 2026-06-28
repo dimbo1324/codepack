@@ -11,9 +11,7 @@ from project_exporter_desktop.services.diff_service import (
 )
 
 
-def test_last_export_detects_added_modified_and_deleted(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_last_export_detects_added_modified_and_deleted(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "project"
     root.mkdir()
     history_file = tmp_path / "history.json"
@@ -67,3 +65,41 @@ def test_uncommitted_git_selection_includes_untracked(tmp_path: Path) -> None:
     selection = resolve_diff_selection(root, "uncommitted", ignored_dirs=frozenset())
 
     assert selection.paths == frozenset({"tracked.py", "new.py"})
+
+
+def test_uncommitted_git_selection_handles_spaces(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    if subprocess.run(["git", "--version"], capture_output=True).returncode != 0:
+        return
+    subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.local"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+
+    (root / "file with spaces.py").write_text("print(1)", encoding="utf-8")
+
+    selection = resolve_diff_selection(root, "uncommitted", ignored_dirs=frozenset())
+
+    assert selection.paths == frozenset({"file with spaces.py"})
+
+
+def test_git_ref_selection_uses_head_not_working_tree(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    if subprocess.run(["git", "--version"], capture_output=True).returncode != 0:
+        return
+    subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.local"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+    (root / "tracked.py").write_text("print(1)", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.py"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+    base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    (root / "committed.py").write_text("print(2)", encoding="utf-8")
+    subprocess.run(["git", "add", "committed.py"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-m", "second"], cwd=root, check=True, capture_output=True)
+    (root / "tracked.py").write_text("print(3)", encoding="utf-8")
+
+    selection = resolve_diff_selection(root, "git_ref", base, ignored_dirs=frozenset())
+
+    assert selection.paths == frozenset({"committed.py"})
