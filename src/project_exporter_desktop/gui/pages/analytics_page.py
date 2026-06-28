@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...i18n import t
 from . import make_card, make_scroll_page
 
 
@@ -36,7 +37,7 @@ class _LanguageChart(QFrame):
         rect = self.rect().adjusted(8, 8, -8, -8)
         if not self._items:
             painter.setPen(QColor("#64748b"))
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Нет данных по языкам")
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, t("analytics.no_lang_data"))
             return
         max_value = max(value for _name, value in self._items) or 1
         row_h = max(20, rect.height() // max(len(self._items), 1))
@@ -74,13 +75,15 @@ class _LanguageChart(QFrame):
 class AnalyticsPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        scroll, layout = make_scroll_page(
-            "Аналитика",
-            "Локальная сводка по стеку, языкам, зависимостям, Git и рискам проекта.",
+        self._last_report: Any = None
+
+        scroll, layout, self._page_title, self._page_hint = make_scroll_page(
+            t("analytics.page_title"),
+            t("analytics.page_hint"),
         )
 
         top_row = QHBoxLayout()
-        self.refresh_button = QPushButton("Обновить аналитику")
+        self.refresh_button = QPushButton(t("analytics.btn_refresh"))
         top_row.addStretch(1)
         top_row.addWidget(self.refresh_button)
         layout.addLayout(top_row)
@@ -91,28 +94,28 @@ class AnalyticsPage(QWidget):
         layout.addWidget(overview_card)
 
         chart_card, chart_layout = make_card()
-        chart_title = QLabel("Языки и LOC")
-        chart_title.setObjectName("PageTitle")
-        chart_layout.addWidget(chart_title)
+        self._chart_title = QLabel(t("analytics.chart_title"))
+        self._chart_title.setObjectName("PageTitle")
+        chart_layout.addWidget(self._chart_title)
         self.chart = _LanguageChart()
         chart_layout.addWidget(self.chart)
         layout.addWidget(chart_card)
 
         deps_card, deps_layout = make_card()
-        deps_title = QLabel("Зависимости")
-        deps_title.setObjectName("PageTitle")
-        deps_layout.addWidget(deps_title)
+        self._deps_title = QLabel(t("analytics.deps_title"))
+        self._deps_title.setObjectName("PageTitle")
+        deps_layout.addWidget(self._deps_title)
         self.deps_table = QTableWidget(0, 4)
-        self.deps_table.setHorizontalHeaderLabels(["Менеджер", "Пакет", "Версия", "Предупреждение"])
+        self._update_deps_headers()
         self.deps_table.setSortingEnabled(True)
         deps_layout.addWidget(self.deps_table)
         layout.addWidget(deps_card)
 
         git_card, git_layout = make_card()
-        git_title = QLabel("Git-активность")
-        git_title.setObjectName("PageTitle")
-        git_layout.addWidget(git_title)
-        self.git_label = QLabel("Git-сводка ещё не построена.")
+        self._git_title = QLabel(t("analytics.git_title"))
+        self._git_title.setObjectName("PageTitle")
+        git_layout.addWidget(self._git_title)
+        self.git_label = QLabel(t("analytics.git_not_built"))
         self.git_label.setObjectName("PageHint")
         self.git_label.setWordWrap(True)
         git_layout.addWidget(self.git_label)
@@ -121,9 +124,9 @@ class AnalyticsPage(QWidget):
         layout.addWidget(git_card)
 
         risks_card, risks_layout = make_card()
-        risks_title = QLabel("Риски")
-        risks_title.setObjectName("PageTitle")
-        risks_layout.addWidget(risks_title)
+        self._risks_title = QLabel(t("analytics.risks_title"))
+        self._risks_title.setObjectName("PageTitle")
+        risks_layout.addWidget(self._risks_title)
         self.risks_list = QListWidget()
         risks_layout.addWidget(self.risks_list)
         layout.addWidget(risks_card)
@@ -134,31 +137,59 @@ class AnalyticsPage(QWidget):
         outer.addWidget(scroll)
         self.set_loading(False)
 
+    def _update_deps_headers(self) -> None:
+        self.deps_table.setHorizontalHeaderLabels([
+            t("analytics.col_manager"),
+            t("analytics.col_package"),
+            t("analytics.col_version"),
+            t("analytics.col_warning"),
+        ])
+
+    def retranslate(self) -> None:
+        self._page_title.setText(t("analytics.page_title"))
+        self._page_hint.setText(t("analytics.page_hint"))
+        self.refresh_button.setText(t("analytics.btn_refresh"))
+        self._chart_title.setText(t("analytics.chart_title"))
+        self._deps_title.setText(t("analytics.deps_title"))
+        self._git_title.setText(t("analytics.git_title"))
+        self._risks_title.setText(t("analytics.risks_title"))
+        self._update_deps_headers()
+        if self._last_report is not None:
+            self.populate(self._last_report)
+        else:
+            self.git_label.setText(t("analytics.git_not_built"))
+            self.chart.update()
+
     def set_loading(self, loading: bool) -> None:
         self.refresh_button.setEnabled(not loading)
         if loading:
-            self._set_summary({"Статус": "Сбор аналитики..."})
+            self._set_summary({t("analytics.stat_project"): t("analytics.loading")})
 
     def set_error(self, text: str) -> None:
         self.set_loading(False)
-        self._set_summary({"Ошибка": text})
+        self._set_summary({t("analytics.stat_error"): text})
 
     def populate(self, report: Any) -> None:
+        self._last_report = report
         self.set_loading(False)
         self._set_summary(
             {
-                "Проект": getattr(report, "project_name", ""),
-                "Стек": getattr(report, "stack", ""),
-                "Файлов": f"{getattr(report, 'total_files', 0):,}",
-                "LOC": f"{getattr(report, 'total_loc', 0):,}",
-                "Размер": getattr(report, "total_size_human", ""),
+                t("analytics.stat_project"): getattr(report, "project_name", ""),
+                t("analytics.stat_stack"): getattr(report, "stack", ""),
+                t("analytics.stat_files"): f"{getattr(report, 'total_files', 0):,}",
+                t("analytics.stat_loc"): f"{getattr(report, 'total_loc', 0):,}",
+                t("analytics.stat_size"): getattr(report, "total_size_human", ""),
             }
         )
         languages = getattr(report, "languages", [])
         self.chart.set_items([(getattr(item, "name", ""), getattr(item, "loc", 0)) for item in languages])
         self._populate_deps(getattr(report, "dependencies", []))
-        branch = getattr(report, "git_branch", "") or "нет данных"
-        self.git_label.setText(f"Ветка: {branch}. {getattr(report, 'git_status', '')}")
+        branch = getattr(report, "git_branch", "") or t("analytics.no_data_branch")
+        self.git_label.setText(
+            t("analytics.branch_label").format(
+                branch=branch, status=getattr(report, "git_status", "")
+            )
+        )
         self.git_list.clear()
         for commit in getattr(report, "git_commits", []):
             self.git_list.addItem(
@@ -166,7 +197,7 @@ class AnalyticsPage(QWidget):
                 f"{getattr(commit, 'author', '')}: {getattr(commit, 'subject', '')}"
             )
         if self.git_list.count() == 0:
-            self.git_list.addItem("Коммиты не найдены.")
+            self.git_list.addItem(t("analytics.no_commits"))
         self.risks_list.clear()
         for risk in getattr(report, "risks", []):
             self.risks_list.addItem(
@@ -174,7 +205,7 @@ class AnalyticsPage(QWidget):
                 f"{getattr(risk, 'reason', '')}"
             )
         if self.risks_list.count() == 0:
-            self.risks_list.addItem("Явные риски не найдены.")
+            self.risks_list.addItem(t("analytics.no_risks"))
 
     def _set_summary(self, values: dict[str, str]) -> None:
         while self.summary_grid.count():

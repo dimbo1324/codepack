@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...i18n import t
 from ...utils.text_utils import format_bytes
 from ...utils.token_counter import context_fit_rows, format_tokens
 from . import make_card
@@ -55,23 +56,19 @@ class PreviewPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(14)
 
-        title = QLabel("Предпросмотр экспорта")
-        title.setObjectName("PageTitle")
-        outer.addWidget(title)
+        self._title_lbl = QLabel(t("preview.page_title"))
+        self._title_lbl.setObjectName("PageTitle")
+        outer.addWidget(self._title_lbl)
 
-        hint = QLabel(
-            "Просмотрите список файлов, которые войдут в экспорт. "
-            "Двойной клик на строке — переключить решение вручную. "
-            "Голубой = принудительно включён, розовый = принудительно исключён."
-        )
-        hint.setObjectName("PageHint")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
+        self._hint_lbl = QLabel(t("preview.page_hint"))
+        self._hint_lbl.setObjectName("PageHint")
+        self._hint_lbl.setWordWrap(True)
+        outer.addWidget(self._hint_lbl)
 
         stats_card, stats_layout = make_card()
         stats_layout.setSpacing(6)
 
-        self._stats_label = QLabel("Ожидание плана экспорта...")
+        self._stats_label = QLabel(t("preview.waiting"))
         self._stats_label.setObjectName("PageTitle")
         stats_layout.addWidget(self._stats_label)
 
@@ -96,21 +93,21 @@ class PreviewPage(QWidget):
         tree_card, tree_layout = make_card()
 
         toolbar = QHBoxLayout()
-        reset_btn = QPushButton("Сбросить переопределения")
-        reset_btn.clicked.connect(self._reset_overrides)
-        toolbar.addWidget(reset_btn)
+        self._reset_btn = QPushButton(t("preview.reset_btn"))
+        self._reset_btn.clicked.connect(self._reset_overrides)
+        toolbar.addWidget(self._reset_btn)
         toolbar.addStretch(1)
-        inc_legend = QLabel("■ Включён")
-        inc_legend.setStyleSheet(f"color: {_COLOR_INCLUDED.name()}")
-        toolbar.addWidget(inc_legend)
-        exc_legend = QLabel("■ Исключён")
-        exc_legend.setStyleSheet(f"color: {_COLOR_EXCLUDED_HIGH.name()}")
-        toolbar.addWidget(exc_legend)
+        self._inc_legend = QLabel(t("preview.legend_included"))
+        self._inc_legend.setStyleSheet(f"color: {_COLOR_INCLUDED.name()}")
+        toolbar.addWidget(self._inc_legend)
+        self._exc_legend = QLabel(t("preview.legend_excluded"))
+        self._exc_legend.setStyleSheet(f"color: {_COLOR_EXCLUDED_HIGH.name()}")
+        toolbar.addWidget(self._exc_legend)
         tree_layout.addLayout(toolbar)
 
         self._tree = QTreeWidget()
         self._tree.setColumnCount(4)
-        self._tree.setHeaderLabels(["Файл", "Размер", "Статус", "Причина"])
+        self._update_tree_headers()
         self._tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -125,16 +122,37 @@ class PreviewPage(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        cancel_btn = QPushButton("Назад к настройкам")
-        cancel_btn.clicked.connect(self.export_cancelled.emit)
-        btn_row.addWidget(cancel_btn)
-        self._confirm_btn = QPushButton("Начать экспорт  →")
+        self._cancel_btn = QPushButton(t("preview.back_btn"))
+        self._cancel_btn.clicked.connect(self.export_cancelled.emit)
+        btn_row.addWidget(self._cancel_btn)
+        self._confirm_btn = QPushButton(t("preview.start_btn"))
         self._confirm_btn.setObjectName("PrimaryButton")
         self._confirm_btn.setEnabled(False)
         self._confirm_btn.clicked.connect(self._on_confirm)
         btn_row.addWidget(self._confirm_btn)
         outer.addLayout(btn_row)
 
+    def _update_tree_headers(self) -> None:
+        self._tree.setHeaderLabels([
+            t("preview.col_file"),
+            t("preview.col_size"),
+            t("preview.col_status"),
+            t("preview.col_reason"),
+        ])
+
+    def retranslate(self) -> None:
+        self._title_lbl.setText(t("preview.page_title"))
+        self._hint_lbl.setText(t("preview.page_hint"))
+        self._reset_btn.setText(t("preview.reset_btn"))
+        self._inc_legend.setText(t("preview.legend_included"))
+        self._exc_legend.setText(t("preview.legend_excluded"))
+        self._cancel_btn.setText(t("preview.back_btn"))
+        self._confirm_btn.setText(t("preview.start_btn"))
+        self._update_tree_headers()
+        if self._plan is not None:
+            self.populate(self._plan)
+        else:
+            self._stats_label.setText(t("preview.waiting"))
 
     def populate(self, plan: Any) -> None:
         self._plan = plan
@@ -163,7 +181,7 @@ class PreviewPage(QWidget):
         self._plan = None
         self._overrides.clear()
         self._tree.clear()
-        self._stats_label.setText("Строится план экспорта...")
+        self._stats_label.setText(t("preview.building"))
         self._token_label.setText("")
         for lbl in self._model_rows:
             lbl.setText("")
@@ -172,14 +190,13 @@ class PreviewPage(QWidget):
     def get_overrides(self) -> dict[str, bool]:
         return dict(self._overrides)
 
-
     def _make_item(self, pf: Any, *, included: bool) -> QTreeWidgetItem:
         rel = getattr(pf, "relative_path", "")
         size = getattr(pf, "size", 0)
         severity = getattr(pf, "severity", "info")
         reason = getattr(pf, "reason", "")
 
-        status_text = "Включён" if included else "Исключён"
+        status_text = t("preview.status_included") if included else t("preview.status_excluded")
         item = QTreeWidgetItem([rel, format_bytes(size), status_text, reason])
         item.setData(0, Qt.ItemDataRole.UserRole, rel)
         item.setData(2, Qt.ItemDataRole.UserRole, included)
@@ -211,9 +228,18 @@ class PreviewPage(QWidget):
             currently_included = new_decision
             color = _COLOR_OVERRIDE_INC if new_decision else _COLOR_OVERRIDE_EXC
 
-        status_text = "Включён ✎" if currently_included else "Исключён ✎"
-        if rel not in self._overrides:
-            status_text = "Включён" if original_included else "Исключён"
+        if rel in self._overrides:
+            status_text = (
+                t("preview.status_included_ov")
+                if currently_included
+                else t("preview.status_excluded_ov")
+            )
+        else:
+            status_text = (
+                t("preview.status_included")
+                if original_included
+                else t("preview.status_excluded")
+            )
 
         item.setText(2, status_text)
         for col in range(4):
@@ -263,10 +289,12 @@ class PreviewPage(QWidget):
         n_exc = len(exc_set)
         overrides_count = len(self._overrides)
 
-        override_note = f"  │  Переопределений: {overrides_count}" if overrides_count else ""
+        override_note = (
+            t("preview.override_note").format(n=overrides_count) if overrides_count else ""
+        )
         self._stats_label.setText(
-            f"Включено: {n_inc:,} файл(ов)  │  ~{format_bytes(inc_bytes)}"
-            f"  │  Исключено: {n_exc:,}{override_note}"
+            t("preview.stats").format(inc=f"{n_inc:,}", size=format_bytes(inc_bytes), exc=f"{n_exc:,}")
+            + override_note
         )
 
         tokens = 0
@@ -274,7 +302,7 @@ class PreviewPage(QWidget):
             from ...utils.token_counter import estimate_tokens
             tokens = estimate_tokens(inc_bytes)
             self._token_label.setText(
-                f"Приблизительно токенов в экспорте: ~{format_tokens(tokens)}"
+                t("preview.token_label").format(n=format_tokens(tokens))
             )
         else:
             self._token_label.setText("")
@@ -289,7 +317,9 @@ class PreviewPage(QWidget):
                 lbl.setText(f"{icon} {name}")
                 lbl.setStyleSheet(f"color: {color}")
                 lbl.setToolTip(
-                    f"{name}: {format_tokens(tok)} / {format_tokens(limit)} токенов ({pct}%)"
+                    t("preview.tooltip").format(
+                        name=name, tok=format_tokens(tok), limit=format_tokens(limit), pct=pct
+                    )
                 )
             else:
                 lbl.setText("")
