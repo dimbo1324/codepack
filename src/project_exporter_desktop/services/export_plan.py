@@ -10,9 +10,9 @@ from ..config import Config
 from ..utils.path_utils import rel_display, should_ignore_dir
 from ..utils.text_utils import format_bytes
 from ..utils.time_utils import human_now
+from .diff_service import DiffSelection
 from .export_ignore import ExportIgnoreRules
 from .export_policy import should_skip_file_for_safety
-from .git_diff import DiffSelection
 from .incremental import IncrementalSelection
 
 
@@ -173,7 +173,7 @@ def build_export_plan(
                         rel_key,
                         size,
                         "excluded",
-                        "not selected by diff/incremental mode",
+                        "не выбран режимом дифференциального экспорта",
                         "info",
                         group,
                     )

@@ -8,6 +8,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 
+from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -16,9 +17,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -27,7 +30,6 @@ from ..config import Config
 from ..constants import (
     APP_NAME,
     APP_VERSION,
-    AI_PRESETS,
     DIFF_EXPORT_MODES,
     SAFE_EXPORT_MODES,
     SETTINGS_FILE,
@@ -40,16 +42,18 @@ from ..services.export_profiles import (
 )
 from ..utils.path_utils import desktop_path, validate_source_root
 from .components.sidebar import Sidebar
-from .dialogs import ExportPlanDialog, HistoryDialog, PromptGoalsDialog, RulesDialog
+from .dialogs import HistoryDialog, PromptGoalsDialog, RulesDialog
 from .logging import app_log_file, append_app_log
-from .pages.project_page import ProjectPage
+from .pages.analytics_page import AnalyticsPage
+from .pages.history_page import HistoryPage
 from .pages.preview_page import PreviewPage
+from .pages.project_page import ProjectPage
 from .pages.result_page import ResultPage
 from .pages.run_page import RunPage
 from .pages.security_page import SecurityPage
 from .pages.settings_page import SettingsPage
 from .resources import asset_path, read_text_resource, style_path
-from .workers import ClipboardExportWorker, ExportWorker, PlanPreviewWorker
+from .workers import AnalyticsWorker, ClipboardExportWorker, ExportWorker, PlanPreviewWorker
 
 EXPORTIGNORE_TEMPLATE = """# Правила Project Exporter
 # Аналог .gitignore. Используйте !шаблон для явного включения файлов.
@@ -80,6 +84,8 @@ _PAGE_SECURITY = 2
 _PAGE_PREVIEW = 3
 _PAGE_RUN = 4
 _PAGE_RESULT = 5
+_PAGE_HISTORY = 6
+_PAGE_ANALYTICS = 7
 
 
 class MainWindow(QMainWindow):
@@ -91,19 +97,28 @@ class MainWindow(QMainWindow):
         self.preview_worker: PlanPreviewWorker | None = None
         self.export_worker: ExportWorker | None = None
         self.clipboard_worker: ClipboardExportWorker | None = None
+        self.analytics_worker: AnalyticsWorker | None = None
         self.pending_source_root: Path | None = None
         self.pending_config: Config | None = None
         self.last_result_path: Path | None = None
         self.log_file = app_log_file()
         self._last_preview_text: str = ""
+        self._tray_quick_mode = False
+        self._allow_close = False
+        self._watch_change_count = 0
+        self._watch_clipboard_mode = False
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1280, 840)
         self.setMinimumSize(1120, 720)
         self._apply_icon()
+        self._build_tray()
+        self._build_watcher()
         self._build_menu()
         self._build_ui()
         self._load_config_to_ui()
+        self._apply_configured_theme()
+        self._sync_watcher()
         self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
         self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
@@ -138,6 +153,131 @@ class MainWindow(QMainWindow):
         tools_menu.addSeparator()
         tools_menu.addAction("История экспортов", self._show_history)
 
+    def _build_tray(self) -> None:
+        self.tray_icon = QSystemTrayIcon(self)
+        icon = self.windowIcon()
+        if icon.isNull():
+            icon = QIcon(str(asset_path("ICO.ico")))
+        self.tray_icon.setIcon(icon)
+        self.tray_icon.setToolTip(APP_NAME)
+        menu = QMenu(self)
+        menu.addAction("Быстрый экспорт", self._quick_export_from_tray)
+        menu.addAction("Открыть", self._show_from_tray)
+        menu.addSeparator()
+        menu.addAction("Выход", self._exit_from_tray)
+        self.tray_icon.setContextMenu(menu)
+        self.tray_icon.activated.connect(self._on_tray_activated)
+        self.tray_icon.show()
+
+    def _build_watcher(self) -> None:
+        self.project_watcher = QFileSystemWatcher(self)
+        self.project_watcher.directoryChanged.connect(self._on_project_changed)
+        self._watch_timer = QTimer(self)
+        self._watch_timer.setSingleShot(True)
+        self._watch_timer.timeout.connect(self._flush_watch_notification)
+
+    def closeEvent(self, event) -> None:  # noqa: ANN001, N802
+        if self._allow_close or not self.tray_icon.isVisible():
+            event.accept()
+            return
+        event.ignore()
+        self.hide()
+        self.tray_icon.showMessage(
+            APP_NAME,
+            "Приложение свернуто в трей. Быстрый экспорт доступен из контекстного меню.",
+            QSystemTrayIcon.MessageIcon.Information,
+            2500,
+        )
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._show_from_tray()
+
+    def _show_from_tray(self) -> None:
+        self.showNormal()
+        self.activateWindow()
+
+    def _exit_from_tray(self) -> None:
+        self._allow_close = True
+        self.close()
+
+    def _quick_export_from_tray(self) -> None:
+        if self.export_worker and self.export_worker.isRunning():
+            self.tray_icon.showMessage(
+                APP_NAME,
+                "Экспорт уже выполняется.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2500,
+            )
+            return
+        try:
+            source_root = validate_source_root(self.config.last_root)
+        except Exception as exc:
+            self.tray_icon.showMessage(APP_NAME, str(exc), QSystemTrayIcon.MessageIcon.Warning, 3500)
+            return
+        self._tray_quick_mode = True
+        self._run_export(source_root, replace(self.config), {})
+
+    def _apply_configured_theme(self) -> None:
+        theme = self.config.normalized_theme()
+        if theme == "system":
+            app = QApplication.instance()
+            color_scheme = app.styleHints().colorScheme()
+            theme = "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
+        qss_name = "app_dark.qss" if theme == "dark" else "app_light.qss"
+        qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
+        QApplication.instance().setStyleSheet(qss)
+
+    def _sync_watcher(self) -> None:
+        if not hasattr(self, "project_watcher"):
+            return
+        paths = self.project_watcher.directories() + self.project_watcher.files()
+        if paths:
+            self.project_watcher.removePaths(paths)
+        if not self.config.watch_enabled:
+            return
+        root_text = self.page_project.get_root() if hasattr(self, "page_project") else self.config.last_root
+        try:
+            root = validate_source_root(root_text)
+        except Exception:
+            return
+        watch_dirs: list[str] = []
+        ignored = self.config.effective_ignored_dirs()
+        for current_dir, dirnames, _filenames in os.walk(root, topdown=True, followlinks=False):
+            current = Path(current_dir)
+            dirnames[:] = [
+                dirname
+                for dirname in dirnames
+                if not (current / dirname).is_symlink()
+                and dirname.casefold() not in ignored
+                and len(watch_dirs) < 256
+            ]
+            watch_dirs.append(str(current))
+            if len(watch_dirs) >= 256:
+                break
+        if watch_dirs:
+            self.project_watcher.addPaths(watch_dirs)
+
+    def _on_project_changed(self, _path: str) -> None:
+        if not self.config.watch_enabled:
+            return
+        self._watch_change_count += 1
+        self._watch_timer.start(900)
+
+    def _flush_watch_notification(self) -> None:
+        count = self._watch_change_count
+        self._watch_change_count = 0
+        self.tray_icon.showMessage(
+            APP_NAME,
+            f"Проект изменился: событий файловой системы {count}.",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000,
+        )
+        self._sync_watcher()
+        if self.config.watch_clipboard_auto_update:
+            self._watch_clipboard_mode = True
+            self._start_clipboard_export()
+
     def _build_ui(self) -> None:
         central = QWidget()
         root = QHBoxLayout(central)
@@ -160,6 +300,8 @@ class MainWindow(QMainWindow):
         self.page_preview = PreviewPage()
         self.page_run = RunPage()
         self.page_result = ResultPage()
+        self.page_history = HistoryPage()
+        self.page_analytics = AnalyticsPage()
 
         # Wire SecurityPage action signals
         sec = self.page_security
@@ -176,6 +318,10 @@ class MainWindow(QMainWindow):
         self.page_result.open_result_requested.connect(self._open_last_result)
         self.page_result.open_desktop_requested.connect(self._open_desktop)
 
+        self.page_history.open_result_requested.connect(self._open_path)
+        self.page_history.repeat_export_requested.connect(self._repeat_history_export)
+        self.page_analytics.refresh_button.clicked.connect(self._refresh_analytics)
+
         # Wire PreviewPage signals
         self.page_preview.export_confirmed.connect(self._on_preview_confirmed)
         self.page_preview.export_cancelled.connect(self._on_preview_back)
@@ -191,6 +337,8 @@ class MainWindow(QMainWindow):
             self.page_preview,
             self.page_run,
             self.page_result,
+            self.page_history,
+            self.page_analytics,
         ]:
             self.stack.addWidget(page)
         content_layout.addWidget(self.stack, 1)
@@ -234,6 +382,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "stack"):
             self.stack.setCurrentIndex(index)
         self.sidebar.set_active_page(index)
+        if index == _PAGE_HISTORY and hasattr(self, "page_history"):
+            self.page_history.set_history(load_export_history())
+        if index == _PAGE_ANALYTICS and hasattr(self, "page_analytics"):
+            self._refresh_analytics()
 
     def _set_running(self, running: bool, preview: bool = False) -> None:
         self.start_button.setEnabled(not running)
@@ -266,11 +418,14 @@ class MainWindow(QMainWindow):
         cfg.text_file_size_limit_enabled = sp.text_limit_checkbox.isChecked()
         cfg.max_text_file_mb = max(1, sp.max_text_mb_spin.value())
         cfg.zip_part_limit_mb = max(1, sp.zip_limit_spin.value())
+        cfg.theme = sp.theme_combo.currentText().strip()
+        cfg.watch_enabled = sp.watch_checkbox.isChecked()
+        cfg.watch_clipboard_auto_update = sp.watch_clipboard_checkbox.isChecked()
         cfg.export_profile = sp.profile_combo.currentText().strip()
         cfg.diff_export_mode = sp.diff_combo.currentText().strip()
         cfg.diff_base_ref = sp.diff_base_edit.text().strip() or "HEAD"
         cfg.diff_target_ref = sp.diff_target_edit.text().strip()
-        cfg.incremental_export_enabled = sp.incremental_checkbox.isChecked()
+        cfg.incremental_export_enabled = False
 
         sc = self.page_security
         cfg.redact_secrets = sc.redact_checkbox.isChecked()
@@ -296,6 +451,8 @@ class MainWindow(QMainWindow):
     def _save_config_from_ui(self) -> None:
         self.config = self._config_from_ui(save=True)
         self.config.save()
+        self._apply_configured_theme()
+        self._sync_watcher()
 
     def _codex_config(self, base: Config) -> Config:
         from ..constants import MAX_ARCHIVE_PART_MB
@@ -438,24 +595,50 @@ class MainWindow(QMainWindow):
         self._set_page(_PAGE_RESULT)
         if cancelled:
             self.page_result.set_cancelled()
-            QMessageBox.warning(
-                self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал."
-            )
+            if self._tray_quick_mode:
+                self.tray_icon.showMessage(
+                    APP_NAME,
+                    "Быстрый экспорт остановлен.",
+                    QSystemTrayIcon.MessageIcon.Warning,
+                    3000,
+                )
+            else:
+                QMessageBox.warning(
+                    self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал."
+                )
         else:
             self.page_result.set_success(self.last_result_path)
-            QMessageBox.information(self, "Экспорт завершён", "Экспорт проекта успешно создан.")
+            if self._tray_quick_mode:
+                self.tray_icon.showMessage(
+                    APP_NAME,
+                    "Быстрый экспорт завершён.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    3000,
+                )
+            else:
+                QMessageBox.information(self, "Экспорт завершён", "Экспорт проекта успешно создан.")
         self.status_label.setText("Готово")
+        self._tray_quick_mode = False
 
     def _on_export_failed(self, traceback_text: str) -> None:
         self._set_running(False)
         self._append_diagnostic(traceback_text)
         self._set_page(_PAGE_RESULT)
         self.page_result.set_failed(str(self.log_file))
-        QMessageBox.critical(
-            self,
-            "Ошибка экспорта",
-            f"Экспорт завершился с ошибкой. Технические подробности записаны в:\n{self.log_file}",
-        )
+        if self._tray_quick_mode:
+            self.tray_icon.showMessage(
+                APP_NAME,
+                "Быстрый экспорт завершился с ошибкой.",
+                QSystemTrayIcon.MessageIcon.Critical,
+                4000,
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Ошибка экспорта",
+                f"Экспорт завершился с ошибкой. Технические подробности записаны в:\n{self.log_file}",
+            )
+        self._tray_quick_mode = False
 
     def _handle_progress(self, percent: int, stage: str, current: str) -> None:
         self.page_run.set_progress(percent, stage, current)
@@ -491,6 +674,16 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Готово")
         from ..utils.text_utils import format_bytes
 
+        if self._watch_clipboard_mode:
+            self.tray_icon.showMessage(
+                APP_NAME,
+                f"Clipboard-дамп обновлён: {format_bytes(byte_count)}, {summary}.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000,
+            )
+            self._watch_clipboard_mode = False
+            return
+
         QMessageBox.information(
             self,
             "Дамп скопирован",
@@ -504,6 +697,15 @@ class MainWindow(QMainWindow):
         self.clipboard_button.setEnabled(True)
         self.status_label.setText("Готово")
         self._append_diagnostic(traceback_text)
+        if self._watch_clipboard_mode:
+            self.tray_icon.showMessage(
+                APP_NAME,
+                "Не удалось обновить clipboard-дамп.",
+                QSystemTrayIcon.MessageIcon.Warning,
+                3500,
+            )
+            self._watch_clipboard_mode = False
+            return
         QMessageBox.critical(
             self,
             "Ошибка копирования",
@@ -603,6 +805,45 @@ class MainWindow(QMainWindow):
     def _show_history(self) -> None:
         HistoryDialog(load_export_history(), self).exec()
 
+    def _repeat_history_export(self, entry: object) -> None:
+        if not isinstance(entry, dict):
+            return
+        source_root = str(entry.get("source_root", "")).strip()
+        if not source_root:
+            return
+        self.config.last_root = source_root
+        self.config.export_profile = str(entry.get("profile", self.config.export_profile))
+        self.config.safe_export_mode = str(
+            entry.get("safe_export_mode", self.config.safe_export_mode)
+        )
+        self.config.diff_export_mode = str(
+            entry.get("diff_export_mode", self.config.diff_export_mode)
+        )
+        self.config.save()
+        self._load_config_to_ui()
+        self._set_page(_PAGE_PROJECT)
+        self._start(codex_package=False)
+
+    def _refresh_analytics(self) -> None:
+        if self.analytics_worker and self.analytics_worker.isRunning():
+            return
+        source_root = self._validate_source_root()
+        if source_root is None:
+            return
+        self._save_config_from_ui()
+        self.page_analytics.set_loading(True)
+        self.analytics_worker = AnalyticsWorker(source_root, self.config, self)
+        self.analytics_worker.finished_report.connect(self._on_analytics_ready)
+        self.analytics_worker.failed.connect(self._on_analytics_failed)
+        self.analytics_worker.start()
+
+    def _on_analytics_ready(self, report: object) -> None:
+        self.page_analytics.populate(report)
+
+    def _on_analytics_failed(self, traceback_text: str) -> None:
+        self._append_diagnostic(traceback_text)
+        self.page_analytics.set_error("Не удалось собрать аналитику. Подробности записаны в журнал.")
+
     def _open_profiles_json(self) -> None:
         self._open_path(ensure_user_profiles_file())
 
@@ -632,7 +873,13 @@ def run_app() -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
     app.setWindowIcon(QIcon(str(asset_path("ICO.ico"))))
-    qss = read_text_resource(style_path())
+    startup_config = Config.load()
+    startup_theme = startup_config.normalized_theme()
+    if startup_theme == "system":
+        color_scheme = app.styleHints().colorScheme()
+        startup_theme = "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
+    qss_name = "app_dark.qss" if startup_theme == "dark" else "app_light.qss"
+    qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
     if qss:
         app.setStyleSheet(qss)
     window = MainWindow()

@@ -7,7 +7,7 @@ from typing import Any
 from ..config import Config
 from ..constants import APP_NAME, APP_VERSION, IGNORED_DIR_NAMES, REPORT_DESCRIPTIONS
 from ..models import ArchiveBuildResult, CopyStats, ExportPaths, TextDumpStats
-from ..services.git_diff import DiffSelection
+from ..services.diff_service import DiffSelection, diff_manifest_payload
 from ..utils.text_utils import format_bytes
 from ..utils.time_utils import human_now
 
@@ -72,18 +72,12 @@ def write_manifest(
             "always_include_files": config.always_include_files,
             "always_include_dirs": config.always_include_dirs,
             "incremental_export_enabled": config.incremental_export_enabled,
+            "theme": config.normalized_theme(),
+            "watch_enabled": config.watch_enabled,
+            "watch_clipboard_auto_update": config.watch_clipboard_auto_update,
             "prompt_goals": config.prompt_goals,
         },
-        "diff_selection": None
-        if diff_selection is None
-        else {
-            "mode": diff_selection.mode,
-            "limited": diff_selection.is_limited,
-            "selected_paths_count": len(diff_selection.paths)
-            if diff_selection.paths is not None
-            else None,
-            "warning": diff_selection.warning,
-        },
+        "diff_selection": diff_manifest_payload(diff_selection),
         "ignored_dirs": {
             "defaults": sorted({name.casefold() for name in IGNORED_DIR_NAMES}),
             "user_extras": sorted(user_extras),

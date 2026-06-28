@@ -117,7 +117,6 @@ def detect_stack(root: Path) -> list[StackInfo]:
         return []
 
     try:
-        root_names = {entry.name for entry in root.iterdir() if not entry.name.startswith(".")}
         root_names_with_dot = {entry.name for entry in root.iterdir()}
         root_suffixes = {entry.suffix for entry in root.iterdir() if entry.is_file()}
     except PermissionError:

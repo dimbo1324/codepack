@@ -17,17 +17,19 @@ from ..reports.text_dump_report import write_text_dump
 from ..utils.path_utils import build_export_paths
 from ..utils.text_utils import format_bytes
 from ..utils.time_utils import human_now
+from ..utils.token_counter import estimate_tokens
 from .archive_service import build_final_archives
 from .copy_service import copy_project
+from .diff_service import (
+    history_snapshot_payload,
+    resolve_diff_selection,
+    snapshot_stats,
+    write_diff_report,
+)
 from .export_history import append_export_history
 from .export_ignore import ExportIgnoreRules
 from .export_plan import build_export_plan, write_export_plan_files
-from .git_diff import resolve_diff_selection
-from .incremental import (
-    resolve_incremental_selection,
-    save_incremental_baseline,
-    write_export_diff_report,
-)
+from .incremental import IncrementalSelection
 from .progress import ProgressReporter
 from .prompt_builder import write_custom_prompt
 from .stack_detector import merged_extra_ignored_dirs
@@ -86,17 +88,12 @@ class ProjectExporter:
             self.config.normalized_diff_export_mode(),
             self.config.diff_base_ref,
             self.config.diff_target_ref,
+            ignored_for_walk,
         )
         if diff_selection.warning:
             self.log(diff_selection.warning)
 
-        incremental_selection = resolve_incremental_selection(
-            paths.source_root,
-            ignored_for_walk,
-            self.config.incremental_export_enabled,
-        )
-        if incremental_selection.warning:
-            self.log(incremental_selection.warning)
+        incremental_selection = IncrementalSelection(enabled=False)
 
         def combined_selected_paths() -> frozenset[str] | None:
             selected_sets: list[frozenset[str]] = []
@@ -142,9 +139,7 @@ class ProjectExporter:
             paths.insights_dir / "28_export_plan.json",
             paths.insights_dir / "28_export_plan.md",
         )
-        write_export_diff_report(
-            paths.insights_dir / "29_export_comparison_report.md", incremental_selection
-        )
+        write_diff_report(paths.insights_dir / "29_export_comparison_report.md", diff_selection)
         self.log(
             "План экспорта: "
             f"included={export_plan.included_count:,}, excluded={export_plan.excluded_count:,}, "
@@ -303,6 +298,9 @@ class ProjectExporter:
         refresh_bundle_metadata(self.archive_result)
 
         result_path = self.archive_result.primary_result if self.archive_result else paths.final_zip
+        successful = not cancelled and not self.cancel_event.is_set() and copy_stats.errors == 0
+        snapshot = history_snapshot_payload(paths.source_root, ignored_for_walk) if successful else {}
+        token_count = estimate_tokens(paths.text_dump.stat().st_size) if paths.text_dump.exists() else 0
         append_export_history(
             {
                 "generated_at": human_now(),
@@ -323,12 +321,12 @@ class ProjectExporter:
                     "files_skipped_by_safety": copy_stats.files_skipped_by_safety,
                     "errors": copy_stats.errors,
                 },
+                "tokens": token_count,
+                "snapshot": snapshot,
+                "snapshot_stats": snapshot_stats(snapshot),
                 "cancelled": cancelled,
             }
         )
-
-        if not cancelled and not self.cancel_event.is_set() and copy_stats.errors == 0:
-            save_incremental_baseline(paths.source_root, ignored_for_walk)
 
         if not self.config.keep_staging_folder:
             self.log("Удаляю промежуточную папку (staging)")

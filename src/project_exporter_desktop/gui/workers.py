@@ -9,11 +9,12 @@ from PySide6.QtCore import QThread, Signal
 
 from ..config import Config
 from ..constants import TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION
+from ..services.analytics_service import analyze_project
+from ..services.diff_service import resolve_diff_selection
 from ..services.export_ignore import ExportIgnoreRules
 from ..services.export_plan import build_export_plan, format_export_plan_for_user
 from ..services.exporter import ProjectExporter
-from ..services.git_diff import resolve_diff_selection
-from ..services.incremental import resolve_incremental_selection
+from ..services.incremental import IncrementalSelection
 from ..services.stack_detector import merged_extra_ignored_dirs
 
 
@@ -49,26 +50,23 @@ class PlanPreviewWorker(QThread):
 
     def run(self) -> None:
         try:
+            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
+                self.source_root
+            )
             diff_selection = resolve_diff_selection(
                 self.source_root,
                 self.config.normalized_diff_export_mode(),
                 self.config.diff_base_ref,
                 self.config.diff_target_ref,
+                ignored,
             )
-            incremental_selection = resolve_incremental_selection(
-                self.source_root,
-                self.config.effective_ignored_dirs(),
-                self.config.incremental_export_enabled,
-            )
+            incremental_selection = IncrementalSelection(enabled=False)
             export_rules = ExportIgnoreRules.from_project_and_config(
                 self.source_root,
                 excluded_files=self.config.custom_excluded_files,
                 excluded_extensions=self.config.custom_excluded_extensions,
                 always_include_files=self.config.always_include_files,
                 always_include_dirs=self.config.always_include_dirs,
-            )
-            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
-                self.source_root
             )
             plan = build_export_plan(
                 self.source_root,
@@ -164,26 +162,23 @@ class ClipboardExportWorker(QThread):
         try:
             from ..utils.token_counter import context_summary_line
 
+            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
+                self.source_root
+            )
             diff_selection = resolve_diff_selection(
                 self.source_root,
                 self.config.normalized_diff_export_mode(),
                 self.config.diff_base_ref,
                 self.config.diff_target_ref,
+                ignored,
             )
-            incremental_selection = resolve_incremental_selection(
-                self.source_root,
-                self.config.effective_ignored_dirs(),
-                self.config.incremental_export_enabled,
-            )
+            incremental_selection = IncrementalSelection(enabled=False)
             export_rules = ExportIgnoreRules.from_project_and_config(
                 self.source_root,
                 excluded_files=self.config.custom_excluded_files,
                 excluded_extensions=self.config.custom_excluded_extensions,
                 always_include_files=self.config.always_include_files,
                 always_include_dirs=self.config.always_include_dirs,
-            )
-            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
-                self.source_root
             )
             plan = build_export_plan(
                 self.source_root,
@@ -245,5 +240,24 @@ class ClipboardExportWorker(QThread):
             summary = context_summary_line(total_bytes)
             # Clipboard write must happen on the main thread — emit text back
             self.finished.emit(full_text, total_bytes, summary)
+        except Exception:
+            self.failed.emit(traceback.format_exc())
+
+
+class AnalyticsWorker(QThread):
+    finished_report = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
+        super().__init__(parent)
+        self.source_root = source_root
+        self.config = replace(config)
+
+    def run(self) -> None:
+        try:
+            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
+                self.source_root
+            )
+            self.finished_report.emit(analyze_project(self.source_root, ignored))
         except Exception:
             self.failed.emit(traceback.format_exc())

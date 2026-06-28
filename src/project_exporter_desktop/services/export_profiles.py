@@ -26,6 +26,9 @@ ALLOWED_PROFILE_OVERRIDE_FIELDS = {
     "always_include_files",
     "always_include_dirs",
     "incremental_export_enabled",
+    "theme",
+    "watch_enabled",
+    "watch_clipboard_auto_update",
     "prompt_goals",
 }
 

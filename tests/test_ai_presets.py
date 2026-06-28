@@ -10,7 +10,6 @@ import pytest
 from project_exporter_desktop.config import Config
 from project_exporter_desktop.constants import AI_PRESETS, EXPORT_PROFILES, SAFE_EXPORT_MODES
 
-
 # ── AI_PRESETS structure ─────────────────────────────────────────────────────
 
 def test_presets_not_empty() -> None:
@@ -71,7 +70,6 @@ def test_config_roundtrip_with_developer_context(tmp_path: Path, monkeypatch: py
     monkeypatch.setattr(
         "project_exporter_desktop.constants.SETTINGS_FILE", settings_file
     )
-    import importlib
     import project_exporter_desktop.config as config_module
 
     monkeypatch.setattr(config_module, "SETTINGS_FILE", settings_file)

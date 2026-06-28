@@ -44,6 +44,9 @@ class Config:
     always_include_dirs: list[str] = field(default_factory=list)
     incremental_export_enabled: bool = False
     developer_context: str = ""
+    theme: str = "system"
+    watch_enabled: bool = False
+    watch_clipboard_auto_update: bool = False
     prompt_goals: list[str] = field(
         default_factory=lambda: [
             "architecture_review",
@@ -90,7 +93,20 @@ class Config:
         return self.safe_export_mode if self.safe_export_mode in SAFE_EXPORT_MODES else "safe"
 
     def normalized_diff_export_mode(self) -> str:
-        return self.diff_export_mode if self.diff_export_mode in DIFF_EXPORT_MODES else "all"
+        aliases = {
+            "changed_since_ref": "git_ref",
+            "between_refs": "git_ref",
+        }
+        if self.diff_export_mode in DIFF_EXPORT_MODES:
+            return self.diff_export_mode
+        if self.diff_export_mode in aliases:
+            return aliases[self.diff_export_mode]
+        if self.incremental_export_enabled:
+            return "last_export"
+        return "all"
+
+    def normalized_theme(self) -> str:
+        return self.theme if self.theme in {"system", "light", "dark"} else "system"
 
     def effective_max_text_file_bytes(self) -> int | None:
         if not self.text_file_size_limit_enabled:

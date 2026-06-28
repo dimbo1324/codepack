@@ -1,0 +1,131 @@
+QMainWindow, QWidget {
+    background: #0f172a;
+    color: #e5e7eb;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10pt;
+}
+
+#Sidebar {
+    background: #020617;
+    border-right: 1px solid #1e293b;
+}
+
+#SidebarTitle {
+    color: #f8fafc;
+    font-size: 15pt;
+    font-weight: 700;
+}
+
+#SidebarSubtitle {
+    color: #94a3b8;
+    font-size: 9pt;
+}
+
+QPushButton#NavButton {
+    color: #cbd5e1;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+QPushButton#NavButton:hover {
+    background: #1e293b;
+    color: #ffffff;
+}
+
+QPushButton#NavButton[active="true"] {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+QFrame#Card {
+    background: #111827;
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+
+QLabel#PageTitle {
+    color: #f8fafc;
+    font-size: 20pt;
+    font-weight: 700;
+}
+
+QLabel#PageHint {
+    color: #94a3b8;
+}
+
+QLineEdit, QComboBox, QSpinBox, QTextEdit, QPlainTextEdit, QTableWidget, QListWidget, QTreeWidget {
+    background: #0b1220;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 7px 9px;
+    color: #e5e7eb;
+    selection-background-color: #2563eb;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border: 1px solid #60a5fa;
+}
+
+QHeaderView::section {
+    background: #1e293b;
+    color: #e5e7eb;
+    border: 0;
+    padding: 6px;
+}
+
+QPushButton {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 8px 13px;
+    color: #e5e7eb;
+}
+
+QPushButton:hover {
+    background: #334155;
+    border-color: #64748b;
+}
+
+QPushButton:disabled {
+    color: #64748b;
+    background: #111827;
+    border-color: #1f2937;
+}
+
+QPushButton#PrimaryButton {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#PrimaryButton:hover {
+    background: #1d4ed8;
+}
+
+QPushButton#DangerButton {
+    background: #451a1a;
+    border-color: #7f1d1d;
+    color: #fecaca;
+}
+
+QProgressBar {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    height: 18px;
+    text-align: center;
+    color: #e5e7eb;
+}
+
+QProgressBar::chunk {
+    background: #2563eb;
+    border-radius: 7px;
+}
+
+QCheckBox {
+    spacing: 8px;
+}

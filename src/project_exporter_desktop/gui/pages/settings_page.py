@@ -85,6 +85,17 @@ class SettingsPage(QWidget):
         self.zip_limit_spin.setSuffix(" МБ")
         form.addRow("Лимит части ZIP", self.zip_limit_spin)
 
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["system", "light", "dark"])
+        form.addRow("Тема", self.theme_combo)
+
+        watch_row = QVBoxLayout()
+        self.watch_checkbox = QCheckBox("Следить за изменениями проекта")
+        self.watch_clipboard_checkbox = QCheckBox("Автоматически обновлять clipboard-дамп")
+        watch_row.addWidget(self.watch_checkbox)
+        watch_row.addWidget(self.watch_clipboard_checkbox)
+        form.addRow("Watch-режим", wrap_layout(watch_row))
+
         self.diff_combo = QComboBox()
         self.diff_combo.addItems(list(DIFF_EXPORT_MODES.keys()))
         self.diff_combo.currentTextChanged.connect(self._sync_diff_hint)
@@ -93,7 +104,7 @@ class SettingsPage(QWidget):
         diff_block = QVBoxLayout()
         diff_block.addWidget(self.diff_combo)
         diff_block.addWidget(self.diff_hint)
-        form.addRow("Режим экспорта Git", wrap_layout(diff_block))
+        form.addRow("Режим экспорта", wrap_layout(diff_block))
 
         refs_row = QHBoxLayout()
         self.diff_base_edit = QLineEdit()
@@ -102,13 +113,13 @@ class SettingsPage(QWidget):
         self.diff_target_edit.setPlaceholderText("целевая ссылка")
         refs_row.addWidget(QLabel("База"))
         refs_row.addWidget(self.diff_base_edit)
-        refs_row.addWidget(QLabel("Цель"))
-        refs_row.addWidget(self.diff_target_edit)
-        form.addRow("Git-ссылки", wrap_layout(refs_row))
+        self.diff_target_edit.setVisible(False)
+        form.addRow("Git-ссылка", wrap_layout(refs_row))
 
         self.incremental_checkbox = QCheckBox(
             "Экспортировать только файлы, добавленные или изменённые с момента последнего успешного базового снимка"
         )
+        self.incremental_checkbox.setVisible(False)
         form.addRow("Инкрементальный", self.incremental_checkbox)
 
         card_layout.addLayout(form)
@@ -157,9 +168,9 @@ class SettingsPage(QWidget):
     def _sync_diff_hint(self) -> None:
         mode = self.diff_combo.currentText().strip()
         self.diff_hint.setText(DIFF_EXPORT_MODES.get(mode, ""))
-        refs_enabled = mode in {"changed_since_ref", "between_refs"}
+        refs_enabled = mode == "git_ref"
         self.diff_base_edit.setEnabled(refs_enabled)
-        self.diff_target_edit.setEnabled(mode == "between_refs")
+        self.diff_target_edit.setEnabled(False)
 
     def _sync_text_limit_state(self) -> None:
         self.max_text_mb_spin.setEnabled(self.text_limit_checkbox.isChecked())
@@ -171,9 +182,12 @@ class SettingsPage(QWidget):
         self.text_limit_checkbox.setChecked(config.text_file_size_limit_enabled)
         self.max_text_mb_spin.setValue(max(1, int(config.max_text_file_mb)))
         self.zip_limit_spin.setValue(max(1, int(config.zip_part_limit_mb or MAX_ARCHIVE_PART_MB)))
+        set_combo_value(self.theme_combo, config.normalized_theme())
+        self.watch_checkbox.setChecked(config.watch_enabled)
+        self.watch_clipboard_checkbox.setChecked(config.watch_clipboard_auto_update)
         self.diff_base_edit.setText(config.diff_base_ref)
         self.diff_target_edit.setText(config.diff_target_ref)
-        self.incremental_checkbox.setChecked(config.incremental_export_enabled)
+        self.incremental_checkbox.setChecked(False)
         set_combo_value(self.profile_combo, config.normalized_export_profile())
         set_combo_value(self.diff_combo, config.normalized_diff_export_mode())
         self._sync_text_limit_state()

@@ -1,0 +1,122 @@
+QMainWindow, QWidget {
+    background: #f4f6fb;
+    color: #162033;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10pt;
+}
+
+#Sidebar {
+    background: #111827;
+    border-right: 1px solid #0b1220;
+}
+
+#SidebarTitle {
+    color: #f8fafc;
+    font-size: 15pt;
+    font-weight: 700;
+}
+
+#SidebarSubtitle {
+    color: #9ca3af;
+    font-size: 9pt;
+}
+
+QPushButton#NavButton {
+    color: #d1d5db;
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+QPushButton#NavButton:hover {
+    background: #1f2937;
+    color: #ffffff;
+}
+
+QPushButton#NavButton[active="true"] {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+QFrame#Card {
+    background: #ffffff;
+    border: 1px solid #dbe3ef;
+    border-radius: 8px;
+}
+
+QLabel#PageTitle {
+    color: #111827;
+    font-size: 20pt;
+    font-weight: 700;
+}
+
+QLabel#PageHint {
+    color: #64748b;
+}
+
+QLineEdit, QComboBox, QSpinBox, QTextEdit, QPlainTextEdit, QTableWidget, QListWidget, QTreeWidget {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 7px 9px;
+    selection-background-color: #2563eb;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border: 1px solid #2563eb;
+}
+
+QPushButton {
+    background: #e8eef8;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 13px;
+    color: #172033;
+}
+
+QPushButton:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
+QPushButton:disabled {
+    color: #94a3b8;
+    background: #edf2f7;
+    border-color: #e2e8f0;
+}
+
+QPushButton#PrimaryButton {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#PrimaryButton:hover {
+    background: #1d4ed8;
+}
+
+QPushButton#DangerButton {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+QProgressBar {
+    background: #e5e7eb;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    height: 18px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background: #2563eb;
+    border-radius: 7px;
+}
+
+QCheckBox {
+    spacing: 8px;
+}

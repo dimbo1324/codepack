@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,7 +18,6 @@ from PySide6.QtWidgets import (
 from ...utils.text_utils import format_bytes
 from ...utils.token_counter import context_fit_rows, format_tokens
 from . import make_card
-
 
 # ── Colour scheme ────────────────────────────────────────────────────────────
 _COLOR_INCLUDED = QColor("#4caf50")        # green

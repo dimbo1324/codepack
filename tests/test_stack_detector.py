@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from project_exporter_desktop.services.stack_detector import (
     StackInfo,
     detect_stack,
