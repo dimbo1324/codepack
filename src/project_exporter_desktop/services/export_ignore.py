@@ -157,11 +157,18 @@ class ExportIgnoreRules:
             for include_dir in self.always_include_dirs
         )
 
-    def should_skip_dir(self, relative_dir: Path) -> tuple[bool, str]:
+    def has_always_included_file_descendant(self, relative_dir: Path) -> bool:
         rel = _normalise_path(relative_dir)
-        if not rel or self.is_inside_always_included_dir(relative_dir):
-            return False, ""
-        name = relative_dir.name.casefold()
+        if not rel:
+            return bool(self.always_include_files)
+        prefix = rel + "/"
+        return any(
+            pattern == rel or pattern.startswith(prefix) for pattern in self.always_include_files
+        )
+
+    def _excluded_dir_match(self, relative_path: Path) -> str:
+        rel = _normalise_path(relative_path)
+        name = relative_path.name.casefold()
         for rule in self.excluded_dirs:
             if (
                 rule == name
@@ -169,7 +176,20 @@ class ExportIgnoreRules:
                 or rel.startswith(rule + "/")
                 or fnmatch.fnmatch(rel, rule)
             ):
-                return True, f".exportignore/custom directory rule: {rule}"
+                return rule
+        return ""
+
+    def should_skip_dir(self, relative_dir: Path) -> tuple[bool, str]:
+        rel = _normalise_path(relative_dir)
+        if (
+            not rel
+            or self.is_inside_always_included_dir(relative_dir)
+            or self.has_always_included_file_descendant(relative_dir)
+        ):
+            return False, ""
+        rule = self._excluded_dir_match(relative_dir)
+        if rule:
+            return True, f".exportignore/custom directory rule: {rule}"
         return False, ""
 
     def should_skip_file(self, relative_path: Path) -> tuple[bool, str]:
@@ -185,6 +205,12 @@ class ExportIgnoreRules:
         for pattern in self.excluded_files:
             if fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(name, pattern):
                 return True, f".exportignore/custom file rule: {pattern}"
+        for parent in relative_path.parents:
+            if str(parent) == ".":
+                break
+            rule = self._excluded_dir_match(parent)
+            if rule:
+                return True, f".exportignore/custom directory rule: {rule}"
         return False, ""
 
     def to_dict(self) -> dict[str, object]:

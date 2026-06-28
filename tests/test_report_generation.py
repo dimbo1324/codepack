@@ -20,6 +20,13 @@ def test_custom_prompt_builder_returns_text(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == prompt
 
 
+def test_custom_prompt_builder_deduplicates_unknown_goals() -> None:
+    prompt = build_custom_prompt("demo", ["unknown", "bug_hunt", "bug_hunt"])
+
+    assert prompt.count("Найти вероятные ошибки") == 1
+    assert "unknown" not in prompt
+
+
 def test_dashboard_writes_html_content(tmp_path: Path) -> None:
     reports = tmp_path / "reports"
     reports.mkdir()
@@ -39,6 +46,25 @@ def test_dashboard_writes_html_content(tmp_path: Path) -> None:
     assert "<!doctype html>" in html
     assert "87/100" in html
     assert "Панель отчётов проекта" in html
+
+
+def test_dashboard_escapes_report_excerpts(tmp_path: Path) -> None:
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "22_project_health_report.md").write_text(
+        "Overall score: **10/100**\n<script>alert(1)</script>\n", encoding="utf-8"
+    )
+    (reports / "27_archive_plan.md").write_text("Split planned: `True`\n", encoding="utf-8")
+    (reports / "28_export_plan.md").write_text("<img src=x onerror=alert(1)>", encoding="utf-8")
+    (reports / "06_security_scan.json").write_text("{}", encoding="utf-8")
+    output = reports / "REPORT_DASHBOARD.html"
+
+    write_html_dashboard(reports, output)
+
+    html = output.read_text(encoding="utf-8")
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<img src=x onerror=alert(1)>" not in html
 
 
 def test_ai_context_folder_writes_codex_prompt(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import threading
 import unittest
+import zipfile
 from pathlib import Path
 
 from project_exporter_desktop.models import ExportPaths
@@ -68,6 +69,27 @@ class ArchiveServiceTests(unittest.TestCase):
             restore_script = paths.archive_set_dir / "restore_archives.py"
             self.assertTrue(restore_script.exists())
             self.assertIn("def main()", restore_script.read_text(encoding="utf-8"))
+
+    def test_reports_only_archive_skips_project_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = self._paths(root)
+            paths.project_dir.mkdir(parents=True)
+            paths.reports_dir.mkdir(parents=True)
+            (paths.staging_dir / "INDEX.md").write_text("index", encoding="utf-8")
+            (paths.project_dir / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (paths.reports_dir / "summary.txt").write_text("summary", encoding="utf-8")
+
+            result = build_final_archives(
+                paths, False, lambda _message: None, threading.Event(), part_limit_bytes=10_000_000
+            )
+
+            self.assertEqual(result.skipped_project_files, 1)
+            with zipfile.ZipFile(paths.final_zip) as archive:
+                names = set(archive.namelist())
+            self.assertIn("INDEX.md", names)
+            self.assertIn("reports/summary.txt", names)
+            self.assertNotIn("source/main.py", names)
 
 
 if __name__ == "__main__":
