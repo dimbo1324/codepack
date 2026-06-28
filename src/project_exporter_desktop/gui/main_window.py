@@ -68,6 +68,42 @@ _PAGE_RESULT = 5
 _PAGE_HISTORY = 6
 _PAGE_ANALYTICS = 7
 
+_ZOOM_MIN = 0.7
+_ZOOM_MAX = 1.5
+_ZOOM_STEP = 0.1
+_BASE_UI_FONT_PT = 10
+_FONT_SIZE_RE = re.compile(r"(font-size:\s*)(\d+(?:\.\d+)?)(pt\s*;)")
+
+
+def _normalized_zoom_factor(factor: float) -> float:
+    return max(_ZOOM_MIN, min(_ZOOM_MAX, round(factor / _ZOOM_STEP) * _ZOOM_STEP))
+
+
+def _scaled_stylesheet(qss: str, zoom_factor: float) -> str:
+    zoom = _normalized_zoom_factor(zoom_factor)
+
+    def repl(match: re.Match[str]) -> str:
+        value = float(match.group(2))
+        scaled = max(7, round(value * zoom))
+        return f"{match.group(1)}{scaled}{match.group(3)}"
+
+    return _FONT_SIZE_RE.sub(repl, qss)
+
+
+def _theme_name_for_config(config: Config) -> str:
+    theme = config.normalized_theme()
+    if theme == "system":
+        app = QApplication.instance()
+        color_scheme = app.styleHints().colorScheme()
+        return "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
+    return theme
+
+
+def _theme_stylesheet(theme: str, zoom_factor: float) -> str:
+    qss_name = "app_dark.qss" if theme == "dark" else "app_light.qss"
+    qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
+    return _scaled_stylesheet(qss, zoom_factor) if qss else ""
+
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
@@ -91,6 +127,7 @@ class MainWindow(QMainWindow):
         self._zoom_factor: float = 1.0
         self._zoom_in_action: QAction | None = None
         self._zoom_out_action: QAction | None = None
+        self._zoom_reset_action: QAction | None = None
         self._lang_action: QAction | None = None
         self.tray_menu: QMenu | None = None
         self.tray_quick_action: QAction | None = None
@@ -161,18 +198,22 @@ class MainWindow(QMainWindow):
         )
         zoom_in_act.triggered.connect(self._zoom_in)
         view_menu.addAction(zoom_in_act)
+        self.addAction(zoom_in_act)
         self._zoom_in_action = zoom_in_act
 
         zoom_out_act = QAction(t("menu.view.zoom_out"), self)
         zoom_out_act.setShortcuts([QKeySequence.StandardKey.ZoomOut, QKeySequence("Ctrl+-")])
         zoom_out_act.triggered.connect(self._zoom_out)
         view_menu.addAction(zoom_out_act)
+        self.addAction(zoom_out_act)
         self._zoom_out_action = zoom_out_act
 
         zoom_reset_act = QAction(t("menu.view.zoom_reset"), self)
         zoom_reset_act.setShortcuts([QKeySequence("Ctrl+0")])
         zoom_reset_act.triggered.connect(self._zoom_reset)
         view_menu.addAction(zoom_reset_act)
+        self.addAction(zoom_reset_act)
+        self._zoom_reset_action = zoom_reset_act
 
         view_menu.addSeparator()
         lang_act = QAction(t("menu.view.language"), self)
@@ -271,13 +312,7 @@ class MainWindow(QMainWindow):
         self._run_export(source_root, replace(self.config), {})
 
     def _apply_configured_theme(self) -> None:
-        theme = self.config.normalized_theme()
-        if theme == "system":
-            app = QApplication.instance()
-            color_scheme = app.styleHints().colorScheme()
-            theme = "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
-        qss_name = "app_dark.qss" if theme == "dark" else "app_light.qss"
-        qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
+        qss = _theme_stylesheet(_theme_name_for_config(self.config), self._zoom_factor)
         QApplication.instance().setStyleSheet(qss)
 
     def _sync_watcher(self) -> None:
@@ -435,8 +470,12 @@ class MainWindow(QMainWindow):
         self.config.save()
 
     def _on_language_changed(self) -> None:
+        for action in (self._zoom_in_action, self._zoom_out_action, self._zoom_reset_action):
+            if action is not None:
+                self.removeAction(action)
         self.menuBar().clear()
         self._build_menu()
+        self._update_zoom_actions()
 
         # Update language toggle action label
         if self._lang_action is not None:
@@ -941,22 +980,22 @@ class MainWindow(QMainWindow):
     def _apply_zoom(self, factor: float) -> None:
         from PySide6.QtGui import QFont
 
-        _min_zoom = 0.7
-        _max_zoom = 1.5
-        _step = 0.1
-        self._zoom_factor = max(_min_zoom, min(_max_zoom, round(factor / _step) * _step))
-        base_pt = 9
-        scaled_pt = max(7, round(base_pt * self._zoom_factor))
+        self._zoom_factor = _normalized_zoom_factor(factor)
+        scaled_pt = max(7, round(_BASE_UI_FONT_PT * self._zoom_factor))
         app = QApplication.instance()
         f = QFont(app.font())
         f.setPointSize(scaled_pt)
         app.setFont(f)
-        if self._zoom_in_action is not None:
-            self._zoom_in_action.setEnabled(self._zoom_factor < _max_zoom - 0.01)
-        if self._zoom_out_action is not None:
-            self._zoom_out_action.setEnabled(self._zoom_factor > _min_zoom + 0.01)
+        self._apply_configured_theme()
+        self._update_zoom_actions()
         self.config.ui_zoom = self._zoom_factor
         self.config.save()
+
+    def _update_zoom_actions(self) -> None:
+        if self._zoom_in_action is not None:
+            self._zoom_in_action.setEnabled(self._zoom_factor < _ZOOM_MAX - 0.01)
+        if self._zoom_out_action is not None:
+            self._zoom_out_action.setEnabled(self._zoom_factor > _ZOOM_MIN + 0.01)
 
     def _zoom_in(self) -> None:
         self._apply_zoom(self._zoom_factor + 0.1)
@@ -1016,20 +1055,15 @@ def run_app() -> int:
     lang = getattr(startup_config, "language", "ru")
     get_i18n().init_language(lang)
 
-    startup_theme = startup_config.normalized_theme()
-    if startup_theme == "system":
-        color_scheme = app.styleHints().colorScheme()
-        startup_theme = "dark" if color_scheme == Qt.ColorScheme.Dark else "light"
-    qss_name = "app_dark.qss" if startup_theme == "dark" else "app_light.qss"
-    qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
+    initial_zoom = startup_config.normalized_ui_zoom()
+    qss = _theme_stylesheet(_theme_name_for_config(startup_config), initial_zoom)
     if qss:
         app.setStyleSheet(qss)
-    initial_zoom = startup_config.normalized_ui_zoom()
     if initial_zoom != 1.0:
         from PySide6.QtGui import QFont
 
         f = QFont(app.font())
-        f.setPointSize(max(7, round(9 * initial_zoom)))
+        f.setPointSize(max(7, round(_BASE_UI_FONT_PT * initial_zoom)))
         app.setFont(f)
     window = MainWindow()
     window.show()

@@ -68,9 +68,32 @@ def test_main_window_retranslates_menu_bar_and_zoom_shortcuts() -> None:
     text = (SRC / "gui" / "main_window.py").read_text(encoding="utf-8")
     assert "self.menuBar().clear()" in text
     assert "self._build_menu()" in text
+    assert "self.addAction(zoom_in_act)" in text
+    assert "self.removeAction(action)" in text
     assert 'QKeySequence("Ctrl+=")' in text
     assert 'QKeySequence("Ctrl++")' in text
     assert "QKeySequence.StandardKey.ZoomIn" in text
+
+
+def test_zoom_scales_stylesheet_font_sizes() -> None:
+    from project_exporter_desktop.gui.main_window import _scaled_stylesheet
+
+    qss = "QWidget { font-size: 10pt; } QLabel { font-size: 20pt; }"
+    assert "font-size: 15pt;" in _scaled_stylesheet(qss, 1.5)
+    assert "font-size: 30pt;" in _scaled_stylesheet(qss, 1.5)
+    assert "font-size: 7pt;" in _scaled_stylesheet(qss, 0.7)
+    assert "font-size: 14pt;" in _scaled_stylesheet(qss, 0.7)
+
+
+def test_full_uninstall_script_requires_explicit_delete_confirmation() -> None:
+    root = SRC.parents[1]
+    batch_text = (root / "uninstall_project_exporter.bat").read_text(encoding="utf-8")
+    ps_text = (root / "tools" / "uninstall_project_exporter.ps1").read_text(encoding="utf-8")
+    assert "tools\\uninstall_project_exporter.ps1" in batch_text
+    assert "Type DELETE to continue" in ps_text
+    assert '$answer -ne "DELETE"' in ps_text
+    assert "Get-InstallEntries" in ps_text
+    assert "Remove-InstallDirectory" in ps_text
 
 
 def test_build_and_install_script_runs_full_interactive_packaging_flow() -> None:
