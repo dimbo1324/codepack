@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -16,7 +17,7 @@ from . import make_card, make_scroll_page
 
 
 class ProjectPage(QWidget):
-    """Страница 1 — выбор корневой папки проекта."""
+    """Страница 1 — выбор корневой папки проекта и контекст для ИИ."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -25,6 +26,8 @@ class ProjectPage(QWidget):
             "Выбор проекта",
             "Выберите корневую папку проекта. При экспорте исходный проект не изменяется.",
         )
+
+        # ── Карточка выбора папки ────────────────────────────────────────────
         card, card_layout = make_card()
 
         form = QGridLayout()
@@ -51,11 +54,37 @@ class ProjectPage(QWidget):
         self.project_hint.setWordWrap(True)
         card_layout.addWidget(self.project_hint)
         layout.addWidget(card)
+
+        # ── Карточка контекста разработчика ─────────────────────────────────
+        ctx_card, ctx_layout = make_card()
+        ctx_title = QLabel("Контекст для ИИ")
+        ctx_title.setObjectName("PageTitle")
+        ctx_layout.addWidget(ctx_title)
+        ctx_hint = QLabel(
+            "Опишите задачу, проблему или вопрос, с которым поможет ИИ. "
+            "Этот текст появится первым в текстовом дампе проекта — "
+            "прямо перед исходным кодом."
+        )
+        ctx_hint.setObjectName("PageHint")
+        ctx_hint.setWordWrap(True)
+        ctx_layout.addWidget(ctx_hint)
+
+        self.context_edit = QPlainTextEdit()
+        self.context_edit.setPlaceholderText(
+            "Пример: «Помоги разобраться в архитектуре этого проекта. "
+            "Меня интересует, как работает авторизация и где хранятся пользователи.»"
+        )
+        self.context_edit.setMaximumHeight(120)
+        ctx_layout.addWidget(self.context_edit)
+        layout.addWidget(ctx_card)
+
         layout.addStretch(1)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
+
+    # ── Folder selection ─────────────────────────────────────────────────────
 
     def _browse_root(self) -> None:
         initial = self.root_edit.text().strip() or str(Path.home())
@@ -63,11 +92,19 @@ class ProjectPage(QWidget):
         if selected:
             self.root_edit.setText(selected)
 
+    # ── Getters / setters ────────────────────────────────────────────────────
+
     def get_root(self) -> str:
         return self.root_edit.text().strip()
 
     def set_root(self, text: str) -> None:
         self.root_edit.setText(text)
+
+    def get_developer_context(self) -> str:
+        return self.context_edit.toPlainText().strip()
+
+    def set_developer_context(self, text: str) -> None:
+        self.context_edit.setPlainText(text)
 
     def set_detected_stack(self, info: str) -> None:
         self._stack_label.setText(info)

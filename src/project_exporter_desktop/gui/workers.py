@@ -8,11 +8,13 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from ..config import Config
+from ..constants import TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION
 from ..services.export_ignore import ExportIgnoreRules
 from ..services.export_plan import build_export_plan, format_export_plan_for_user
 from ..services.exporter import ProjectExporter
 from ..services.git_diff import resolve_diff_selection
 from ..services.incremental import resolve_incremental_selection
+from ..services.stack_detector import merged_extra_ignored_dirs
 
 
 class QtLogQueue:
@@ -37,6 +39,7 @@ class QtLogQueue:
 
 class PlanPreviewWorker(QThread):
     finished_preview = Signal(str)
+    finished_plan = Signal(object)   # emits ExportPlan for PreviewPage
     failed = Signal(str)
 
     def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
@@ -64,14 +67,18 @@ class PlanPreviewWorker(QThread):
                 always_include_files=self.config.always_include_files,
                 always_include_dirs=self.config.always_include_dirs,
             )
+            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
+                self.source_root
+            )
             plan = build_export_plan(
                 self.source_root,
                 self.config,
-                self.config.effective_ignored_dirs(),
+                ignored,
                 diff_selection,
                 incremental_selection,
                 export_rules,
             )
+            self.finished_plan.emit(plan)
             self.finished_preview.emit(
                 format_export_plan_for_user(plan, self.config.effective_zip_part_bytes())
             )
@@ -91,11 +98,13 @@ class ExportWorker(QThread):
         config: Config,
         cancel_event: threading.Event,
         parent=None,  # noqa: ANN001
+        file_overrides: dict[str, bool] | None = None,
     ) -> None:
         super().__init__(parent)
         self.source_root = source_root
         self.config = replace(config)
         self.cancel_event = cancel_event
+        self.file_overrides: dict[str, bool] = file_overrides or {}
         self.exporter: ProjectExporter | None = None
 
     def run(self) -> None:
@@ -105,6 +114,7 @@ class ExportWorker(QThread):
                 config=self.config,
                 log_queue=QtLogQueue(self),
                 cancel_event=self.cancel_event,
+                file_overrides=self.file_overrides,
             )
             paths = self.exporter.run()
             archive_result = self.exporter.archive_result
@@ -130,3 +140,110 @@ class ExportWorker(QThread):
 
     def cancel(self) -> None:
         self.cancel_event.set()
+
+
+class ClipboardExportWorker(QThread):
+    """Generates a text dump of included project files for the clipboard.
+
+    Emits the text via finished() so the main thread can paste it into the
+    clipboard. Does NOT archive or write to disk.
+    """
+
+    # (full_text, byte_count, token_summary_line)
+    finished = Signal(str, int, str)
+    failed = Signal(str)
+
+    _MAX_CLIPBOARD_BYTES = 20 * 1024 * 1024  # 20 MB hard cap for clipboard sanity
+
+    def __init__(self, source_root: Path, config: Config, parent=None) -> None:  # noqa: ANN001
+        super().__init__(parent)
+        self.source_root = source_root
+        self.config = replace(config)
+
+    def run(self) -> None:
+        try:
+            from ..utils.token_counter import context_summary_line
+
+            diff_selection = resolve_diff_selection(
+                self.source_root,
+                self.config.normalized_diff_export_mode(),
+                self.config.diff_base_ref,
+                self.config.diff_target_ref,
+            )
+            incremental_selection = resolve_incremental_selection(
+                self.source_root,
+                self.config.effective_ignored_dirs(),
+                self.config.incremental_export_enabled,
+            )
+            export_rules = ExportIgnoreRules.from_project_and_config(
+                self.source_root,
+                excluded_files=self.config.custom_excluded_files,
+                excluded_extensions=self.config.custom_excluded_extensions,
+                always_include_files=self.config.always_include_files,
+                always_include_dirs=self.config.always_include_dirs,
+            )
+            ignored = self.config.effective_ignored_dirs() | merged_extra_ignored_dirs(
+                self.source_root
+            )
+            plan = build_export_plan(
+                self.source_root,
+                self.config,
+                ignored,
+                diff_selection,
+                incremental_selection,
+                export_rules,
+            )
+
+            parts: list[str] = []
+            total_bytes = 0
+
+            # Prepend developer context if set
+            ctx = (self.config.developer_context or "").strip()
+            if ctx:
+                header = (
+                    "# ══════════════════════════════════════════════════\n"
+                    "# ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА\n"
+                    "# ══════════════════════════════════════════════════\n\n"
+                    + ctx
+                    + "\n\n# ══════════════════════════════════════════════════\n\n"
+                )
+                parts.append(header)
+                total_bytes += len(header.encode("utf-8"))
+
+            for pf in plan.included_files:
+                if total_bytes >= self._MAX_CLIPBOARD_BYTES:
+                    parts.append(
+                        "\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n"
+                    )
+                    break
+                file_path = self.source_root / pf.relative_path
+                if not file_path.is_file():
+                    continue
+                suffix = file_path.suffix.lstrip(".").casefold()
+                name_lower = file_path.name.casefold()
+                is_text = (
+                    suffix in TEXT_EXTENSIONS
+                    or name_lower in TEXT_FILENAMES_WITHOUT_EXTENSION
+                )
+                if not is_text:
+                    continue
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+                block = f"\n\n{'='*60}\nФАЙЛ: {pf.relative_path}\n{'='*60}\n{content}"
+                block_bytes = block.encode("utf-8")
+                if total_bytes + len(block_bytes) > self._MAX_CLIPBOARD_BYTES:
+                    parts.append(
+                        "\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n"
+                    )
+                    break
+                parts.append(block)
+                total_bytes += len(block_bytes)
+
+            full_text = "".join(parts)
+            summary = context_summary_line(total_bytes)
+            # Clipboard write must happen on the main thread — emit text back
+            self.finished.emit(full_text, total_bytes, summary)
+        except Exception:
+            self.failed.emit(traceback.format_exc())

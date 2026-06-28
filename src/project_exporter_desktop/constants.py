@@ -547,6 +547,56 @@ BALANCED_MODE_EXCLUDED_SUFFIXES: set[str] = SENSITIVE_SUFFIXES | {
     "backup",
 }
 
+AI_PRESETS: dict[str, dict[str, object]] = {
+    "Claude Code": {
+        "description": "Полный контекст: архитектура, Git-история, все AI-отчёты. Оптимально для Claude.",
+        "export_profile": "ai_review",
+        "safe_export_mode": "safe",
+        "redact_secrets": True,
+        "include_git_patch": False,
+        "diff_export_mode": "all",
+        "text_file_size_limit_enabled": False,
+    },
+    "ChatGPT": {
+        "description": "Компактный обзор без Git-патча. Подходит для GPT-4 с ограниченным контекстным окном.",
+        "export_profile": "quick",
+        "safe_export_mode": "safe",
+        "redact_secrets": True,
+        "include_git_patch": False,
+        "diff_export_mode": "all",
+        "text_file_size_limit_enabled": True,
+        "max_text_file_mb": 1,
+    },
+    "Code Review": {
+        "description": "Полный снимок кода с Git-патчем. Идеально для детального ревью.",
+        "export_profile": "ai_review",
+        "safe_export_mode": "balanced",
+        "redact_secrets": True,
+        "include_git_patch": True,
+        "diff_export_mode": "all",
+        "text_file_size_limit_enabled": False,
+    },
+    "Security Audit": {
+        "description": "Акцент на безопасности: конфигурация, зависимости и анализ рисков.",
+        "export_profile": "security",
+        "safe_export_mode": "safe",
+        "redact_secrets": True,
+        "include_git_patch": False,
+        "diff_export_mode": "all",
+        "text_file_size_limit_enabled": False,
+    },
+    "Онбординг": {
+        "description": "Краткий обзор для быстрого введения нового разработчика в проект.",
+        "export_profile": "minimal",
+        "safe_export_mode": "balanced",
+        "redact_secrets": True,
+        "include_git_patch": False,
+        "diff_export_mode": "all",
+        "text_file_size_limit_enabled": True,
+        "max_text_file_mb": 2,
+    },
+}
+
 REPORT_DESCRIPTIONS: tuple[tuple[str, str], ...] = (
     (
         "PROJECT_PROFILE.json",

@@ -14,21 +14,47 @@ from PySide6.QtWidgets import (
 )
 
 from ...config import Config
-from ...constants import DIFF_EXPORT_MODES, EXPORT_PROFILES, MAX_ARCHIVE_PART_MB
+from ...constants import AI_PRESETS, DIFF_EXPORT_MODES, EXPORT_PROFILES, MAX_ARCHIVE_PART_MB
 from . import make_card, make_scroll_page, set_combo_value, wrap_layout
+
+_NO_PRESET = "— без пресета —"
 
 
 class SettingsPage(QWidget):
-    """Страница 2 — профиль экспорта, текстовый дамп, архив и параметры Git diff."""
+    """Страница 2 — профиль экспорта, AI-пресеты, текстовый дамп, архив и параметры Git diff."""
 
     def __init__(self, profile_catalog: dict[str, str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._profile_catalog = profile_catalog
+        self._applying_preset = False
 
         scroll, layout = make_scroll_page(
             "Настройки экспорта",
-            "Управление профилем, лимитами текстового дампа, размером архива и выбором файлов Git/инкрементального экспорта.",
+            "Выберите AI-пресет для быстрой конфигурации, либо настройте профиль и параметры вручную.",
         )
+
+        # ── AI Presets card ─────────────────────────────────────────────────
+        preset_card, preset_layout = make_card()
+        preset_title = QLabel("AI-пресет")
+        preset_title.setObjectName("PageTitle")
+        preset_layout.addWidget(preset_title)
+
+        preset_form = QFormLayout()
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItem(_NO_PRESET)
+        self.preset_combo.addItems(list(AI_PRESETS.keys()))
+        self.preset_combo.currentTextChanged.connect(self._on_preset_changed)
+        self.preset_hint = QLabel("")
+        self.preset_hint.setObjectName("PageHint")
+        self.preset_hint.setWordWrap(True)
+        preset_block = QVBoxLayout()
+        preset_block.addWidget(self.preset_combo)
+        preset_block.addWidget(self.preset_hint)
+        preset_form.addRow("Пресет", wrap_layout(preset_block))
+        preset_layout.addLayout(preset_form)
+        layout.addWidget(preset_card)
+
+        # ── Main settings card ──────────────────────────────────────────────
         card, card_layout = make_card()
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -93,7 +119,36 @@ class SettingsPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
+    # ── Sync helpers ─────────────────────────────────────────────────────────
+
+    def _on_preset_changed(self, preset_name: str) -> None:
+        if preset_name == _NO_PRESET or self._applying_preset:
+            self.preset_hint.setText("")
+            return
+        preset = AI_PRESETS.get(preset_name)
+        if not preset:
+            return
+        self.preset_hint.setText(str(preset.get("description", "")))
+        self._apply_preset(preset)
+
+    def _apply_preset(self, preset: dict[str, object]) -> None:
+        self._applying_preset = True
+        try:
+            if "export_profile" in preset:
+                set_combo_value(self.profile_combo, str(preset["export_profile"]))
+            if "diff_export_mode" in preset:
+                set_combo_value(self.diff_combo, str(preset["diff_export_mode"]))
+            if "text_file_size_limit_enabled" in preset:
+                self.text_limit_checkbox.setChecked(bool(preset["text_file_size_limit_enabled"]))
+            if "max_text_file_mb" in preset:
+                self.max_text_mb_spin.setValue(int(preset["max_text_file_mb"]))  # type: ignore[arg-type]
+        finally:
+            self._applying_preset = False
+        self._sync_text_limit_state()
+
     def _sync_profile_hint(self) -> None:
+        if self._applying_preset:
+            return
         profile = self.profile_combo.currentText().strip()
         self.profile_hint.setText(
             self._profile_catalog.get(profile, EXPORT_PROFILES.get(profile, ""))
@@ -109,7 +164,10 @@ class SettingsPage(QWidget):
     def _sync_text_limit_state(self) -> None:
         self.max_text_mb_spin.setEnabled(self.text_limit_checkbox.isChecked())
 
+    # ── Config I/O ───────────────────────────────────────────────────────────
+
     def load_from_config(self, config: Config) -> None:
+        self.preset_combo.setCurrentIndex(0)  # — без пресета —
         self.text_limit_checkbox.setChecked(config.text_file_size_limit_enabled)
         self.max_text_mb_spin.setValue(max(1, int(config.max_text_file_mb)))
         self.zip_limit_spin.setValue(max(1, int(config.zip_part_limit_mb or MAX_ARCHIVE_PART_MB)))
@@ -119,3 +177,10 @@ class SettingsPage(QWidget):
         set_combo_value(self.profile_combo, config.normalized_export_profile())
         set_combo_value(self.diff_combo, config.normalized_diff_export_mode())
         self._sync_text_limit_state()
+        self._sync_profile_hint()
+        self._sync_diff_hint()
+
+    def get_preset_name(self) -> str:
+        """Return the currently selected preset name, or '' if none."""
+        text = self.preset_combo.currentText()
+        return "" if text == _NO_PRESET else text
