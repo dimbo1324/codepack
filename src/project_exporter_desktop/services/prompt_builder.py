@@ -21,7 +21,11 @@ def normalise_prompt_goals(goals: list[str] | None) -> list[str]:
         goal = goal.strip()
         if goal in PROMPT_GOALS and goal not in cleaned:
             cleaned.append(goal)
-    return cleaned or ["architecture_review", "bug_hunt", "write_tests"]  # default goals when none are specified or all are invalid
+    return cleaned or [
+        "architecture_review",
+        "bug_hunt",
+        "write_tests",
+    ]  # default goals when none are specified or all are invalid
 
 
 def build_custom_prompt(project_name: str, goals: list[str] | None = None) -> str:

@@ -21,7 +21,9 @@ def append_export_history(entry: dict[str, Any]) -> None:
         )
         if not isinstance(history, list):
             history = []
-        history.insert(0, entry)  # newest entry first so callers can short-circuit on the first match
+        history.insert(
+            0, entry
+        )  # newest entry first so callers can short-circuit on the first match
         del history[MAX_HISTORY_ITEMS:]
         HISTORY_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as exc:

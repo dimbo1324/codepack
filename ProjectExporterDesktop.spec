@@ -1,3 +1,5 @@
+# PyInstaller spec for building the desktop executable from the repository root.
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,3 +1,5 @@
+# Reusable PySide6 component module shared by multiple GUI pages.
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
@@ -11,13 +13,18 @@ from PySide6.QtWidgets import (
 from ...i18n import t
 
 _NAV_KEYS = [
-    "nav.1", "nav.2", "nav.3", "nav.4",
-    "nav.5", "nav.6", "nav.7", "nav.8",
+    "nav.1",
+    "nav.2",
+    "nav.3",
+    "nav.4",
+    "nav.5",
+    "nav.6",
+    "nav.7",
+    "nav.8",
 ]
 
 
 class Sidebar(QFrame):
-
     page_requested = Signal(int)
     open_desktop_requested = Signal()
 

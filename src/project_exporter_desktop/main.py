@@ -1,3 +1,5 @@
+# Core application module for codepack.
+
 from __future__ import annotations
 
 from .constants import APP_NAME

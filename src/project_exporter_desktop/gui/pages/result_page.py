@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +19,6 @@ from . import make_card, make_scroll_page
 
 
 class ResultPage(QWidget):
-
     open_result_requested = Signal()
     open_desktop_requested = Signal()
 

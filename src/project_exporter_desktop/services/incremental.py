@@ -95,7 +95,9 @@ def resolve_incremental_selection(
             old = previous.get(rel)
             if not isinstance(old, dict):
                 added.append(rel)
-            elif old.get("size") != meta.get("size") or old.get("mtime_ns") != meta.get("mtime_ns"):  # mtime_ns is nanosecond precision; size cross-check catches touch-only edits that reset mtime
+            elif (
+                old.get("size") != meta.get("size") or old.get("mtime_ns") != meta.get("mtime_ns")
+            ):  # mtime_ns is nanosecond precision; size cross-check catches touch-only edits that reset mtime
                 modified.append(rel)
             else:
                 unchanged += 1

@@ -70,7 +70,11 @@ class ArchiveServiceTests(unittest.TestCase):
             self.assertTrue((paths.archive_set_dir / "ARCHIVE_SET_MANIFEST.json").exists())
             restore_script = paths.archive_set_dir / "restore_archives.py"
             self.assertTrue(restore_script.exists())
-            self.assertIn("def main()", restore_script.read_text(encoding="utf-8"))
+            restore_text = restore_script.read_text(encoding="utf-8")
+            self.assertIn("def main()", restore_text)
+            self.assertIn("_extract_archive_safely", restore_text)
+            self.assertIn("Unsafe archive member path", restore_text)
+            self.assertNotIn("extractall", restore_text)
 
     def test_reports_only_archive_skips_project_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

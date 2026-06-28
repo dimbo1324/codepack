@@ -9,7 +9,6 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class StackInfo:
-
     name: str
     markers_found: tuple[str, ...]
     extra_ignored_dirs: frozenset[str] = field(default_factory=frozenset)
@@ -142,7 +141,9 @@ def detect_stack(root: Path) -> list[StackInfo]:
                 )
             )
 
-    results.sort(key=lambda s: len(s.markers_found), reverse=True)  # stack with the most matched markers is treated as the primary one
+    results.sort(
+        key=lambda s: len(s.markers_found), reverse=True
+    )  # stack with the most matched markers is treated as the primary one
     return results
 
 

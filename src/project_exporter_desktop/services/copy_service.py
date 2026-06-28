@@ -137,7 +137,9 @@ def copy_project(
             try:
                 shutil.copy2(src_file, dst_file)
                 stats.files_copied += 1
-                if stats.files_copied % 250 == 0:  # log progress every 250 files to avoid flooding the queue
+                if (
+                    stats.files_copied % 250 == 0
+                ):  # log progress every 250 files to avoid flooding the queue
                     log(f"Скопировано файлов: {stats.files_copied:,}")
                     if progress is not None:
                         progress(20, "Копирование файлов", rel_display(src_file, source_root))

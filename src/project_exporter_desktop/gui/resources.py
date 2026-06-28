@@ -1,3 +1,5 @@
+# PySide6 GUI module: keep export/business logic in services and communicate through workers/signals.
+
 from __future__ import annotations
 
 import sys

@@ -1,3 +1,5 @@
+# Project metadata plus test/lint configuration used by local checks and GitHub CI.
+
 [project]
 name = "project-exporter-desktop"
 version = "5.1.0"
@@ -8,6 +10,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Keep development tools optional so the runtime install stays small.
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
@@ -18,11 +21,13 @@ dev = [
 project-exporter-desktop = "project_exporter_desktop.main:main"
 
 [tool.pytest.ini_options]
+# Tests import the package directly from src/ without requiring an editable install.
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-q"
 
 [tool.ruff]
+# Ruff is the CI gate for import ordering and basic Python safety/modernization rules.
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]

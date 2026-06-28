@@ -1,3 +1,5 @@
+# Export report writer: produces a generated artifact that is packaged with the copied project.
+
 from __future__ import annotations
 
 import threading

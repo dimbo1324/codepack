@@ -1,3 +1,5 @@
+# Self-contained smoke test that builds a small sample project export and validates core safety exclusions.
+
 from __future__ import annotations
 
 import io

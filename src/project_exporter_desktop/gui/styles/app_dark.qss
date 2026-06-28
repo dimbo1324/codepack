@@ -1,3 +1,5 @@
+/* Dark theme QSS bundle loaded when the user chooses dark mode or the system theme is dark. */
+
 QMainWindow, QWidget {
     background: #0f172a;
     color: #e5e7eb;

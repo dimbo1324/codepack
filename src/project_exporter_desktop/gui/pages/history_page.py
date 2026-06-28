@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -136,15 +138,17 @@ class HistoryPage(QWidget):
         outer.addWidget(scroll)
 
     def _update_table_headers(self) -> None:
-        self.table.setHorizontalHeaderLabels([
-            t("history.col_date"),
-            t("history.col_project"),
-            t("history.col_profile"),
-            t("history.col_files"),
-            t("history.col_tokens"),
-            t("history.col_status"),
-            t("history.col_result"),
-        ])
+        self.table.setHorizontalHeaderLabels(
+            [
+                t("history.col_date"),
+                t("history.col_project"),
+                t("history.col_profile"),
+                t("history.col_files"),
+                t("history.col_tokens"),
+                t("history.col_status"),
+                t("history.col_result"),
+            ]
+        )
 
     def retranslate(self) -> None:
         self._page_title.setText(t("history.page_title"))
@@ -180,7 +184,9 @@ class HistoryPage(QWidget):
     def _set_row(self, row: int, entry: dict[str, Any]) -> None:
         copy_stats = entry.get("copy_stats") if isinstance(entry.get("copy_stats"), dict) else {}
         files = copy_stats.get("files_copied", "")
-        status = t("history.status_cancelled") if entry.get("cancelled") else t("history.status_done")
+        status = (
+            t("history.status_cancelled") if entry.get("cancelled") else t("history.status_done")
+        )
         values = [
             entry.get("generated_at", ""),
             entry.get("project_name", ""),

@@ -1,3 +1,5 @@
+# PySide6 GUI module: keep export/business logic in services and communicate through workers/signals.
+
 from __future__ import annotations
 
 import logging
@@ -22,7 +24,6 @@ _log = logging.getLogger(__name__)
 
 
 class QtLogQueue:
-
     def __init__(self, worker: ExportWorker) -> None:
         self.worker = worker
 
@@ -147,7 +148,6 @@ class ExportWorker(QThread):
 
 
 class ClipboardExportWorker(QThread):
-
     finished = Signal(str, int, str)
     failed = Signal(str)
 
@@ -206,9 +206,7 @@ class ClipboardExportWorker(QThread):
 
             for pf in plan.included_files:
                 if total_bytes >= self._MAX_CLIPBOARD_BYTES:
-                    parts.append(
-                        "\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n"
-                    )
+                    parts.append("\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n")
                     break
                 file_path = self.source_root / pf.relative_path
                 if not file_path.is_file():
@@ -216,8 +214,7 @@ class ClipboardExportWorker(QThread):
                 suffix = file_path.suffix.lstrip(".").casefold()
                 name_lower = file_path.name.casefold()
                 is_text = (
-                    suffix in TEXT_EXTENSIONS
-                    or name_lower in TEXT_FILENAMES_WITHOUT_EXTENSION
+                    suffix in TEXT_EXTENSIONS or name_lower in TEXT_FILENAMES_WITHOUT_EXTENSION
                 )
                 if not is_text:
                     continue
@@ -225,12 +222,10 @@ class ClipboardExportWorker(QThread):
                     content = file_path.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     continue
-                block = f"\n\n{'='*60}\nФАЙЛ: {pf.relative_path}\n{'='*60}\n{content}"
+                block = f"\n\n{'=' * 60}\nФАЙЛ: {pf.relative_path}\n{'=' * 60}\n{content}"
                 block_bytes = block.encode("utf-8")
                 if total_bytes + len(block_bytes) > self._MAX_CLIPBOARD_BYTES:
-                    parts.append(
-                        "\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n"
-                    )
+                    parts.append("\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n")
                     break
                 parts.append(block)
                 total_bytes += len(block_bytes)

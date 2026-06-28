@@ -10,8 +10,7 @@ from pathlib import Path
 
 from ...utils.time_utils import human_now
 
-PROMPTS: dict[str, str] = {
-}
+PROMPTS: dict[str, str] = {}
 
 
 def write_ai_prompt_files(_copied_root: Path, output_dir: Path) -> None:

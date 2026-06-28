@@ -1,3 +1,5 @@
+# Small utility module shared across services, reports, GUI workers, and tests.
+
 from __future__ import annotations
 
 _CHARS_PER_TOKEN: float = 3.5
@@ -24,10 +26,7 @@ def format_tokens(n: int) -> str:
 
 def context_fit_rows(byte_count: int) -> list[tuple[str, int, int, bool]]:
     tokens = estimate_tokens(byte_count)
-    rows = [
-        (name, tokens, limit, tokens <= limit)
-        for name, limit in MODEL_CONTEXT_LIMITS.items()
-    ]
+    rows = [(name, tokens, limit, tokens <= limit) for name, limit in MODEL_CONTEXT_LIMITS.items()]
     return sorted(rows, key=lambda r: r[2])
 
 

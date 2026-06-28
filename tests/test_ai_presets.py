@@ -1,4 +1,3 @@
-
 """Tests for AI preset definitions and developer-context config fields in the codepack app."""
 
 from __future__ import annotations
@@ -47,7 +46,6 @@ def test_required_presets_exist() -> None:
     assert expected == set(AI_PRESETS.keys())
 
 
-
 def test_developer_context_default_empty() -> None:
     cfg = Config()
     assert cfg.developer_context == ""
@@ -64,11 +62,11 @@ def test_developer_context_serialises(tmp_path: Path) -> None:
     assert loaded_data["developer_context"] == "Помоги найти утечки памяти."
 
 
-def test_config_roundtrip_with_developer_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_roundtrip_with_developer_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     settings_file = tmp_path / ".project_exporter_desktop.json"
-    monkeypatch.setattr(
-        "project_exporter_desktop.constants.SETTINGS_FILE", settings_file
-    )
+    monkeypatch.setattr("project_exporter_desktop.constants.SETTINGS_FILE", settings_file)
     import project_exporter_desktop.config as config_module
 
     monkeypatch.setattr(config_module, "SETTINGS_FILE", settings_file)
@@ -79,7 +77,6 @@ def test_config_roundtrip_with_developer_context(tmp_path: Path, monkeypatch: py
 
     loaded = Config.load()
     assert loaded.developer_context == "Это тестовый контекст."
-
 
 
 def test_claude_code_preset_uses_ai_review() -> None:

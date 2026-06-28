@@ -1,3 +1,5 @@
+# PyInstaller spec used by release scripts under build/pyinstaller.
+
 from __future__ import annotations
 
 from pathlib import Path

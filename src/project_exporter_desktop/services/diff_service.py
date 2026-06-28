@@ -89,7 +89,9 @@ def _run_git_records(args: list[str], cwd: Path) -> tuple[int, list[str], str]:
 def _hash_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):  # 1 MB chunks keep memory use flat for large files
+        for chunk in iter(
+            lambda: handle.read(1024 * 1024), b""
+        ):  # 1 MB chunks keep memory use flat for large files
             digest.update(chunk)
     return digest.hexdigest()
 

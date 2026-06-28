@@ -1,3 +1,5 @@
+# Core application module for codepack.
+
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal
@@ -782,6 +784,7 @@ Right-click the icon opens a menu with <em>Quick Export</em> and <em>Exit</em>.<
 # ---------------------------------------------------------------------------
 # I18n singleton
 # ---------------------------------------------------------------------------
+
 
 class I18n(QObject):
     language_changed = Signal()

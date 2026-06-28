@@ -1,3 +1,5 @@
+# Insight report generator: reads the copied project and writes one focused analysis artifact into reports/insights.
+
 from __future__ import annotations
 
 import re

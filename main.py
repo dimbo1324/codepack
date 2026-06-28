@@ -1,3 +1,5 @@
+# CLI/bootstrap shim for launching the packaged desktop application from the repository root.
+
 from __future__ import annotations
 
 import sys

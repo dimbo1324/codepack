@@ -1,3 +1,5 @@
+/* Light theme QSS bundle loaded when the user chooses light mode or the system theme is light. */
+
 QMainWindow, QWidget {
     background: #f4f6fb;
     color: #162033;

@@ -133,7 +133,14 @@ def test_preset_desc_keys_present() -> None:
 
 def test_page_title_keys_present() -> None:
     page_prefixes = (
-        "project", "settings", "security", "preview", "run", "result", "history", "analytics"
+        "project",
+        "settings",
+        "security",
+        "preview",
+        "run",
+        "result",
+        "history",
+        "analytics",
     )
     for prefix in page_prefixes:
         key = f"{prefix}.page_title"
@@ -142,6 +149,7 @@ def test_page_title_keys_present() -> None:
 
 def test_t_fallback_to_ru_when_en_key_missing(monkeypatch) -> None:
     from project_exporter_desktop.i18n import _STRINGS
+
     original = _STRINGS["en"].get("nav.1")
     try:
         del _STRINGS["en"]["nav.1"]

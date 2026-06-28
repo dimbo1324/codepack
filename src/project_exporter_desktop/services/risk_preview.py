@@ -77,7 +77,9 @@ def build_pre_export_risk_preview(
             report.estimated_selected_bytes += size
 
             safety = classify_sensitive_file(rel)
-            if safety.skip and len(report.sensitive_files) < 100:  # cap items to keep the preview dialog manageable
+            if (
+                safety.skip and len(report.sensitive_files) < 100
+            ):  # cap items to keep the preview dialog manageable
                 report.sensitive_files.append(
                     RiskPreviewItem(
                         rel_display(path, source_root), safety.reason, size, safety.severity

@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
@@ -20,7 +22,6 @@ from . import make_card, make_scroll_page, set_combo_value, wrap_layout
 
 
 class SecurityPage(QWidget):
-
     edit_rules_requested = Signal()
     edit_prompt_goals_requested = Signal()
     create_exportignore_requested = Signal()

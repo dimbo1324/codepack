@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from typing import Any
@@ -138,12 +140,14 @@ class AnalyticsPage(QWidget):
         self.set_loading(False)
 
     def _update_deps_headers(self) -> None:
-        self.deps_table.setHorizontalHeaderLabels([
-            t("analytics.col_manager"),
-            t("analytics.col_package"),
-            t("analytics.col_version"),
-            t("analytics.col_warning"),
-        ])
+        self.deps_table.setHorizontalHeaderLabels(
+            [
+                t("analytics.col_manager"),
+                t("analytics.col_package"),
+                t("analytics.col_version"),
+                t("analytics.col_warning"),
+            ]
+        )
 
     def retranslate(self) -> None:
         self._page_title.setText(t("analytics.page_title"))
@@ -182,7 +186,9 @@ class AnalyticsPage(QWidget):
             }
         )
         languages = getattr(report, "languages", [])
-        self.chart.set_items([(getattr(item, "name", ""), getattr(item, "loc", 0)) for item in languages])
+        self.chart.set_items(
+            [(getattr(item, "name", ""), getattr(item, "loc", 0)) for item in languages]
+        )
         self._populate_deps(getattr(report, "dependencies", []))
         branch = getattr(report, "git_branch", "") or t("analytics.no_data_branch")
         self.git_label.setText(

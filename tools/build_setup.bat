@@ -1,4 +1,5 @@
 @echo off
+REM Inno Setup wrapper; expects the PyInstaller executable to exist first.
 setlocal
 cd /d "%~dp0\.."
 if not exist "dist\ProjectExporterDesktop.exe" (

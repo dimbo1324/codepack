@@ -109,7 +109,9 @@ class ProjectExporter:
                 return None  # no active filter → include everything
             result = set(selected_sets[0])
             for selected in selected_sets[1:]:
-                result &= set(selected)  # intersection: a file must be selected by every active mode
+                result &= set(
+                    selected
+                )  # intersection: a file must be selected by every active mode
             for rel_path, include in self.file_overrides.items():
                 rel_key = rel_path.replace("/", "\\")
                 if include:

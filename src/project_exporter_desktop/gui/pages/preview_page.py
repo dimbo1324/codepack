@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from typing import Any
@@ -42,7 +44,6 @@ _COL_REASON = 3
 
 
 class PreviewPage(QWidget):
-
     export_confirmed = Signal(object)
     export_cancelled = Signal()
 
@@ -133,12 +134,14 @@ class PreviewPage(QWidget):
         outer.addLayout(btn_row)
 
     def _update_tree_headers(self) -> None:
-        self._tree.setHeaderLabels([
-            t("preview.col_file"),
-            t("preview.col_size"),
-            t("preview.col_status"),
-            t("preview.col_reason"),
-        ])
+        self._tree.setHeaderLabels(
+            [
+                t("preview.col_file"),
+                t("preview.col_size"),
+                t("preview.col_status"),
+                t("preview.col_reason"),
+            ]
+        )
 
     def retranslate(self) -> None:
         self._title_lbl.setText(t("preview.page_title"))
@@ -236,9 +239,7 @@ class PreviewPage(QWidget):
             )
         else:
             status_text = (
-                t("preview.status_included")
-                if original_included
-                else t("preview.status_excluded")
+                t("preview.status_included") if original_included else t("preview.status_excluded")
             )
 
         item.setText(2, status_text)
@@ -293,17 +294,18 @@ class PreviewPage(QWidget):
             t("preview.override_note").format(n=overrides_count) if overrides_count else ""
         )
         self._stats_label.setText(
-            t("preview.stats").format(inc=f"{n_inc:,}", size=format_bytes(inc_bytes), exc=f"{n_exc:,}")
+            t("preview.stats").format(
+                inc=f"{n_inc:,}", size=format_bytes(inc_bytes), exc=f"{n_exc:,}"
+            )
             + override_note
         )
 
         tokens = 0
         if inc_bytes > 0:
             from ...utils.token_counter import estimate_tokens
+
             tokens = estimate_tokens(inc_bytes)
-            self._token_label.setText(
-                t("preview.token_label").format(n=format_tokens(tokens))
-            )
+            self._token_label.setText(t("preview.token_label").format(n=format_tokens(tokens)))
         else:
             self._token_label.setText("")
 

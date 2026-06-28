@@ -1,3 +1,5 @@
+# Small utility module shared across services, reports, GUI workers, and tests.
+
 from __future__ import annotations
 
 import os

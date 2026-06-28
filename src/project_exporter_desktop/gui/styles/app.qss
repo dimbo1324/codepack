@@ -1,3 +1,5 @@
+/* Default light QSS bundle used as a fallback when theme-specific files are unavailable. */
+
 QMainWindow, QWidget {
     background: #f4f6fb;
     color: #162033;

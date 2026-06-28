@@ -223,7 +223,10 @@ def build_archive_plan(
 def _write_zip(archive_path: Path, entries: Iterable[ArchiveEntry], cancel: threading.Event) -> int:
     count = 0
     with zipfile.ZipFile(
-        archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6  # level 6 balances speed vs. size reduction
+        archive_path,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,  # level 6 balances speed vs. size reduction
     ) as archive:
         for entry in entries:
             if cancel.is_set():
@@ -268,9 +271,31 @@ def _write_restore_files(
     (result.output_dir / "restore_archives.py").write_text(
         """from __future__ import annotations
 
+import shutil
 import sys
 import zipfile
 from pathlib import Path
+
+
+def _safe_member_target(destination: Path, member_name: str) -> Path:
+    target = (destination / member_name).resolve()
+    try:
+        target.relative_to(destination)
+    except ValueError as exc:
+        raise RuntimeError(f"Unsafe archive member path: {member_name}") from exc
+    return target
+
+
+def _extract_archive_safely(archive_path: Path, destination: Path) -> None:
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            target = _safe_member_target(destination, member.filename)
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
 
 
 def main() -> int:
@@ -286,8 +311,7 @@ def main() -> int:
         return 1
     for archive_path in archives:
         print(f"Распаковка: {archive_path.name}")
-        with zipfile.ZipFile(archive_path) as archive:
-            archive.extractall(destination)
+        _extract_archive_safely(archive_path, destination)
     print(f"Готово: {destination}")
     return 0
 
@@ -414,7 +438,9 @@ def build_final_archives(
             f"Одиночный ZIP превысил лимит после записи ({format_bytes(compressed_size)} > {format_bytes(plan.limit_bytes)}). Пересобираю частями."
         )
         try:
-            paths.final_zip.unlink(missing_ok=True)  # discard the oversized single archive before splitting
+            paths.final_zip.unlink(
+                missing_ok=True
+            )  # discard the oversized single archive before splitting
         except Exception:
             pass
         plan.split = True

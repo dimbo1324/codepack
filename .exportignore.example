@@ -1,10 +1,13 @@
-# Project Exporter rules
+# Project export rules: copied into a project root as .exportignore when users need custom filters.
 # Similar to .gitignore. Use !pattern to explicitly include custom-ignored files.
 
+# Heavy dependency/build folders are excluded by default because they waste AI context.
 node_modules/
 .git/
 dist/
 build/
+
+# Generated logs, archives, databases, and local secrets should stay out of shared export bundles.
 *.log
 *.zip
 *.rar
@@ -15,6 +18,6 @@ build/
 private/
 large-assets/
 
-# Examples:
+# Explicit include examples:
 # !README.md
 # !docs/

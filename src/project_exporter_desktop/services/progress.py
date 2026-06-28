@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 @dataclass(slots=True)
 class ProgressReporter:
-
     log: Callable[[str], None]
     total_steps: int = 8
     current_step: int = 0
@@ -22,7 +21,9 @@ class ProgressReporter:
 
     def update(self, percent: int, stage: str, current: str = "") -> None:
         percent = max(0, min(100, int(percent)))
-        self.log(f"PROGRESS\t{percent}\t{stage}\t{current}")  # tab-delimited sentinel parsed by the GUI worker
+        self.log(
+            f"PROGRESS\t{percent}\t{stage}\t{current}"
+        )  # tab-delimited sentinel parsed by the GUI worker
 
     def done(self, stage: str = "Done") -> None:
         self.update(100, stage, "")

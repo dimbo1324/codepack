@@ -134,7 +134,9 @@ def _read_package_json(root: Path) -> list[DependencyItem]:
             continue
         for name, version in deps.items():
             value = str(version)
-            items.append(DependencyItem(f"npm/{section}", str(name), value, _dependency_warning(value)))
+            items.append(
+                DependencyItem(f"npm/{section}", str(name), value, _dependency_warning(value))
+            )
     return items
 
 
@@ -152,7 +154,9 @@ def _read_requirements(root: Path) -> list[DependencyItem]:
             if not match:
                 continue
             version = (match.group(2) or "").strip()
-            result.append(DependencyItem(filename, match.group(1), version, _dependency_warning(version)))
+            result.append(
+                DependencyItem(filename, match.group(1), version, _dependency_warning(version))
+            )
     return result
 
 
@@ -169,7 +173,9 @@ def _read_go_mod(root: Path) -> list[DependencyItem]:
             value = value.removeprefix("require ").strip()
         parts = value.split()
         if len(parts) >= 2:
-            result.append(DependencyItem("go.mod", parts[0], parts[1], _dependency_warning(parts[1])))
+            result.append(
+                DependencyItem("go.mod", parts[0], parts[1], _dependency_warning(parts[1]))
+            )
     return result
 
 
@@ -189,7 +195,9 @@ def _read_cargo_toml(root: Path) -> list[DependencyItem]:
         name, version = value.split("=", 1)
         version_value = version.strip().strip('"')
         result.append(
-            DependencyItem("Cargo.toml", name.strip(), version_value, _dependency_warning(version_value))
+            DependencyItem(
+                "Cargo.toml", name.strip(), version_value, _dependency_warning(version_value)
+            )
         )
     return result
 
@@ -279,7 +287,9 @@ def analyze_project(root: Path, ignored_dirs: frozenset[str] | set[str]) -> Anal
             if risk is not None and len(report.risks) < 100:  # cap at 100 to avoid huge reports
                 report.risks.append(risk)
 
-    report.languages = sorted(by_language.values(), key=lambda item: item.loc, reverse=True)  # sort by LOC so dominant language appears first
+    report.languages = sorted(
+        by_language.values(), key=lambda item: item.loc, reverse=True
+    )  # sort by LOC so dominant language appears first
     report.dependencies = (
         _read_package_json(root)
         + _read_requirements(root)

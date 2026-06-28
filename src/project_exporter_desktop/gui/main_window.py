@@ -1,3 +1,5 @@
+# PySide6 GUI module: keep export/business logic in services and communicate through workers/signals.
+
 from __future__ import annotations
 
 import os
@@ -134,7 +136,9 @@ class MainWindow(QMainWindow):
         tools_menu = self.menuBar().addMenu(t("menu.tools"))
         tools_menu.addAction(t("menu.tools.rules"), self._edit_rules)
         tools_menu.addAction(t("menu.tools.prompt_goals"), self._edit_prompt_goals)
-        tools_menu.addAction(t("menu.tools.create_exportignore"), self._create_exportignore_template)
+        tools_menu.addAction(
+            t("menu.tools.create_exportignore"), self._create_exportignore_template
+        )
         tools_menu.addSeparator()
         tools_menu.addAction(t("menu.tools.export_settings"), self._export_settings)
         tools_menu.addAction(t("menu.tools.import_settings"), self._import_settings)
@@ -425,6 +429,7 @@ class MainWindow(QMainWindow):
         for key in ("status.ready", "status.building", "status.exporting", "status.clipboard"):
             # Check both RU and EN forms
             from ..i18n import _STRINGS
+
             for lang_strings in _STRINGS.values():
                 if current_status == lang_strings.get(key, ""):
                     self.status_label.setText(t(key))
@@ -589,9 +594,7 @@ class MainWindow(QMainWindow):
     def _on_preview_confirmed(self, overrides: object) -> None:
         file_overrides: dict[str, bool] = overrides if isinstance(overrides, dict) else {}
         if self.pending_source_root is None or self.pending_config is None:
-            QMessageBox.critical(
-                self, t("msg.internal_error.title"), t("msg.internal_error.body")
-            )
+            QMessageBox.critical(self, t("msg.internal_error.title"), t("msg.internal_error.body"))
             return
         self._run_export(self.pending_source_root, self.pending_config, file_overrides)
 
@@ -667,9 +670,7 @@ class MainWindow(QMainWindow):
                     3000,
                 )
             else:
-                QMessageBox.warning(
-                    self, t("msg.stopped.title"), t("msg.stopped.body")
-                )
+                QMessageBox.warning(self, t("msg.stopped.title"), t("msg.stopped.body"))
         else:
             self.page_result.set_success(self.last_result_path)
             if self._tray_quick_mode:
@@ -680,9 +681,7 @@ class MainWindow(QMainWindow):
                     3000,
                 )
             else:
-                QMessageBox.information(
-                    self, t("msg.export_done.title"), t("msg.export_done.body")
-                )
+                QMessageBox.information(self, t("msg.export_done.title"), t("msg.export_done.body"))
         self.status_label.setText(t("status.ready"))
         self._tray_quick_mode = False
 
@@ -751,9 +750,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             t("msg.clipboard_done.title"),
-            t("msg.clipboard_done.body").format(
-                size=format_bytes(byte_count), summary=summary
-            ),
+            t("msg.clipboard_done.body").format(size=format_bytes(byte_count), summary=summary),
         )
 
     def _on_clipboard_failed(self, traceback_text: str) -> None:
@@ -854,9 +851,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, t("msg.import_settings_failed.title"), str(exc))
 
     def _reset_settings(self) -> None:
-        reply = QMessageBox.question(
-            self, t("msg.reset.title"), t("msg.reset.body")
-        )
+        reply = QMessageBox.question(self, t("msg.reset.title"), t("msg.reset.body"))
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
@@ -960,9 +955,7 @@ class MainWindow(QMainWindow):
         if self.last_result_path and self.last_result_path.exists():
             self._open_path(self.last_result_path)
         else:
-            QMessageBox.warning(
-                self, t("msg.no_result.title"), t("msg.no_result.body")
-            )
+            QMessageBox.warning(self, t("msg.no_result.title"), t("msg.no_result.body"))
 
     def _open_path(self, path: Path) -> None:
         try:

@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,7 +17,6 @@ from . import make_card, make_scroll_page
 
 
 class _ProgressBar(QWidget):
-
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -30,7 +31,6 @@ class _ProgressBar(QWidget):
 
 
 class RunPage(QWidget):
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 

@@ -1,3 +1,5 @@
+# Build helper used by release packaging to produce the PyInstaller executable.
+
 from __future__ import annotations
 
 import subprocess

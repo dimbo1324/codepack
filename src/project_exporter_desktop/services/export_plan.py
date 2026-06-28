@@ -108,7 +108,9 @@ def _selected_by_diff_and_incremental(
         selected_sets.append(incremental.paths)
     if not selected_sets:
         return True  # no active filter means "include everything"
-    return all(rel_key in selected for selected in selected_sets)  # file must appear in every active set
+    return all(
+        rel_key in selected for selected in selected_sets
+    )  # file must appear in every active set
 
 
 def build_export_plan(

@@ -1,3 +1,5 @@
+# PySide6 wizard page module: owns one visible screen and emits user actions back to MainWindow.
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -20,7 +22,6 @@ from . import make_card, make_scroll_page, set_combo_value, wrap_layout
 
 
 class SettingsPage(QWidget):
-
     def __init__(self, profile_catalog: dict[str, str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._profile_catalog = profile_catalog

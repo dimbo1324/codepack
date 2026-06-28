@@ -1,3 +1,5 @@
+# Shared GUI page helpers used by concrete wizard pages.
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
