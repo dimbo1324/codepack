@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer
-from PySide6.QtGui import QAction, QCursor, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCursor, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -128,7 +128,6 @@ class MainWindow(QMainWindow):
         self._zoom_in_action: QAction | None = None
         self._zoom_out_action: QAction | None = None
         self._zoom_reset_action: QAction | None = None
-        self._zoom_shortcuts: list[QShortcut] = []
         self._lang_action: QAction | None = None
         self.tray_menu: QMenu | None = None
         self.tray_quick_action: QAction | None = None
@@ -146,14 +145,13 @@ class MainWindow(QMainWindow):
         self._build_tray()
         self._build_watcher()
         self._build_menu()
-        self._install_zoom_shortcuts()
         self._build_ui()
         self._load_config_to_ui()
         self._apply_configured_theme()
         self._sync_watcher()
         self._apply_zoom(self.config.normalized_ui_zoom())
-        self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
-        self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
+        self._append_log(t("log.ready").format(name=APP_NAME, version=APP_VERSION))
+        self._append_log(t("log.choose_folder"))
 
         # Wire language change signal
         get_i18n().language_changed.connect(self._on_language_changed)
@@ -164,71 +162,110 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(icon)))
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu(t("menu.file"))
-        open_desktop = QAction(t("menu.file.desktop"), self)
-        open_desktop.triggered.connect(self._open_desktop)
-        file_menu.addAction(open_desktop)
-        open_result = QAction(t("menu.file.last_result"), self)
-        open_result.triggered.connect(self._open_last_result)
-        file_menu.addAction(open_result)
-        file_menu.addSeparator()
-        exit_action = QAction(t("menu.file.exit"), self)
-        exit_action.triggered.connect(self._exit_from_tray)
-        file_menu.addAction(exit_action)
+        # Built exactly once. Language changes call _retranslate_menu() instead of
+        # rebuilding, so shortcut-bearing QActions are never duplicated (which would
+        # otherwise create "ambiguous shortcut overload" and break the zoom keys).
+        bar = self.menuBar()
 
-        tools_menu = self.menuBar().addMenu(t("menu.tools"))
-        tools_menu.addAction(t("menu.tools.rules"), self._edit_rules)
-        tools_menu.addAction(t("menu.tools.prompt_goals"), self._edit_prompt_goals)
-        tools_menu.addAction(
+        self._file_menu = bar.addMenu(t("menu.file"))
+        self._act_open_desktop = QAction(t("menu.file.desktop"), self)
+        self._act_open_desktop.triggered.connect(self._open_desktop)
+        self._file_menu.addAction(self._act_open_desktop)
+        self._act_open_result = QAction(t("menu.file.last_result"), self)
+        self._act_open_result.triggered.connect(self._open_last_result)
+        self._file_menu.addAction(self._act_open_result)
+        self._file_menu.addSeparator()
+        self._act_exit = QAction(t("menu.file.exit"), self)
+        self._act_exit.triggered.connect(self._exit_from_tray)
+        self._file_menu.addAction(self._act_exit)
+
+        self._tools_menu = bar.addMenu(t("menu.tools"))
+        self._act_rules = self._tools_menu.addAction(t("menu.tools.rules"), self._edit_rules)
+        self._act_prompt_goals = self._tools_menu.addAction(
+            t("menu.tools.prompt_goals"), self._edit_prompt_goals
+        )
+        self._act_create_exportignore = self._tools_menu.addAction(
             t("menu.tools.create_exportignore"), self._create_exportignore_template
         )
-        tools_menu.addSeparator()
-        tools_menu.addAction(t("menu.tools.export_settings"), self._export_settings)
-        tools_menu.addAction(t("menu.tools.import_settings"), self._import_settings)
-        tools_menu.addAction(t("menu.tools.reset_settings"), self._reset_settings)
-        tools_menu.addSeparator()
-        tools_menu.addAction(t("menu.tools.history"), self._show_history)
+        self._tools_menu.addSeparator()
+        self._act_export_settings = self._tools_menu.addAction(
+            t("menu.tools.export_settings"), self._export_settings
+        )
+        self._act_import_settings = self._tools_menu.addAction(
+            t("menu.tools.import_settings"), self._import_settings
+        )
+        self._act_reset_settings = self._tools_menu.addAction(
+            t("menu.tools.reset_settings"), self._reset_settings
+        )
+        self._tools_menu.addSeparator()
+        self._act_history = self._tools_menu.addAction(t("menu.tools.history"), self._show_history)
 
-        view_menu = self.menuBar().addMenu(t("menu.view"))
-        zoom_in_act = QAction(t("menu.view.zoom_in"), self)
-        zoom_in_act.setShortcuts(
+        self._view_menu = bar.addMenu(t("menu.view"))
+        self._zoom_in_action = QAction(t("menu.view.zoom_in"), self)
+        self._zoom_in_action.setShortcuts(
             [
                 QKeySequence.StandardKey.ZoomIn,
                 QKeySequence("Ctrl+="),
                 QKeySequence("Ctrl++"),
+                QKeySequence("Ctrl+Num++"),
             ]
         )
-        zoom_in_act.triggered.connect(self._zoom_in)
-        view_menu.addAction(zoom_in_act)
-        self._zoom_in_action = zoom_in_act
+        self._zoom_in_action.triggered.connect(self._zoom_in)
+        self._view_menu.addAction(self._zoom_in_action)
 
-        zoom_out_act = QAction(t("menu.view.zoom_out"), self)
-        zoom_out_act.setShortcuts([QKeySequence.StandardKey.ZoomOut, QKeySequence("Ctrl+-")])
-        zoom_out_act.triggered.connect(self._zoom_out)
-        view_menu.addAction(zoom_out_act)
-        self._zoom_out_action = zoom_out_act
+        self._zoom_out_action = QAction(t("menu.view.zoom_out"), self)
+        self._zoom_out_action.setShortcuts(
+            [
+                QKeySequence.StandardKey.ZoomOut,
+                QKeySequence("Ctrl+-"),
+                QKeySequence("Ctrl+Num+-"),
+            ]
+        )
+        self._zoom_out_action.triggered.connect(self._zoom_out)
+        self._view_menu.addAction(self._zoom_out_action)
 
-        zoom_reset_act = QAction(t("menu.view.zoom_reset"), self)
-        zoom_reset_act.setShortcuts([QKeySequence("Ctrl+0")])
-        zoom_reset_act.triggered.connect(self._zoom_reset)
-        view_menu.addAction(zoom_reset_act)
-        self._zoom_reset_action = zoom_reset_act
+        self._zoom_reset_action = QAction(t("menu.view.zoom_reset"), self)
+        self._zoom_reset_action.setShortcuts([QKeySequence("Ctrl+0"), QKeySequence("Ctrl+Num+0")])
+        self._zoom_reset_action.triggered.connect(self._zoom_reset)
+        self._view_menu.addAction(self._zoom_reset_action)
 
-        view_menu.addSeparator()
-        lang_act = QAction(t("menu.view.language"), self)
-        lang_act.triggered.connect(self._toggle_language)
-        view_menu.addAction(lang_act)
-        self._lang_action = lang_act
+        self._view_menu.addSeparator()
+        self._lang_action = QAction(t("menu.view.language"), self)
+        self._lang_action.triggered.connect(self._toggle_language)
+        self._view_menu.addAction(self._lang_action)
 
-        help_menu = self.menuBar().addMenu(t("menu.help"))
-        help_act = QAction(t("menu.help.manual"), self)
-        help_act.setShortcut("F1")
-        help_act.triggered.connect(self._show_help)
-        help_menu.addAction(help_act)
-        help_menu.addSeparator()
-        about_act = QAction(f"{t('menu.help.about')} {APP_NAME}", self)
-        about_act.triggered.connect(self._show_about)
-        help_menu.addAction(about_act)
+        self._help_menu = bar.addMenu(t("menu.help"))
+        self._act_help = QAction(t("menu.help.manual"), self)
+        self._act_help.setShortcut("F1")
+        self._act_help.triggered.connect(self._show_help)
+        self._help_menu.addAction(self._act_help)
+        self._help_menu.addSeparator()
+        self._act_about = QAction(f"{t('menu.help.about')} {APP_NAME}", self)
+        self._act_about.triggered.connect(self._show_about)
+        self._help_menu.addAction(self._act_about)
+
+    def _retranslate_menu(self) -> None:
+        # Update menu titles and action labels in place; never re-create actions.
+        self._file_menu.setTitle(t("menu.file"))
+        self._act_open_desktop.setText(t("menu.file.desktop"))
+        self._act_open_result.setText(t("menu.file.last_result"))
+        self._act_exit.setText(t("menu.file.exit"))
+        self._tools_menu.setTitle(t("menu.tools"))
+        self._act_rules.setText(t("menu.tools.rules"))
+        self._act_prompt_goals.setText(t("menu.tools.prompt_goals"))
+        self._act_create_exportignore.setText(t("menu.tools.create_exportignore"))
+        self._act_export_settings.setText(t("menu.tools.export_settings"))
+        self._act_import_settings.setText(t("menu.tools.import_settings"))
+        self._act_reset_settings.setText(t("menu.tools.reset_settings"))
+        self._act_history.setText(t("menu.tools.history"))
+        self._view_menu.setTitle(t("menu.view"))
+        self._zoom_in_action.setText(t("menu.view.zoom_in"))
+        self._zoom_out_action.setText(t("menu.view.zoom_out"))
+        self._zoom_reset_action.setText(t("menu.view.zoom_reset"))
+        self._lang_action.setText(t("menu.view.language"))
+        self._help_menu.setTitle(t("menu.help"))
+        self._act_help.setText(t("menu.help.manual"))
+        self._act_about.setText(f"{t('menu.help.about')} {APP_NAME}")
 
     def _build_tray(self) -> None:
         self.tray_icon = QSystemTrayIcon(self)
@@ -469,13 +506,11 @@ class MainWindow(QMainWindow):
         self.config.save()
 
     def _on_language_changed(self) -> None:
-        self.menuBar().clear()
-        self._build_menu()
+        # Retranslate the existing menu in place — no rebuild, so zoom/F1 shortcuts
+        # are not duplicated across language switches.
+        self._retranslate_menu()
         self._update_zoom_actions()
 
-        # Update language toggle action label
-        if self._lang_action is not None:
-            self._lang_action.setText(t("menu.view.language"))
         if self.tray_quick_action is not None:
             self.tray_quick_action.setText(t("tray.menu_quick"))
         if self.tray_open_action is not None:
@@ -615,11 +650,49 @@ class MainWindow(QMainWindow):
         label = format_stack_label(root) if root and root.is_dir() else ""
         self.page_project.set_detected_stack(label)
 
+    # ------------------------------------------------------------------
+    # Message-box helpers (explicit button text so Qt's English-only
+    # standard buttons follow the active UI language).
+    # ------------------------------------------------------------------
+
+    def _message_box(self, icon: QMessageBox.Icon, title: str, text: str) -> QMessageBox:
+        box = QMessageBox(self)
+        box.setIcon(icon)
+        box.setWindowTitle(title)
+        box.setText(text)
+        return box
+
+    def _info(self, title: str, text: str) -> None:
+        box = self._message_box(QMessageBox.Icon.Information, title, text)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.button(QMessageBox.StandardButton.Ok).setText(t("btn.ok"))
+        box.exec()
+
+    def _warn(self, title: str, text: str) -> None:
+        box = self._message_box(QMessageBox.Icon.Warning, title, text)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.button(QMessageBox.StandardButton.Ok).setText(t("btn.ok"))
+        box.exec()
+
+    def _error(self, title: str, text: str) -> None:
+        box = self._message_box(QMessageBox.Icon.Critical, title, text)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.button(QMessageBox.StandardButton.Ok).setText(t("btn.ok"))
+        box.exec()
+
+    def _confirm(self, title: str, text: str) -> bool:
+        box = self._message_box(QMessageBox.Icon.Question, title, text)
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.button(QMessageBox.StandardButton.Yes).setText(t("btn.yes"))
+        box.button(QMessageBox.StandardButton.No).setText(t("btn.no"))
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        return box.exec() == QMessageBox.StandardButton.Yes
+
     def _validate_source_root(self) -> Path | None:
         try:
             return validate_source_root(self.page_project.get_root())
         except Exception as exc:
-            QMessageBox.critical(self, t("msg.bad_path.title"), str(exc))
+            self._error(t("msg.bad_path.title"), str(exc))
             return None
 
     def _start(self, codex_package: bool = False) -> None:
@@ -640,9 +713,11 @@ class MainWindow(QMainWindow):
         self.page_preview.reset()
         self._set_page(_PAGE_PREVIEW)
         self._append_log(
-            f"Строится план экспорта... профиль={run_config.normalized_export_profile()}, "
-            f"режим={run_config.normalized_safe_export_mode()}, "
-            f"diff={run_config.normalized_diff_export_mode()}"
+            t("log.building_plan").format(
+                profile=run_config.normalized_export_profile(),
+                mode=run_config.normalized_safe_export_mode(),
+                diff=run_config.normalized_diff_export_mode(),
+            )
         )
         self._set_running(True, preview=True)
         self.preview_worker = PlanPreviewWorker(source_root, run_config, self)
@@ -661,7 +736,7 @@ class MainWindow(QMainWindow):
     def _on_preview_confirmed(self, overrides: object) -> None:
         file_overrides: dict[str, bool] = overrides if isinstance(overrides, dict) else {}
         if self.pending_source_root is None or self.pending_config is None:
-            QMessageBox.critical(self, t("msg.internal_error.title"), t("msg.internal_error.body"))
+            self._error(t("msg.internal_error.title"), t("msg.internal_error.body"))
             return
         self._run_export(self.pending_source_root, self.pending_config, file_overrides)
 
@@ -671,8 +746,7 @@ class MainWindow(QMainWindow):
     def _on_preview_failed(self, traceback_text: str) -> None:
         self._set_running(False)
         self._append_diagnostic(traceback_text)
-        QMessageBox.critical(
-            self,
+        self._error(
             t("msg.preview_failed.title"),
             t("msg.preview_failed.body").format(log=self.log_file),
         )
@@ -690,7 +764,7 @@ class MainWindow(QMainWindow):
         self.page_run.reset()
         self._set_page(_PAGE_RUN)
         self._set_running(True)
-        self._append_log("Запуск потока экспорта...")
+        self._append_log(t("log.export_thread_start"))
         self.export_worker = ExportWorker(
             source_root,
             config,
@@ -707,14 +781,9 @@ class MainWindow(QMainWindow):
     def _cancel_export(self) -> None:
         if not (self.export_worker and self.export_worker.isRunning()):
             return
-        reply = QMessageBox.question(
-            self,
-            t("msg.cancel_export.title"),
-            t("msg.cancel_export.body"),
-        )
-        if reply == QMessageBox.StandardButton.Yes:
+        if self._confirm(t("msg.cancel_export.title"), t("msg.cancel_export.body")):
             self.cancel_event.set()
-            self._append_log("Запрошена отмена...")
+            self._append_log(t("log.cancel_requested"))
 
     def _on_export_finished(self, result: object) -> None:
         data = result if isinstance(result, dict) else {}
@@ -737,7 +806,7 @@ class MainWindow(QMainWindow):
                     3000,
                 )
             else:
-                QMessageBox.warning(self, t("msg.stopped.title"), t("msg.stopped.body"))
+                self._warn(t("msg.stopped.title"), t("msg.stopped.body"))
         else:
             self.page_result.set_success(self.last_result_path)
             if self._tray_quick_mode:
@@ -748,7 +817,7 @@ class MainWindow(QMainWindow):
                     3000,
                 )
             else:
-                QMessageBox.information(self, t("msg.export_done.title"), t("msg.export_done.body"))
+                self._info(t("msg.export_done.title"), t("msg.export_done.body"))
         self.status_label.setText(t("status.ready"))
         self._tray_quick_mode = False
 
@@ -765,8 +834,7 @@ class MainWindow(QMainWindow):
                 4000,
             )
         else:
-            QMessageBox.critical(
-                self,
+            self._error(
                 t("msg.export_failed.title"),
                 t("msg.export_failed.body").format(log=self.log_file),
             )
@@ -780,9 +848,11 @@ class MainWindow(QMainWindow):
         self.page_run.append_log(message)
 
     def _append_diagnostic(self, traceback_text: str) -> None:
-        append_app_log("Техническая трассировка:")
+        # The raw traceback header stays in English in the on-disk log file (stable for
+        # diagnostics); the user-facing pointer line follows the active UI language.
+        append_app_log("Technical traceback:")
         append_app_log(traceback_text)
-        self._append_log(f"Технические подробности записаны в: {self.log_file}")
+        self._append_log(t("log.diagnostic_saved").format(log=self.log_file))
 
     def _start_clipboard_export(self) -> None:
         if self.clipboard_worker and self.clipboard_worker.isRunning():
@@ -814,8 +884,7 @@ class MainWindow(QMainWindow):
             self._watch_clipboard_mode = False
             return
 
-        QMessageBox.information(
-            self,
+        self._info(
             t("msg.clipboard_done.title"),
             t("msg.clipboard_done.body").format(size=format_bytes(byte_count), summary=summary),
         )
@@ -833,8 +902,7 @@ class MainWindow(QMainWindow):
             )
             self._watch_clipboard_mode = False
             return
-        QMessageBox.critical(
-            self,
+        self._error(
             t("msg.clipboard_failed.title"),
             t("msg.clipboard_failed.body").format(log=self.log_file),
         )
@@ -855,7 +923,7 @@ class MainWindow(QMainWindow):
         self.config.always_include_files = values["always_include_files"]
         self.config.always_include_dirs = values["always_include_dirs"]
         self.config.save()
-        self._append_log("Правила включения/исключения сохранены.")
+        self._append_log(t("log.rules_saved"))
 
     def _edit_prompt_goals(self) -> None:
         dialog = PromptGoalsDialog(self.config.prompt_goals, self)
@@ -863,7 +931,7 @@ class MainWindow(QMainWindow):
             return
         self.config.prompt_goals = dialog.goals()
         self.config.save()
-        self._append_log("Цели промптов сохранены.")
+        self._append_log(t("log.goals_saved"))
 
     def _create_exportignore_template(self) -> None:
         source_root = self._validate_source_root()
@@ -871,20 +939,17 @@ class MainWindow(QMainWindow):
             return
         target = source_root / ".exportignore"
         if target.exists():
-            reply = QMessageBox.question(
-                self,
-                t("msg.exportignore_exists.title"),
-                t("msg.exportignore_exists.body"),
-            )
-            if reply != QMessageBox.StandardButton.Yes:
+            if not self._confirm(
+                t("msg.exportignore_exists.title"), t("msg.exportignore_exists.body")
+            ):
                 return
         try:
             target.write_text(EXPORTIGNORE_TEMPLATE, encoding="utf-8", newline="\n")
-            self._append_log(f"Создан .exportignore: {target}")
+            self._append_log(t("log.exportignore_created").format(path=target))
             self._open_path(target)
         except Exception as exc:
-            QMessageBox.critical(
-                self, t("msg.write_error.title"), t("msg.write_error_exportignore").format(exc=exc)
+            self._error(
+                t("msg.write_error.title"), t("msg.write_error_exportignore").format(exc=exc)
             )
 
     def _export_settings(self) -> None:
@@ -893,19 +958,19 @@ class MainWindow(QMainWindow):
             self,
             t("menu.tools.export_settings"),
             "project_exporter_settings.json",
-            "JSON-файлы (*.json)",
+            t("dialog.json_filter"),
         )
         if not target:
             return
         try:
             Config.export_settings(Path(target), self.config)
-            self._append_log(f"Настройки экспортированы: {target}")
+            self._append_log(t("log.settings_exported").format(path=target))
         except Exception as exc:
-            QMessageBox.critical(self, t("msg.export_settings_failed.title"), str(exc))
+            self._error(t("msg.export_settings_failed.title"), str(exc))
 
     def _import_settings(self) -> None:
         source, _ = QFileDialog.getOpenFileName(
-            self, t("menu.tools.import_settings"), "", "JSON-файлы (*.json)"
+            self, t("menu.tools.import_settings"), "", t("dialog.json_filter")
         )
         if not source:
             return
@@ -913,13 +978,12 @@ class MainWindow(QMainWindow):
             self.config = Config.import_settings(Path(source))
             self.config.save()
             self._load_config_to_ui()
-            self._append_log(f"Настройки импортированы: {source}")
+            self._append_log(t("log.settings_imported").format(path=source))
         except Exception as exc:
-            QMessageBox.critical(self, t("msg.import_settings_failed.title"), str(exc))
+            self._error(t("msg.import_settings_failed.title"), str(exc))
 
     def _reset_settings(self) -> None:
-        reply = QMessageBox.question(self, t("msg.reset.title"), t("msg.reset.body"))
-        if reply != QMessageBox.StandardButton.Yes:
+        if not self._confirm(t("msg.reset.title"), t("msg.reset.body")):
             return
         try:
             SETTINGS_FILE.unlink(missing_ok=True)
@@ -927,7 +991,7 @@ class MainWindow(QMainWindow):
             pass
         self.config = Config()
         self._load_config_to_ui()
-        self._append_log("Настройки сброшены к значениям по умолчанию.")
+        self._append_log(t("log.settings_reset"))
 
     def _show_history(self) -> None:
         HistoryDialog(load_export_history(), self).exec()
@@ -969,9 +1033,7 @@ class MainWindow(QMainWindow):
 
     def _on_analytics_failed(self, traceback_text: str) -> None:
         self._append_diagnostic(traceback_text)
-        self.page_analytics.set_error(
-            "Не удалось собрать аналитику. Подробности записаны в журнал."
-        )
+        self.page_analytics.set_error(t("analytics.error_generic"))
 
     def _apply_zoom(self, factor: float) -> None:
         from PySide6.QtGui import QFont
@@ -993,23 +1055,6 @@ class MainWindow(QMainWindow):
         if self._zoom_out_action is not None:
             self._zoom_out_action.setEnabled(self._zoom_factor > _ZOOM_MIN + 0.01)
 
-    def _install_zoom_shortcuts(self) -> None:
-        shortcut_map = {
-            "Ctrl++": self._zoom_in,
-            "Ctrl+=": self._zoom_in,
-            "Ctrl+Num++": self._zoom_in,
-            "Ctrl+-": self._zoom_out,
-            "Ctrl+_": self._zoom_out,
-            "Ctrl+Num+-": self._zoom_out,
-            "Ctrl+0": self._zoom_reset,
-            "Ctrl+Num+0": self._zoom_reset,
-        }
-        for sequence, slot in shortcut_map.items():
-            shortcut = QShortcut(QKeySequence(sequence), self)
-            shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
-            shortcut.activated.connect(slot)
-            self._zoom_shortcuts.append(shortcut)
-
     def _zoom_in(self) -> None:
         self._apply_zoom(self._zoom_factor + 0.1)
 
@@ -1023,8 +1068,7 @@ class MainWindow(QMainWindow):
         HelpDialog(self).exec()
 
     def _show_about(self) -> None:
-        QMessageBox.information(
-            self,
+        self._info(
             t("dialog.about.title").format(name=APP_NAME),
             t("dialog.about.body").format(name=APP_NAME, version=APP_VERSION),
         )
@@ -1039,7 +1083,7 @@ class MainWindow(QMainWindow):
         if self.last_result_path and self.last_result_path.exists():
             self._open_path(self.last_result_path)
         else:
-            QMessageBox.warning(self, t("msg.no_result.title"), t("msg.no_result.body"))
+            self._warn(t("msg.no_result.title"), t("msg.no_result.body"))
 
     def _open_path(self, path: Path) -> None:
         try:
@@ -1050,8 +1094,7 @@ class MainWindow(QMainWindow):
             else:
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception as exc:
-            QMessageBox.critical(
-                self,
+            self._error(
                 t("msg.open_error.title"),
                 t("msg.open_error.body").format(path=path, exc=exc),
             )

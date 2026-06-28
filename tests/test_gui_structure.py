@@ -66,17 +66,36 @@ def test_application_menus_have_hover_and_shortcut_spacing_styles() -> None:
         assert "QSpinBox::up-button" not in text
 
 
-def test_main_window_retranslates_menu_bar_and_zoom_shortcuts() -> None:
+def test_main_window_retranslates_menu_in_place_without_rebuild() -> None:
+    # The language switch must retranslate the existing menu in place. Rebuilding the
+    # menu (menuBar().clear() + _build_menu) leaked shortcut-bearing QActions and broke
+    # the zoom keys via "ambiguous shortcut overload", so guard against that regression.
     text = (SRC / "gui" / "main_window.py").read_text(encoding="utf-8")
-    assert "self.menuBar().clear()" in text
-    assert "self._build_menu()" in text
-    assert "QShortcut" in text
-    assert "ApplicationShortcut" in text
+    assert "def _retranslate_menu(self)" in text
+    assert "self._retranslate_menu()" in text
+    assert "self.menuBar().clear()" not in text
+
+
+def test_main_window_zoom_shortcuts_bound_only_to_actions() -> None:
+    # Zoom shortcuts live exclusively on menu QActions — no parallel QShortcut objects,
+    # which is what previously caused the ambiguous-overload conflict.
+    text = (SRC / "gui" / "main_window.py").read_text(encoding="utf-8")
+    assert "QShortcut" not in text
+    assert "_install_zoom_shortcuts" not in text
+    assert "self._zoom_in_action.setShortcuts" in text
     assert 'QKeySequence("Ctrl+=")' in text
     assert 'QKeySequence("Ctrl++")' in text
-    assert '"Ctrl+_"' in text
-    assert '"Ctrl+Num+-"' in text
+    assert 'QKeySequence("Ctrl+0")' in text
+    assert 'QKeySequence("Ctrl+Num++")' in text
     assert "QKeySequence.StandardKey.ZoomIn" in text
+
+
+def test_clipboard_dump_redacts_secrets_when_enabled() -> None:
+    # The "Copy Dump" clipboard path must mask secrets like the ZIP text dump does,
+    # otherwise redact_secrets=True would still leak credentials to the clipboard.
+    text = (SRC / "gui" / "workers.py").read_text(encoding="utf-8")
+    assert "if self.config.redact_secrets:" in text
+    assert "redact_secrets(content)" in text
 
 
 def test_zoom_scales_stylesheet_font_sizes() -> None:

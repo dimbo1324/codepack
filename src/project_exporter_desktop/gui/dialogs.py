@@ -178,9 +178,13 @@ class HistoryDialog(QDialog):
                     "\n".join(
                         [
                             str(item.get("generated_at", "")),
-                            f"Проект: {item.get('project_name', '')}",
-                            f"Профиль: {item.get('profile', '')}; Режим: {item.get('safe_export_mode', '')}; Разбивка: {item.get('split_archives', False)}",
-                            f"Результат: {item.get('result', '')}",
+                            t("history.dlg_project").format(name=item.get("project_name", "")),
+                            t("history.dlg_meta").format(
+                                profile=item.get("profile", ""),
+                                mode=item.get("safe_export_mode", ""),
+                                split=item.get("split_archives", False),
+                            ),
+                            t("history.dlg_result").format(result=item.get("result", "")),
                         ]
                     )
                 )

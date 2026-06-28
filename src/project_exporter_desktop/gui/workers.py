@@ -12,6 +12,7 @@ from PySide6.QtCore import QThread, Signal
 
 from ..config import Config
 from ..constants import TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION
+from ..i18n import t
 from ..services.analytics_service import analyze_project
 from ..services.diff_service import resolve_diff_selection
 from ..services.export_ignore import ExportIgnoreRules
@@ -19,6 +20,7 @@ from ..services.export_plan import build_export_plan, format_export_plan_for_use
 from ..services.exporter import ProjectExporter
 from ..services.incremental import IncrementalSelection
 from ..services.stack_detector import merged_extra_ignored_dirs
+from ..utils.text_utils import redact_secrets
 
 _log = logging.getLogger(__name__)
 
@@ -192,21 +194,19 @@ class ClipboardExportWorker(QThread):
             parts: list[str] = []
             total_bytes = 0
 
+            bar = "# " + "═" * 50
             ctx = (self.config.developer_context or "").strip()
             if ctx:
                 header = (
-                    "# ══════════════════════════════════════════════════\n"
-                    "# ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА\n"
-                    "# ══════════════════════════════════════════════════\n\n"
-                    + ctx
-                    + "\n\n# ══════════════════════════════════════════════════\n\n"
+                    f"{bar}\n# {t('clipboard.context_header')}\n{bar}\n\n" + ctx + f"\n\n{bar}\n\n"
                 )
                 parts.append(header)
                 total_bytes += len(header.encode("utf-8"))
 
+            truncated_note = f"\n\n{t('clipboard.truncated')}\n"
             for pf in plan.included_files:
                 if total_bytes >= self._MAX_CLIPBOARD_BYTES:
-                    parts.append("\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n")
+                    parts.append(truncated_note)
                     break
                 file_path = self.source_root / pf.relative_path
                 if not file_path.is_file():
@@ -222,10 +222,17 @@ class ClipboardExportWorker(QThread):
                     content = file_path.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     continue
-                block = f"\n\n{'=' * 60}\nФАЙЛ: {pf.relative_path}\n{'=' * 60}\n{content}"
+                # Mirror the ZIP text-dump behaviour: mask secrets when redaction is on,
+                # so the clipboard path cannot leak credentials the export would have hidden.
+                if self.config.redact_secrets:
+                    content = redact_secrets(content)
+                sep = "=" * 60
+                block = (
+                    f"\n\n{sep}\n{t('clipboard.file_label')}: {pf.relative_path}\n{sep}\n{content}"
+                )
                 block_bytes = block.encode("utf-8")
                 if total_bytes + len(block_bytes) > self._MAX_CLIPBOARD_BYTES:
-                    parts.append("\n\n[ОБРЕЗАНО: достигнут лимит 20 МБ для буфера обмена]\n")
+                    parts.append(truncated_note)
                     break
                 parts.append(block)
                 total_bytes += len(block_bytes)
