@@ -67,8 +67,68 @@ QLineEdit, QComboBox, QSpinBox, QTextEdit, QPlainTextEdit, QTableWidget, QListWi
     selection-background-color: #2563eb;
 }
 
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QTextEdit:hover, QPlainTextEdit:hover, QTableWidget:hover, QListWidget:hover, QTreeWidget:hover {
+    border-color: #60a5fa;
+    background: #111827;
+}
+
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
     border: 1px solid #60a5fa;
+}
+
+QComboBox {
+    min-height: 20px;
+    padding-right: 30px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    border-left: 1px solid #334155;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    background: #111827;
+}
+
+QComboBox::drop-down:hover {
+    background: #1e293b;
+}
+
+QComboBox QAbstractItemView {
+    background: #0b1220;
+    border: 1px solid #334155;
+    color: #e5e7eb;
+    selection-background-color: #2563eb;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+QSpinBox {
+    min-height: 20px;
+    padding-right: 32px;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    width: 28px;
+    border-left: 1px solid #334155;
+    background: #111827;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background: #1e293b;
+}
+
+QSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    border-top-right-radius: 8px;
+}
+
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    border-bottom-right-radius: 8px;
 }
 
 QHeaderView::section {
@@ -130,6 +190,60 @@ QProgressBar::chunk {
 
 QCheckBox {
     spacing: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+}
+
+QCheckBox:hover {
+    color: #ffffff;
+    background: #111827;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+QMenuBar {
+    background: #020617;
+    color: #f8fafc;
+    spacing: 4px;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+QMenuBar::item:selected, QMenuBar::item:pressed {
+    background: #1e293b;
+    color: #ffffff;
+}
+
+QMenu {
+    background: #0b1220;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px;
+    color: #f8fafc;
+}
+
+QMenu::item {
+    min-width: 260px;
+    padding: 8px 90px 8px 18px;
+    border-radius: 6px;
+}
+
+QMenu::item:selected {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #1e293b;
+    margin: 5px 8px;
 }
 
 QMenu#TrayMenu {

@@ -181,6 +181,8 @@ def test_language_toggle_label_differs() -> None:
     set_language("en")
     en_label = t("menu.view.language")
     assert ru_label != en_label
+    assert ru_label.startswith("Переключить")
+    assert en_label.startswith("Switch")
 
 
 def test_history_status_keys() -> None:

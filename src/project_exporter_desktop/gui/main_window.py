@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer
-from PySide6.QtGui import QAction, QCursor, QIcon
+from PySide6.QtGui import QAction, QCursor, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -152,19 +152,25 @@ class MainWindow(QMainWindow):
 
         view_menu = self.menuBar().addMenu(t("menu.view"))
         zoom_in_act = QAction(t("menu.view.zoom_in"), self)
-        zoom_in_act.setShortcut("Ctrl+=")
+        zoom_in_act.setShortcuts(
+            [
+                QKeySequence.StandardKey.ZoomIn,
+                QKeySequence("Ctrl+="),
+                QKeySequence("Ctrl++"),
+            ]
+        )
         zoom_in_act.triggered.connect(self._zoom_in)
         view_menu.addAction(zoom_in_act)
         self._zoom_in_action = zoom_in_act
 
         zoom_out_act = QAction(t("menu.view.zoom_out"), self)
-        zoom_out_act.setShortcut("Ctrl+-")
+        zoom_out_act.setShortcuts([QKeySequence.StandardKey.ZoomOut, QKeySequence("Ctrl+-")])
         zoom_out_act.triggered.connect(self._zoom_out)
         view_menu.addAction(zoom_out_act)
         self._zoom_out_action = zoom_out_act
 
         zoom_reset_act = QAction(t("menu.view.zoom_reset"), self)
-        zoom_reset_act.setShortcut("Ctrl+0")
+        zoom_reset_act.setShortcuts([QKeySequence("Ctrl+0")])
         zoom_reset_act.triggered.connect(self._zoom_reset)
         view_menu.addAction(zoom_reset_act)
 
@@ -429,6 +435,9 @@ class MainWindow(QMainWindow):
         self.config.save()
 
     def _on_language_changed(self) -> None:
+        self.menuBar().clear()
+        self._build_menu()
+
         # Update language toggle action label
         if self._lang_action is not None:
             self._lang_action.setText(t("menu.view.language"))

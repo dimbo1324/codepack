@@ -52,6 +52,27 @@ def test_tray_menu_has_explicit_selected_styles() -> None:
         assert "background: #2563eb" in text
 
 
+def test_application_menus_have_hover_and_shortcut_spacing_styles() -> None:
+    styles_dir = SRC / "gui" / "styles"
+    for qss_file in ("app_dark.qss", "app_light.qss"):
+        text = (styles_dir / qss_file).read_text(encoding="utf-8")
+        assert "QMenuBar::item:selected" in text
+        assert "QMenu::item:selected" in text
+        assert "min-width: 260px" in text
+        assert "padding: 8px 90px 8px 18px" in text
+        assert "QLineEdit:hover" in text
+        assert "QCheckBox:hover" in text
+
+
+def test_main_window_retranslates_menu_bar_and_zoom_shortcuts() -> None:
+    text = (SRC / "gui" / "main_window.py").read_text(encoding="utf-8")
+    assert "self.menuBar().clear()" in text
+    assert "self._build_menu()" in text
+    assert 'QKeySequence("Ctrl+=")' in text
+    assert 'QKeySequence("Ctrl++")' in text
+    assert "QKeySequence.StandardKey.ZoomIn" in text
+
+
 def test_build_and_install_script_runs_full_interactive_packaging_flow() -> None:
     script = SRC.parents[1] / "build_and_install.bat"
     text = script.read_text(encoding="utf-8")
