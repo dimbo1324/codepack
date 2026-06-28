@@ -486,24 +486,24 @@ SENSITIVE_SUFFIXES: set[str] = {
 DEFAULT_EXPORT_PROFILE = "full"
 
 EXPORT_PROFILES: dict[str, str] = {
-    "quick": "Quick Export — short overview, setup/run info, key files and core project profile.",
-    "full": "Full Export — all generated reports and AI context files.",
-    "ai_review": "AI Review Export — all reports that help ChatGPT/Codex understand and safely modify the project.",
-    "security": "Security Export — configuration, dependency, Git, code-quality, and security-focused reports.",
-    "minimal": "Minimal Source Export — compact overview for lightweight sharing.",
+    "quick": "Быстрый — краткий обзор, инструкции по запуску, ключевые файлы и профиль проекта.",
+    "full": "Полный — все созданные отчёты и файлы AI-контекста.",
+    "ai_review": "AI-ревью — все отчёты для понимания проекта ChatGPT/Codex и безопасного изменения кода.",
+    "security": "Безопасность — конфигурация, зависимости, Git, качество кода и отчёты безопасности.",
+    "minimal": "Минимальный — компактный обзор для лёгкой передачи.",
 }
 
 SAFE_EXPORT_MODES: dict[str, str] = {
-    "safe": "Safe — excludes secrets, private keys, local databases, dumps and archives.",
-    "balanced": "Balanced — excludes high-risk credentials and keys, keeps more project configuration.",
-    "full": "Full — copies project files except ignored directories; use only for private/local exports.",
+    "safe": "Строгий — исключает секреты, приватные ключи, локальные БД, дампы и архивы.",
+    "balanced": "Сбалансированный — исключает высокорисковые ключи и учётные данные, сохраняет больше конфигурации.",
+    "full": "Полный — копирует файлы проекта, кроме игнорируемых директорий; только для приватных/локальных экспортов.",
 }
 
 DIFF_EXPORT_MODES: dict[str, str] = {
-    "all": "All files — export the whole project copy.",
-    "uncommitted": "Uncommitted changes — tracked changes plus untracked files.",
-    "changed_since_ref": "Changed since ref — files changed from a Git ref to HEAD.",
-    "between_refs": "Between refs — files changed between two Git refs.",
+    "all": "Все файлы — экспортировать полную копию проекта.",
+    "uncommitted": "Незакоммиченные изменения — отслеживаемые изменения и неотслеживаемые файлы.",
+    "changed_since_ref": "Изменения с ссылки — файлы, изменённые от указанной Git-ссылки до HEAD.",
+    "between_refs": "Между ссылками — файлы, изменённые между двумя Git-ссылками.",
 }
 
 HIGH_RISK_FILENAMES: set[str] = {

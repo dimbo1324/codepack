@@ -9,11 +9,11 @@ from PySide6.QtWidgets import (
 )
 
 _NAV_LABELS = [
-    "1  Project",
-    "2  Export settings",
-    "3  Safety & filters",
-    "4  Run log",
-    "5  Result summary",
+    "1  Проект",
+    "2  Настройки",
+    "3  Безопасность",
+    "4  Журнал",
+    "5  Результат",
 ]
 
 
@@ -36,7 +36,7 @@ class Sidebar(QFrame):
 
         title = QLabel("Project\nExporter")
         title.setObjectName("SidebarTitle")
-        subtitle = QLabel("AI-ready safe handoff")
+        subtitle = QLabel("Снимок проекта для ИИ")
         subtitle.setObjectName("SidebarSubtitle")
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -52,7 +52,7 @@ class Sidebar(QFrame):
 
         layout.addStretch(1)
 
-        desktop_button = QPushButton("Open Desktop")
+        desktop_button = QPushButton("Рабочий стол")
         desktop_button.setObjectName("NavButton")
         desktop_button.clicked.connect(self.open_desktop_requested.emit)
         layout.addWidget(desktop_button)
