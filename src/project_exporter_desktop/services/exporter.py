@@ -30,6 +30,7 @@ from .incremental import (
 )
 from .progress import ProgressReporter
 from .prompt_builder import write_custom_prompt
+from .stack_detector import merged_extra_ignored_dirs
 
 
 class ProjectExporter:
@@ -52,10 +53,11 @@ class ProjectExporter:
     def run(self) -> ExportPaths:
         paths = build_export_paths(self.source_root)
         progress = ProgressReporter(self.log, total_steps=8)
-        extra_ignored = self.config.effective_ignored_dirs() - {
+        stack_dirs = merged_extra_ignored_dirs(self.source_root)
+        extra_ignored = (self.config.effective_ignored_dirs() | stack_dirs) - {
             name.casefold() for name in IGNORED_DIR_NAMES
         }
-        ignored_for_walk = self.config.effective_ignored_dirs()
+        ignored_for_walk = self.config.effective_ignored_dirs() | stack_dirs
         max_bytes = self.config.effective_max_text_file_bytes()
         cancelled = False
 

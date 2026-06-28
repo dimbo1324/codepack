@@ -37,6 +37,7 @@ from ..services.export_profiles import (
     ensure_user_profiles_file,
     load_profile_catalog,
 )
+from ..services.stack_detector import format_stack_label
 from ..utils.path_utils import desktop_path, validate_source_root
 from .components.sidebar import Sidebar
 from .dialogs import ExportPlanDialog, HistoryDialog, PromptGoalsDialog, RulesDialog
@@ -162,6 +163,9 @@ class MainWindow(QMainWindow):
         # Wire ResultPage navigation signals
         self.page_result.open_result_requested.connect(self._open_last_result)
         self.page_result.open_desktop_requested.connect(self._open_desktop)
+
+        # Update stack label whenever the project root path changes
+        self.page_project.root_edit.textChanged.connect(self._on_root_changed)
 
         self.stack = QStackedWidget()
         for page in [
@@ -505,6 +509,11 @@ class MainWindow(QMainWindow):
 
     def _show_history(self) -> None:
         HistoryDialog(load_export_history(), self).exec()
+
+    def _on_root_changed(self, text: str) -> None:
+        root = Path(text.strip()) if text.strip() else None
+        label = format_stack_label(root) if root and root.is_dir() else ""
+        self.page_project.set_detected_stack(label)
 
     def _open_profiles_json(self) -> None:
         self._open_path(ensure_user_profiles_file())
