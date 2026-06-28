@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...i18n import t
 from . import make_card, make_scroll_page
 
 
@@ -33,16 +34,16 @@ class RunPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        scroll, layout = make_scroll_page(
-            "Журнал выполнения",
-            "Экспорт выполняется в отдельном потоке. Прогресс, текущий этап и диагностические сообщения отображаются здесь.",
+        scroll, layout, self._page_title, self._page_hint = make_scroll_page(
+            t("run.page_title"),
+            t("run.page_hint"),
         )
         card, card_layout = make_card()
 
         self._progress_bar = _ProgressBar()
         card_layout.addWidget(self._progress_bar)
 
-        self._stage_label = QLabel("Ожидание")
+        self._stage_label = QLabel(t("run.waiting"))
         self._stage_label.setObjectName("PageHint")
         self._current_item_label = QLabel("")
         self._current_item_label.setObjectName("PageHint")
@@ -61,9 +62,13 @@ class RunPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
 
+    def retranslate(self) -> None:
+        self._page_title.setText(t("run.page_title"))
+        self._page_hint.setText(t("run.page_hint"))
+
     def reset(self) -> None:
         self._progress_bar.setValue(0)
-        self._stage_label.setText("Начало экспорта...")
+        self._stage_label.setText(t("run.starting"))
         self._current_item_label.clear()
 
     def append_log(self, message: str) -> None:

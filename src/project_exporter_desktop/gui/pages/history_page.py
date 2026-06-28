@@ -17,16 +17,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...i18n import t
 from . import make_card, make_scroll_page
 
 
 class SnapshotCompareDialog(QDialog):
     def __init__(self, older: dict[str, Any], newer: dict[str, Any], parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Сравнение снапшотов")
+        self.setWindowTitle(t("snapshot.title"))
         self.setMinimumSize(760, 560)
         layout = QVBoxLayout(self)
-        title = QLabel("Сравнение двух экспортов")
+        title = QLabel(t("snapshot.subtitle"))
         title.setObjectName("PageTitle")
         layout.addWidget(title)
         summary = QLabel(self._summary_text(older, newer))
@@ -37,7 +38,7 @@ class SnapshotCompareDialog(QDialog):
         for line in self._diff_lines(older, newer):
             list_widget.addItem(line)
         layout.addWidget(list_widget, 1)
-        close = QPushButton("Закрыть")
+        close = QPushButton(t("snapshot.close"))
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
         row.addStretch(1)
@@ -66,9 +67,11 @@ class SnapshotCompareDialog(QDialog):
         ]
         old_loc = sum(int(meta.get("loc", 0)) for meta in old.values())
         new_loc = sum(int(meta.get("loc", 0)) for meta in new.values())
-        return (
-            f"Добавлено: {len(added):,}; изменено: {len(modified):,}; "
-            f"удалено: {len(deleted):,}; изменение LOC: {new_loc - old_loc:+,}."
+        return t("snapshot.summary").format(
+            added=len(added),
+            modified=len(modified),
+            deleted=len(deleted),
+            loc=new_loc - old_loc,
         )
 
     def _diff_lines(self, older: dict[str, Any], newer: dict[str, Any]) -> list[str]:
@@ -85,7 +88,7 @@ class SnapshotCompareDialog(QDialog):
             lines.append(f"~ {path}")
         for path in sorted(path for path in old if path not in new):
             lines.append(f"- {path}")
-        return lines or ["Различий в сохранённых снапшотах не найдено."]
+        return lines or [t("snapshot.no_diff")]
 
 
 class HistoryPage(QWidget):
@@ -95,35 +98,33 @@ class HistoryPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._history: list[dict[str, Any]] = []
-        scroll, layout = make_scroll_page(
-            "История",
-            "Поиск, сортировка, повторный запуск и сравнение сохранённых экспортов.",
+        scroll, layout, self._page_title, self._page_hint = make_scroll_page(
+            t("history.page_title"),
+            t("history.page_hint"),
         )
 
         card, card_layout = make_card()
         toolbar = QHBoxLayout()
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Поиск по проекту, дате или пути")
+        self.search_edit.setPlaceholderText(t("history.search_placeholder"))
         self.search_edit.textChanged.connect(self._apply_filter)
-        refresh = QPushButton("Обновить")
-        refresh.clicked.connect(self._apply_filter)
-        self.open_button = QPushButton("Открыть результат")
+        self._refresh_btn = QPushButton(t("history.btn_refresh"))
+        self._refresh_btn.clicked.connect(self._apply_filter)
+        self.open_button = QPushButton(t("history.btn_open"))
         self.open_button.clicked.connect(self._open_selected)
-        self.repeat_button = QPushButton("Повторить экспорт")
+        self.repeat_button = QPushButton(t("history.btn_repeat"))
         self.repeat_button.clicked.connect(self._repeat_selected)
-        self.compare_button = QPushButton("Сравнить два")
+        self.compare_button = QPushButton(t("history.btn_compare"))
         self.compare_button.clicked.connect(self._compare_selected)
         toolbar.addWidget(self.search_edit, 1)
-        toolbar.addWidget(refresh)
+        toolbar.addWidget(self._refresh_btn)
         toolbar.addWidget(self.open_button)
         toolbar.addWidget(self.repeat_button)
         toolbar.addWidget(self.compare_button)
         card_layout.addLayout(toolbar)
 
         self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels(
-            ["Дата", "Проект", "Профиль", "Файлы", "Токены", "Статус", "Результат"]
-        )
+        self._update_table_headers()
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self.table.setSortingEnabled(True)
@@ -133,6 +134,28 @@ class HistoryPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
+
+    def _update_table_headers(self) -> None:
+        self.table.setHorizontalHeaderLabels([
+            t("history.col_date"),
+            t("history.col_project"),
+            t("history.col_profile"),
+            t("history.col_files"),
+            t("history.col_tokens"),
+            t("history.col_status"),
+            t("history.col_result"),
+        ])
+
+    def retranslate(self) -> None:
+        self._page_title.setText(t("history.page_title"))
+        self._page_hint.setText(t("history.page_hint"))
+        self.search_edit.setPlaceholderText(t("history.search_placeholder"))
+        self._refresh_btn.setText(t("history.btn_refresh"))
+        self.open_button.setText(t("history.btn_open"))
+        self.repeat_button.setText(t("history.btn_repeat"))
+        self.compare_button.setText(t("history.btn_compare"))
+        self._update_table_headers()
+        self._apply_filter()
 
     def set_history(self, history: list[dict[str, Any]]) -> None:
         self._history = history
@@ -157,7 +180,7 @@ class HistoryPage(QWidget):
     def _set_row(self, row: int, entry: dict[str, Any]) -> None:
         copy_stats = entry.get("copy_stats") if isinstance(entry.get("copy_stats"), dict) else {}
         files = copy_stats.get("files_copied", "")
-        status = "отменён" if entry.get("cancelled") else "готов"
+        status = t("history.status_cancelled") if entry.get("cancelled") else t("history.status_done")
         values = [
             entry.get("generated_at", ""),
             entry.get("project_name", ""),

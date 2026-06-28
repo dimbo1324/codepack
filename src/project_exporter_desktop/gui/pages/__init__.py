@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 
-def make_scroll_page(title_text: str, hint_text: str) -> tuple[QScrollArea, QVBoxLayout]:
+def make_scroll_page(
+    title_text: str, hint_text: str
+) -> tuple[QScrollArea, QVBoxLayout, QLabel, QLabel]:
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -27,7 +29,7 @@ def make_scroll_page(title_text: str, hint_text: str) -> tuple[QScrollArea, QVBo
     layout.addWidget(title)
     layout.addWidget(hint)
     scroll.setWidget(body)
-    return scroll, layout
+    return scroll, layout, title, hint
 
 
 def make_card() -> tuple[QFrame, QVBoxLayout]:

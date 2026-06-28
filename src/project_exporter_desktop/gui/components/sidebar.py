@@ -8,15 +8,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-_NAV_LABELS = [
-    "1  Проект",
-    "2  Настройки",
-    "3  Безопасность",
-    "4  Предпросмотр",
-    "5  Журнал",
-    "6  Результат",
-    "7  История",
-    "8  Аналитика",
+from ...i18n import t
+
+_NAV_KEYS = [
+    "nav.1", "nav.2", "nav.3", "nav.4",
+    "nav.5", "nav.6", "nav.7", "nav.8",
 ]
 
 
@@ -38,14 +34,14 @@ class Sidebar(QFrame):
 
         title = QLabel("Project\nExporter")
         title.setObjectName("SidebarTitle")
-        subtitle = QLabel("Снимок проекта для ИИ")
-        subtitle.setObjectName("SidebarSubtitle")
+        self._subtitle = QLabel(t("sidebar.subtitle"))
+        self._subtitle.setObjectName("SidebarSubtitle")
         layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.addWidget(self._subtitle)
         layout.addSpacing(20)
 
-        for index, text in enumerate(_NAV_LABELS):
-            button = QPushButton(text)
+        for index, key in enumerate(_NAV_KEYS):
+            button = QPushButton(t(key))
             button.setObjectName("NavButton")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.clicked.connect(lambda _checked=False, i=index: self.page_requested.emit(i))
@@ -54,10 +50,16 @@ class Sidebar(QFrame):
 
         layout.addStretch(1)
 
-        desktop_button = QPushButton("Рабочий стол")
-        desktop_button.setObjectName("NavButton")
-        desktop_button.clicked.connect(self.open_desktop_requested.emit)
-        layout.addWidget(desktop_button)
+        self._desktop_button = QPushButton(t("sidebar.desktop"))
+        self._desktop_button.setObjectName("NavButton")
+        self._desktop_button.clicked.connect(self.open_desktop_requested.emit)
+        layout.addWidget(self._desktop_button)
+
+    def retranslate(self) -> None:
+        self._subtitle.setText(t("sidebar.subtitle"))
+        for i, key in enumerate(_NAV_KEYS):
+            self._nav_buttons[i].setText(t(key))
+        self._desktop_button.setText(t("sidebar.desktop"))
 
     def set_active_page(self, index: int) -> None:
         for i, button in enumerate(self._nav_buttons):

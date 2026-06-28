@@ -45,6 +45,7 @@ class Config:
     watch_enabled: bool = False
     watch_clipboard_auto_update: bool = False
     ui_zoom: float = 1.0
+    language: str = "ru"
     prompt_goals: list[str] = field(
         default_factory=lambda: [
             "architecture_review",

@@ -34,6 +34,7 @@ from ..constants import (
     SAFE_EXPORT_MODES,
     SETTINGS_FILE,
 )
+from ..i18n import get_i18n, set_language, t
 from ..services.export_history import load_export_history
 from ..services.export_ignore import EXPORTIGNORE_TEMPLATE
 from ..services.export_profiles import (
@@ -88,6 +89,12 @@ class MainWindow(QMainWindow):
         self._zoom_factor: float = 1.0
         self._zoom_in_action: QAction | None = None
         self._zoom_out_action: QAction | None = None
+        self._lang_action: QAction | None = None
+
+        # Apply saved language before building UI
+        lang = getattr(self.config, "language", "ru")
+        if lang in ("ru", "en"):
+            get_i18n()._lang = lang
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(1100, 780)
@@ -104,60 +111,69 @@ class MainWindow(QMainWindow):
         self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
         self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
+        # Wire language change signal
+        get_i18n().language_changed.connect(self._on_language_changed)
+
     def _apply_icon(self) -> None:
         icon = asset_path("ICO.ico")
         if icon.exists():
             self.setWindowIcon(QIcon(str(icon)))
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("Файл")
-        open_desktop = QAction("Рабочий стол", self)
+        file_menu = self.menuBar().addMenu(t("menu.file"))
+        open_desktop = QAction(t("menu.file.desktop"), self)
         open_desktop.triggered.connect(self._open_desktop)
         file_menu.addAction(open_desktop)
-        open_result = QAction("Последний результат", self)
+        open_result = QAction(t("menu.file.last_result"), self)
         open_result.triggered.connect(self._open_last_result)
         file_menu.addAction(open_result)
         file_menu.addSeparator()
-        exit_action = QAction("Выход", self)
+        exit_action = QAction(t("menu.file.exit"), self)
         exit_action.triggered.connect(self._exit_from_tray)
         file_menu.addAction(exit_action)
 
-        tools_menu = self.menuBar().addMenu("Инструменты")
-        tools_menu.addAction("Правила включения/исключения", self._edit_rules)
-        tools_menu.addAction("Промпт-цели", self._edit_prompt_goals)
-        tools_menu.addAction("Создать .exportignore", self._create_exportignore_template)
+        tools_menu = self.menuBar().addMenu(t("menu.tools"))
+        tools_menu.addAction(t("menu.tools.rules"), self._edit_rules)
+        tools_menu.addAction(t("menu.tools.prompt_goals"), self._edit_prompt_goals)
+        tools_menu.addAction(t("menu.tools.create_exportignore"), self._create_exportignore_template)
         tools_menu.addSeparator()
-        tools_menu.addAction("Экспорт настроек", self._export_settings)
-        tools_menu.addAction("Импорт настроек", self._import_settings)
-        tools_menu.addAction("Сбросить настройки", self._reset_settings)
+        tools_menu.addAction(t("menu.tools.export_settings"), self._export_settings)
+        tools_menu.addAction(t("menu.tools.import_settings"), self._import_settings)
+        tools_menu.addAction(t("menu.tools.reset_settings"), self._reset_settings)
         tools_menu.addSeparator()
-        tools_menu.addAction("История экспортов", self._show_history)
+        tools_menu.addAction(t("menu.tools.history"), self._show_history)
 
-        view_menu = self.menuBar().addMenu("Вид")
-        zoom_in_act = QAction("Увеличить масштаб", self)
+        view_menu = self.menuBar().addMenu(t("menu.view"))
+        zoom_in_act = QAction(t("menu.view.zoom_in"), self)
         zoom_in_act.setShortcut("Ctrl+=")
         zoom_in_act.triggered.connect(self._zoom_in)
         view_menu.addAction(zoom_in_act)
         self._zoom_in_action = zoom_in_act
 
-        zoom_out_act = QAction("Уменьшить масштаб", self)
+        zoom_out_act = QAction(t("menu.view.zoom_out"), self)
         zoom_out_act.setShortcut("Ctrl+-")
         zoom_out_act.triggered.connect(self._zoom_out)
         view_menu.addAction(zoom_out_act)
         self._zoom_out_action = zoom_out_act
 
-        zoom_reset_act = QAction("Сбросить масштаб (100%)", self)
+        zoom_reset_act = QAction(t("menu.view.zoom_reset"), self)
         zoom_reset_act.setShortcut("Ctrl+0")
         zoom_reset_act.triggered.connect(self._zoom_reset)
         view_menu.addAction(zoom_reset_act)
 
-        help_menu = self.menuBar().addMenu("Справка")
-        help_act = QAction("Руководство пользователя", self)
+        view_menu.addSeparator()
+        lang_act = QAction(t("menu.view.language"), self)
+        lang_act.triggered.connect(self._toggle_language)
+        view_menu.addAction(lang_act)
+        self._lang_action = lang_act
+
+        help_menu = self.menuBar().addMenu(t("menu.help"))
+        help_act = QAction(t("menu.help.manual"), self)
         help_act.setShortcut("F1")
         help_act.triggered.connect(self._show_help)
         help_menu.addAction(help_act)
         help_menu.addSeparator()
-        about_act = QAction(f"О программе {APP_NAME}", self)
+        about_act = QAction(f"{t('menu.help.about')} {APP_NAME}", self)
         about_act.triggered.connect(self._show_about)
         help_menu.addAction(about_act)
 
@@ -169,10 +185,10 @@ class MainWindow(QMainWindow):
         self.tray_icon.setIcon(icon)
         self.tray_icon.setToolTip(APP_NAME)
         menu = QMenu(self)
-        menu.addAction("Быстрый экспорт", self._quick_export_from_tray)
-        menu.addAction("Открыть", self._show_from_tray)
+        menu.addAction(t("tray.menu_quick"), self._quick_export_from_tray)
+        menu.addAction(t("tray.menu_open"), self._show_from_tray)
         menu.addSeparator()
-        menu.addAction("Выход", self._exit_from_tray)
+        menu.addAction(t("tray.menu_exit"), self._exit_from_tray)
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(self._on_tray_activated)
         self.tray_icon.show()
@@ -192,7 +208,7 @@ class MainWindow(QMainWindow):
         self.hide()
         self.tray_icon.showMessage(
             APP_NAME,
-            "Приложение свернуто в трей. Быстрый экспорт доступен из контекстного меню.",
+            t("tray.minimized"),
             QSystemTrayIcon.MessageIcon.Information,
             2500,
         )
@@ -213,7 +229,7 @@ class MainWindow(QMainWindow):
         if self.export_worker and self.export_worker.isRunning():
             self.tray_icon.showMessage(
                 APP_NAME,
-                "Экспорт уже выполняется.",
+                t("tray.quick_running"),
                 QSystemTrayIcon.MessageIcon.Information,
                 2500,
             )
@@ -281,7 +297,7 @@ class MainWindow(QMainWindow):
         self._watch_change_count = 0
         self.tray_icon.showMessage(
             APP_NAME,
-            f"Проект изменился: событий файловой системы {count}.",
+            t("tray.changed").format(n=count),
             QSystemTrayIcon.MessageIcon.Information,
             3000,
         )
@@ -352,28 +368,26 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.stack, 1)
 
         bottom = QHBoxLayout()
-        self.status_label = QLabel("Готово")
+        self.status_label = QLabel(t("status.ready"))
         self.status_label.setObjectName("PageHint")
         bottom.addWidget(self.status_label, 1)
-        self.open_result_button = QPushButton("Открыть результат")
+        self.open_result_button = QPushButton(t("btn.open_result"))
         self.open_result_button.setEnabled(False)
         self.open_result_button.clicked.connect(self._open_last_result)
         bottom.addWidget(self.open_result_button)
-        self.cancel_button = QPushButton("Отмена")
+        self.cancel_button = QPushButton(t("btn.cancel"))
         self.cancel_button.setObjectName("DangerButton")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self._cancel_export)
         bottom.addWidget(self.cancel_button)
-        self.clipboard_button = QPushButton("Скопировать дамп")
-        self.clipboard_button.setToolTip(
-            "Скопировать текст всех включённых файлов в буфер обмена (без создания архива)"
-        )
+        self.clipboard_button = QPushButton(t("btn.clipboard"))
+        self.clipboard_button.setToolTip(t("btn.clipboard.tip"))
         self.clipboard_button.clicked.connect(self._start_clipboard_export)
         bottom.addWidget(self.clipboard_button)
-        self.codex_button = QPushButton("Codex-пакет")
+        self.codex_button = QPushButton(t("btn.codex"))
         self.codex_button.clicked.connect(lambda: self._start(codex_package=True))
         bottom.addWidget(self.codex_button)
-        self.start_button = QPushButton("Создать экспорт")
+        self.start_button = QPushButton(t("btn.create_export"))
         self.start_button.setObjectName("PrimaryButton")
         self.start_button.clicked.connect(lambda: self._start(codex_package=False))
         bottom.addWidget(self.start_button)
@@ -382,6 +396,55 @@ class MainWindow(QMainWindow):
         root.addWidget(content_host, 1)
         self.setCentralWidget(central)
         self._set_page(_PAGE_PROJECT)
+
+    # ------------------------------------------------------------------
+    # Language support
+    # ------------------------------------------------------------------
+
+    def _toggle_language(self) -> None:
+        current = get_i18n().lang
+        new_lang = "en" if current == "ru" else "ru"
+        set_language(new_lang)
+        self.config.language = new_lang
+        self.config.save()
+
+    def _on_language_changed(self) -> None:
+        # Update language toggle action label
+        if self._lang_action is not None:
+            self._lang_action.setText(t("menu.view.language"))
+
+        # Update bottom bar buttons
+        self.open_result_button.setText(t("btn.open_result"))
+        self.cancel_button.setText(t("btn.cancel"))
+        self.clipboard_button.setText(t("btn.clipboard"))
+        self.clipboard_button.setToolTip(t("btn.clipboard.tip"))
+        self.codex_button.setText(t("btn.codex"))
+        self.start_button.setText(t("btn.create_export"))
+
+        # Update status label if it's in a "ready" state
+        current_status = self.status_label.text()
+        for key in ("status.ready", "status.building", "status.exporting", "status.clipboard"):
+            # Check both RU and EN forms
+            from ..i18n import _STRINGS
+            for lang_strings in _STRINGS.values():
+                if current_status == lang_strings.get(key, ""):
+                    self.status_label.setText(t(key))
+                    break
+
+        # Retranslate sidebar
+        self.sidebar.retranslate()
+
+        # Retranslate all pages
+        self.page_project.retranslate()
+        self.page_settings.retranslate()
+        self.page_security.retranslate()
+        self.page_preview.retranslate()
+        self.page_run.retranslate()
+        self.page_result.retranslate()
+        self.page_history.retranslate()
+        self.page_analytics.retranslate()
+
+    # ------------------------------------------------------------------
 
     def _set_page(self, index: int) -> None:
         if hasattr(self, "stack"):
@@ -400,11 +463,12 @@ class MainWindow(QMainWindow):
         self.open_result_button.setEnabled(
             bool(self.last_result_path and self.last_result_path.exists())
         )
-        self.status_label.setText(
-            "Строится план экспорта..."
-            if preview
-            else ("Выполняется экспорт..." if running else "Готово")
-        )
+        if preview:
+            self.status_label.setText(t("status.building"))
+        elif running:
+            self.status_label.setText(t("status.exporting"))
+        else:
+            self.status_label.setText(t("status.ready"))
 
     def _load_config_to_ui(self) -> None:
         self.page_project.set_root(self.config.last_root)
@@ -484,7 +548,7 @@ class MainWindow(QMainWindow):
         try:
             return validate_source_root(self.page_project.get_root())
         except Exception as exc:
-            QMessageBox.critical(self, "Неверный путь к проекту", str(exc))
+            QMessageBox.critical(self, t("msg.bad_path.title"), str(exc))
             return None
 
     def _start(self, codex_package: bool = False) -> None:
@@ -527,7 +591,7 @@ class MainWindow(QMainWindow):
         file_overrides: dict[str, bool] = overrides if isinstance(overrides, dict) else {}
         if self.pending_source_root is None or self.pending_config is None:
             QMessageBox.critical(
-                self, "Ошибка экспорта", "Внутреннее состояние было утеряно перед запуском."
+                self, t("msg.internal_error.title"), t("msg.internal_error.body")
             )
             return
         self._run_export(self.pending_source_root, self.pending_config, file_overrides)
@@ -540,8 +604,8 @@ class MainWindow(QMainWindow):
         self._append_diagnostic(traceback_text)
         QMessageBox.critical(
             self,
-            "Ошибка плана экспорта",
-            f"Не удалось построить план экспорта. Технические подробности записаны в:\n{self.log_file}",
+            t("msg.preview_failed.title"),
+            t("msg.preview_failed.body").format(log=self.log_file),
         )
 
     def _run_export(
@@ -576,8 +640,8 @@ class MainWindow(QMainWindow):
             return
         reply = QMessageBox.question(
             self,
-            "Отмена экспорта",
-            "Остановить текущий экспорт? Частичный результат может остаться.",
+            t("msg.cancel_export.title"),
+            t("msg.cancel_export.body"),
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.cancel_event.set()
@@ -599,26 +663,28 @@ class MainWindow(QMainWindow):
             if self._tray_quick_mode:
                 self.tray_icon.showMessage(
                     APP_NAME,
-                    "Быстрый экспорт остановлен.",
+                    t("tray.quick_stopped"),
                     QSystemTrayIcon.MessageIcon.Warning,
                     3000,
                 )
             else:
                 QMessageBox.warning(
-                    self, "Остановлено", "Экспорт остановлен. Проверьте результат и журнал."
+                    self, t("msg.stopped.title"), t("msg.stopped.body")
                 )
         else:
             self.page_result.set_success(self.last_result_path)
             if self._tray_quick_mode:
                 self.tray_icon.showMessage(
                     APP_NAME,
-                    "Быстрый экспорт завершён.",
+                    t("tray.quick_done"),
                     QSystemTrayIcon.MessageIcon.Information,
                     3000,
                 )
             else:
-                QMessageBox.information(self, "Экспорт завершён", "Экспорт проекта успешно создан.")
-        self.status_label.setText("Готово")
+                QMessageBox.information(
+                    self, t("msg.export_done.title"), t("msg.export_done.body")
+                )
+        self.status_label.setText(t("status.ready"))
         self._tray_quick_mode = False
 
     def _on_export_failed(self, traceback_text: str) -> None:
@@ -629,15 +695,15 @@ class MainWindow(QMainWindow):
         if self._tray_quick_mode:
             self.tray_icon.showMessage(
                 APP_NAME,
-                "Быстрый экспорт завершился с ошибкой.",
+                t("tray.quick_failed"),
                 QSystemTrayIcon.MessageIcon.Critical,
                 4000,
             )
         else:
             QMessageBox.critical(
                 self,
-                "Ошибка экспорта",
-                f"Экспорт завершился с ошибкой. Технические подробности записаны в:\n{self.log_file}",
+                t("msg.export_failed.title"),
+                t("msg.export_failed.body").format(log=self.log_file),
             )
         self._tray_quick_mode = False
 
@@ -661,7 +727,7 @@ class MainWindow(QMainWindow):
             return
         self._save_config_from_ui()
         self.clipboard_button.setEnabled(False)
-        self.status_label.setText("Подготовка дампа для буфера обмена...")
+        self.status_label.setText(t("status.clipboard"))
         self.clipboard_worker = ClipboardExportWorker(source_root, self.config, self)
         self.clipboard_worker.finished.connect(self._on_clipboard_ready)
         self.clipboard_worker.failed.connect(self._on_clipboard_failed)
@@ -670,13 +736,13 @@ class MainWindow(QMainWindow):
     def _on_clipboard_ready(self, text: str, byte_count: int, summary: str) -> None:
         QApplication.clipboard().setText(text)
         self.clipboard_button.setEnabled(True)
-        self.status_label.setText("Готово")
+        self.status_label.setText(t("status.ready"))
         from ..utils.text_utils import format_bytes
 
         if self._watch_clipboard_mode:
             self.tray_icon.showMessage(
                 APP_NAME,
-                f"Clipboard-дамп обновлён: {format_bytes(byte_count)}, {summary}.",
+                t("tray.clipboard_updated").format(size=format_bytes(byte_count), summary=summary),
                 QSystemTrayIcon.MessageIcon.Information,
                 3000,
             )
@@ -685,21 +751,20 @@ class MainWindow(QMainWindow):
 
         QMessageBox.information(
             self,
-            "Дамп скопирован",
-            f"Текстовый дамп скопирован в буфер обмена.\n\n"
-            f"Размер: {format_bytes(byte_count)}\n"
-            f"Оценка токенов: {summary}\n\n"
-            "Вставьте текст в чат с ИИ-ассистентом.",
+            t("msg.clipboard_done.title"),
+            t("msg.clipboard_done.body").format(
+                size=format_bytes(byte_count), summary=summary
+            ),
         )
 
     def _on_clipboard_failed(self, traceback_text: str) -> None:
         self.clipboard_button.setEnabled(True)
-        self.status_label.setText("Готово")
+        self.status_label.setText(t("status.ready"))
         self._append_diagnostic(traceback_text)
         if self._watch_clipboard_mode:
             self.tray_icon.showMessage(
                 APP_NAME,
-                "Не удалось обновить clipboard-дамп.",
+                t("tray.clipboard_failed"),
                 QSystemTrayIcon.MessageIcon.Warning,
                 3500,
             )
@@ -707,8 +772,8 @@ class MainWindow(QMainWindow):
             return
         QMessageBox.critical(
             self,
-            "Ошибка копирования",
-            f"Не удалось подготовить дамп. Технические подробности записаны в:\n{self.log_file}",
+            t("msg.clipboard_failed.title"),
+            t("msg.clipboard_failed.body").format(log=self.log_file),
         )
 
     def _edit_rules(self) -> None:
@@ -745,8 +810,8 @@ class MainWindow(QMainWindow):
         if target.exists():
             reply = QMessageBox.question(
                 self,
-                ".exportignore уже существует",
-                ".exportignore уже существует. Перезаписать шаблоном?",
+                t("msg.exportignore_exists.title"),
+                t("msg.exportignore_exists.body"),
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
@@ -755,13 +820,15 @@ class MainWindow(QMainWindow):
             self._append_log(f"Создан .exportignore: {target}")
             self._open_path(target)
         except Exception as exc:
-            QMessageBox.critical(self, "Ошибка записи", f"Не удалось создать .exportignore:\n{exc}")
+            QMessageBox.critical(
+                self, t("msg.write_error.title"), t("msg.write_error_exportignore").format(exc=exc)
+            )
 
     def _export_settings(self) -> None:
         self._save_config_from_ui()
         target, _ = QFileDialog.getSaveFileName(
             self,
-            "Экспорт настроек",
+            t("menu.tools.export_settings"),
             "project_exporter_settings.json",
             "JSON-файлы (*.json)",
         )
@@ -771,10 +838,12 @@ class MainWindow(QMainWindow):
             Config.export_settings(Path(target), self.config)
             self._append_log(f"Настройки экспортированы: {target}")
         except Exception as exc:
-            QMessageBox.critical(self, "Ошибка экспорта настроек", str(exc))
+            QMessageBox.critical(self, t("msg.export_settings_failed.title"), str(exc))
 
     def _import_settings(self) -> None:
-        source, _ = QFileDialog.getOpenFileName(self, "Импорт настроек", "", "JSON-файлы (*.json)")
+        source, _ = QFileDialog.getOpenFileName(
+            self, t("menu.tools.import_settings"), "", "JSON-файлы (*.json)"
+        )
         if not source:
             return
         try:
@@ -783,11 +852,11 @@ class MainWindow(QMainWindow):
             self._load_config_to_ui()
             self._append_log(f"Настройки импортированы: {source}")
         except Exception as exc:
-            QMessageBox.critical(self, "Ошибка импорта настроек", str(exc))
+            QMessageBox.critical(self, t("msg.import_settings_failed.title"), str(exc))
 
     def _reset_settings(self) -> None:
         reply = QMessageBox.question(
-            self, "Сброс настроек", "Сбросить настройки к безопасным значениям по умолчанию?"
+            self, t("msg.reset.title"), t("msg.reset.body")
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -878,11 +947,8 @@ class MainWindow(QMainWindow):
     def _show_about(self) -> None:
         QMessageBox.information(
             self,
-            f"О программе {APP_NAME}",
-            f"{APP_NAME} v{APP_VERSION}\n\n"
-            "Создаёт снимок вашего проекта в формате, удобном для ИИ-ассистентов:\n"
-            "архив с кодом, текстовый дамп, отчёты по структуре и аналитике.\n\n"
-            "Поддерживаемые ИИ: Claude Code, ChatGPT, Gemini, Copilot и другие.",
+            t("dialog.about.title").format(name=APP_NAME),
+            t("dialog.about.body").format(name=APP_NAME, version=APP_VERSION),
         )
 
     def _open_profiles_json(self) -> None:
@@ -895,7 +961,9 @@ class MainWindow(QMainWindow):
         if self.last_result_path and self.last_result_path.exists():
             self._open_path(self.last_result_path)
         else:
-            QMessageBox.warning(self, "Нет результата", "Результат экспорта ещё не создавался.")
+            QMessageBox.warning(
+                self, t("msg.no_result.title"), t("msg.no_result.body")
+            )
 
     def _open_path(self, path: Path) -> None:
         try:
@@ -906,7 +974,11 @@ class MainWindow(QMainWindow):
             else:
                 subprocess.Popen(["xdg-open", str(path)])
         except Exception as exc:
-            QMessageBox.critical(self, "Ошибка открытия", f"Не удалось открыть:\n{path}\n\n{exc}")
+            QMessageBox.critical(
+                self,
+                t("msg.open_error.title"),
+                t("msg.open_error.body").format(path=path, exc=exc),
+            )
 
 
 def run_app() -> int:
@@ -915,6 +987,12 @@ def run_app() -> int:
     app.setApplicationVersion(APP_VERSION)
     app.setWindowIcon(QIcon(str(asset_path("ICO.ico"))))
     startup_config = Config.load()
+
+    # Apply saved language before first render
+    lang = getattr(startup_config, "language", "ru")
+    if lang in ("ru", "en"):
+        get_i18n()._lang = lang
+
     startup_theme = startup_config.normalized_theme()
     if startup_theme == "system":
         color_scheme = app.styleHints().colorScheme()

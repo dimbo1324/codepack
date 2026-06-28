@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import t
 from ..services.prompt_builder import PROMPT_GOALS
 
 
@@ -76,7 +77,7 @@ class RulesDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Правила включения и исключения")
+        self.setWindowTitle(t("dialog.rules.title"))
         self.setMinimumSize(780, 640)
 
         self.excluded_files = QTextEdit()
@@ -85,20 +86,14 @@ class RulesDialog(QDialog):
         self.always_include_dirs = QTextEdit()
 
         fields = [
-            ("Исключить файлы / glob-шаблоны", self.excluded_files, excluded_files),
-            ("Исключить расширения", self.excluded_extensions, excluded_extensions),
-            (
-                "Всегда включать файлы / glob-шаблоны",
-                self.always_include_files,
-                always_include_files,
-            ),
-            ("Всегда включать директории", self.always_include_dirs, always_include_dirs),
+            (t("dialog.rules.excluded_files"), self.excluded_files, excluded_files),
+            (t("dialog.rules.excluded_ext"), self.excluded_extensions, excluded_extensions),
+            (t("dialog.rules.always_files"), self.always_include_files, always_include_files),
+            (t("dialog.rules.always_dirs"), self.always_include_dirs, always_include_dirs),
         ]
 
         layout = QVBoxLayout(self)
-        intro = QLabel(
-            "Вводите по одному элементу на строку или через запятую. Правила безопасного экспорта могут по-прежнему блокировать рисковые файлы."
-        )
+        intro = QLabel(t("dialog.rules.intro"))
         intro.setObjectName("PageHint")
         layout.addWidget(intro)
 
@@ -129,13 +124,13 @@ class RulesDialog(QDialog):
 class PromptGoalsDialog(QDialog):
     def __init__(self, selected_goals: Iterable[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Цели промптов")
+        self.setWindowTitle(t("dialog.goals.title"))
         self.setMinimumSize(660, 420)
         selected = set(selected_goals)
         self.checkboxes: dict[str, QCheckBox] = {}
 
         layout = QVBoxLayout(self)
-        hint = QLabel("Выберите цели, которые будут включены в AI_PROMPTS/CUSTOM_PROMPT.md.")
+        hint = QLabel(t("dialog.goals.hint"))
         hint.setObjectName("PageHint")
         layout.addWidget(hint)
 
@@ -167,16 +162,16 @@ class PromptGoalsDialog(QDialog):
 class HistoryDialog(QDialog):
     def __init__(self, history: list[dict[str, object]], parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("История экспортов")
+        self.setWindowTitle(t("dialog.history.title"))
         self.setMinimumSize(720, 460)
         layout = QVBoxLayout(self)
-        title = QLabel("История экспортов")
+        title = QLabel(t("dialog.history.title"))
         title.setObjectName("PageTitle")
         layout.addWidget(title)
         text = QPlainTextEdit()
         text.setReadOnly(True)
         if not history:
-            text.setPlainText("История экспортов пуста.")
+            text.setPlainText(t("dialog.history.empty"))
         else:
             blocks: list[str] = []
             for item in history[:15]:
@@ -192,7 +187,7 @@ class HistoryDialog(QDialog):
                 )
             text.setPlainText("\n\n".join(blocks))
         layout.addWidget(text, 1)
-        close = QPushButton("Закрыть")
+        close = QPushButton(t("dialog.history.close"))
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
         row.addStretch(1)
@@ -305,7 +300,8 @@ Git-отчёт → текстовый дамп → аналитика → ман
 class HelpDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Справка — Project Exporter Desktop")
+        from ..i18n import get_i18n
+        self.setWindowTitle(t("dialog.help.title"))
         self.setMinimumSize(780, 620)
         self.resize(900, 700)
 
@@ -313,10 +309,10 @@ class HelpDialog(QDialog):
 
         browser = QTextBrowser()
         browser.setOpenExternalLinks(False)
-        browser.setHtml(_HELP_HTML)
+        browser.setHtml(get_i18n().help_html())
         layout.addWidget(browser, 1)
 
-        close = QPushButton("Закрыть")
+        close = QPushButton(t("snapshot.close"))
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
         row.addStretch(1)
