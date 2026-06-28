@@ -43,7 +43,7 @@ from ..services.export_profiles import (
 )
 from ..utils.path_utils import desktop_path, validate_source_root
 from .components.sidebar import Sidebar
-from .dialogs import HistoryDialog, PromptGoalsDialog, RulesDialog
+from .dialogs import HelpDialog, HistoryDialog, PromptGoalsDialog, RulesDialog
 from .logging import app_log_file, append_app_log
 from .pages.analytics_page import AnalyticsPage
 from .pages.history_page import HistoryPage
@@ -85,10 +85,13 @@ class MainWindow(QMainWindow):
         self._allow_close = False
         self._watch_change_count = 0
         self._watch_clipboard_mode = False
+        self._zoom_factor: float = 1.0
+        self._zoom_in_action: QAction | None = None
+        self._zoom_out_action: QAction | None = None
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
-        self.resize(1280, 840)
-        self.setMinimumSize(1120, 720)
+        self.resize(1100, 780)
+        self.setMinimumSize(820, 540)
         self._apply_icon()
         self._build_tray()
         self._build_watcher()
@@ -97,6 +100,7 @@ class MainWindow(QMainWindow):
         self._load_config_to_ui()
         self._apply_configured_theme()
         self._sync_watcher()
+        self._apply_zoom(self.config.normalized_ui_zoom())
         self._append_log(f"{APP_NAME} v{APP_VERSION} готов к работе.")
         self._append_log("Выберите папку проекта и создайте экспорт-пакет.")
 
@@ -128,6 +132,34 @@ class MainWindow(QMainWindow):
         tools_menu.addAction("Сбросить настройки", self._reset_settings)
         tools_menu.addSeparator()
         tools_menu.addAction("История экспортов", self._show_history)
+
+        view_menu = self.menuBar().addMenu("Вид")
+        zoom_in_act = QAction("Увеличить масштаб", self)
+        zoom_in_act.setShortcut("Ctrl+=")
+        zoom_in_act.triggered.connect(self._zoom_in)
+        view_menu.addAction(zoom_in_act)
+        self._zoom_in_action = zoom_in_act
+
+        zoom_out_act = QAction("Уменьшить масштаб", self)
+        zoom_out_act.setShortcut("Ctrl+-")
+        zoom_out_act.triggered.connect(self._zoom_out)
+        view_menu.addAction(zoom_out_act)
+        self._zoom_out_action = zoom_out_act
+
+        zoom_reset_act = QAction("Сбросить масштаб (100%)", self)
+        zoom_reset_act.setShortcut("Ctrl+0")
+        zoom_reset_act.triggered.connect(self._zoom_reset)
+        view_menu.addAction(zoom_reset_act)
+
+        help_menu = self.menuBar().addMenu("Справка")
+        help_act = QAction("Руководство пользователя", self)
+        help_act.setShortcut("F1")
+        help_act.triggered.connect(self._show_help)
+        help_menu.addAction(help_act)
+        help_menu.addSeparator()
+        about_act = QAction(f"О программе {APP_NAME}", self)
+        about_act.triggered.connect(self._show_about)
+        help_menu.addAction(about_act)
 
     def _build_tray(self) -> None:
         self.tray_icon = QSystemTrayIcon(self)
@@ -811,6 +843,48 @@ class MainWindow(QMainWindow):
             "Не удалось собрать аналитику. Подробности записаны в журнал."
         )
 
+    def _apply_zoom(self, factor: float) -> None:
+        from PySide6.QtGui import QFont
+
+        _min_zoom = 0.7
+        _max_zoom = 1.5
+        _step = 0.1
+        self._zoom_factor = max(_min_zoom, min(_max_zoom, round(factor / _step) * _step))
+        base_pt = 9
+        scaled_pt = max(7, round(base_pt * self._zoom_factor))
+        app = QApplication.instance()
+        f = QFont(app.font())
+        f.setPointSize(scaled_pt)
+        app.setFont(f)
+        if self._zoom_in_action is not None:
+            self._zoom_in_action.setEnabled(self._zoom_factor < _max_zoom - 0.01)
+        if self._zoom_out_action is not None:
+            self._zoom_out_action.setEnabled(self._zoom_factor > _min_zoom + 0.01)
+        self.config.ui_zoom = self._zoom_factor
+        self.config.save()
+
+    def _zoom_in(self) -> None:
+        self._apply_zoom(self._zoom_factor + 0.1)
+
+    def _zoom_out(self) -> None:
+        self._apply_zoom(self._zoom_factor - 0.1)
+
+    def _zoom_reset(self) -> None:
+        self._apply_zoom(1.0)
+
+    def _show_help(self) -> None:
+        HelpDialog(self).exec()
+
+    def _show_about(self) -> None:
+        QMessageBox.information(
+            self,
+            f"О программе {APP_NAME}",
+            f"{APP_NAME} v{APP_VERSION}\n\n"
+            "Создаёт снимок вашего проекта в формате, удобном для ИИ-ассистентов:\n"
+            "архив с кодом, текстовый дамп, отчёты по структуре и аналитике.\n\n"
+            "Поддерживаемые ИИ: Claude Code, ChatGPT, Gemini, Copilot и другие.",
+        )
+
     def _open_profiles_json(self) -> None:
         self._open_path(ensure_user_profiles_file())
 
@@ -849,6 +923,13 @@ def run_app() -> int:
     qss = read_text_resource(style_path(qss_name)) or read_text_resource(style_path())
     if qss:
         app.setStyleSheet(qss)
+    initial_zoom = startup_config.normalized_ui_zoom()
+    if initial_zoom != 1.0:
+        from PySide6.QtGui import QFont
+
+        f = QFont(app.font())
+        f.setPointSize(max(7, round(9 * initial_zoom)))
+        app.setFont(f)
     window = MainWindow()
     window.show()
     return app.exec()
