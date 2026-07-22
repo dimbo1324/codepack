@@ -788,7 +788,11 @@ erDiagram
 | Логи | `%LOCALAPPDATA%\codepack\logs` | `~/Library/Logs/codepack` | `~/.local/state/codepack` |
 | API-ключи (§B.8) | Credential Manager | Keychain | Secret Service |
 
-⚙️ В Rust — крейты `directories`/`dirs` для путей и `keyring` для секретов ОС.
+⚙️ В Rust — пути настроек/логов резолвятся вручную через переменные окружения
+(`APPDATA`/`LOCALAPPDATA`/`HOME`/`USERPROFILE`/`XDG_CONFIG_HOME`), без крейта
+`directories`/`dirs` — он тянет MPL-2.0-зависимость (`option-ext`), и владелец
+предпочёл избежать copyleft вместо разрешения лицензии (решение от 2026-07-22,
+`docs/decisions/open-questions.md`). Для секретов ОС — крейт `keyring`.
 **API-ключи никогда не пишутся в обычные файлы настроек.**
 
 ## D.5 Форматы артефактов (контракты остаются)
@@ -971,7 +975,9 @@ ignore/diff, корпус-тесты детектора секретов (precis
 
 `tauri`, `serde`/`serde_json`, `ignore`, `walkdir`, `globset`, `regex`, `aho-corasick`,
 `git2`, `sha2`, `zip`, `flate2`, `rayon`, `crossbeam-channel`, `rusqlite`/`sqlx`,
-`directories`/`dirs`, `keyring`, `tera`/`askama`, `tiktoken-rs` (опц.), `fluent` (опц., i18n).
+`keyring`, `tera`/`askama`, `tiktoken-rs` (опц.), `fluent` (опц., i18n). Пути настроек/
+логов (§D.4) резолвятся вручную, без крейта `directories`/`dirs` (MPL-2.0-зависимость,
+решение от 2026-07-22).
 
 ---
 

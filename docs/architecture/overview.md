@@ -15,7 +15,7 @@
 | Область | Состояние |
 |---|---|
 | Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
-| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). 56 юнит- + 6 интеграционных тестов |
+| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). 50 юнит- + 6 интеграционных тестов (56 всего) |
 | Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
 | `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `deny`, `sync-agents [--check]`, `doctor` |
 | `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |

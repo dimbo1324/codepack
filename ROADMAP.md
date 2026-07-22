@@ -131,7 +131,7 @@
 вывод `text_file_size_limit_enabled` из `max_text_file_mb`), 5 AI-пресетов
 (данные, без применения — это S7), 5 общих типов пайплайна, `AppPaths`,
 `CancellationToken`, канал `ProgressEvent`/`LogEvent` (`crossbeam-channel`),
-`CoreError`/`Result`. 56 юнит- и 6 интеграционных тестов (4 legacy-фикстуры +
+`CoreError`/`Result`. 50 юнит- и 6 интеграционных тестов (56 всего; 4 legacy-фикстуры +
 контракт JSON-формы). `cargo deny check` включён в гейт с этой стадии.
 
 ⚠️ Отклонение от BLUEPRINT §D.4 (⚙️-пометка про крейт `directories`/`dirs`):

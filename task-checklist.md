@@ -33,9 +33,10 @@ rather than silently rewriting the already-merged S0 one.
 
 ## Implementation
 
-- [+] Added `serde`, `serde_json`, `thiserror`, `directories`, `crossbeam-channel` to
+- [+] Added `serde`, `serde_json`, `thiserror`, `crossbeam-channel` to
       `[workspace.dependencies]`; `tempfile` as a dev-dependency; wired into
-      `crates/codepack-core/Cargo.toml` via `dep.workspace = true`
+      `crates/codepack-core/Cargo.toml` via `dep.workspace = true` (`directories` was
+      planned here too but dropped — see "Mid-implementation deviations" below)
 - [+] `crates/codepack-core/src/error.rs` — `CoreError` (thiserror) + `Result<T>` alias
 - [+] `crates/codepack-core/src/types.rs` — `ExportPaths`, `CopyStats`, `TextDumpStats`,
       `RiskPreviewItem`, `RiskPreviewReport` (+ `has_warnings`), `ArchiveBuildResult`
@@ -43,8 +44,9 @@ rather than silently rewriting the already-merged S0 one.
 - [+] `crates/codepack-core/src/cancellation.rs` — `CancellationToken`
 - [+] `crates/codepack-core/src/progress.rs` — `ProgressEvent`/`LogEvent` +
       crossbeam-channel aliases
-- [+] `crates/codepack-core/src/paths.rs` — `AppPaths` over `directories`, injectable
-      base dir for hermetic tests, legacy settings-file location resolver
+- [+] `crates/codepack-core/src/paths.rs` — `AppPaths` resolved by hand from
+      environment variables (not `directories`, see below), injectable base dir for
+      hermetic tests, legacy settings-file location resolver
 - [+] `crates/codepack-core/src/config/` directory module: `mod.rs` (26-field struct,
       declaration order matches legacy), `normalize.rs` (methods on `&Config`, handles
       the `diff_export_mode`/`incremental_export_enabled` coupling), `valid_sets.rs`
@@ -96,6 +98,18 @@ rather than silently rewriting the already-merged S0 one.
   have no `license` field yet (separate, undecided question) and would otherwise fail
   the license check as "unlicensed" — this is the correct cargo-deny mechanism for
   unpublished internal crates, not a loosening of the copyleft policy.
+- `codepack-quality-reviewer` caught a real parity bug before merge: `normalized_ui_zoom`
+  fell back to the default for all non-finite input, but legacy's `min`/`max` against
+  NaN is a comparison quirk that actually clamps NaN/+inf to 1.5 and -inf to 0.7 rather
+  than falling back at all. Decided not to replicate the quirk (it is an accident, not
+  a behavior, and unreachable through JSON since `serde_json` rejects NaN/Infinity
+  tokens) — documented the deviation explicitly in the doc comment instead of silently
+  diverging. Also fixed: an inflated "56 unit + 6 integration" test-count claim (actual
+  is 50 unit + 6 integration = 56 total) in ROADMAP.md/overview.md, a stale
+  `directories`-crate mention left in BLUEPRINT.md §D.4 and Приложение 3 after the
+  mid-task pivot, an `io.rs` doc comment overclaiming legacy parity on partial-failure
+  behavior, and the two stale pre-pivot `directories` references in this file's own
+  Implementation section above.
 
 ---
 
