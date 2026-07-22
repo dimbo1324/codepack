@@ -1,5 +1,9 @@
 # Legacy Reference: The Previous Python Implementation
 
+<!-- tier: extended -->
+
+> **Essence.** `docs/__arch__/codepack-main.zip` is the behavioral reference for exact constants, artifact formats, and ambiguous behavior — consult it, never copy its Python architecture into Rust.
+
 The previous product version (Project Exporter Desktop 1.0.1, Python + PySide6,
 Windows-only) is preserved as an archive:
 

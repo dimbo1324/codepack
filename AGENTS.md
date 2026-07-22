@@ -1,411 +1,607 @@
 <!--
-СГЕНЕРИРОВАННЫЙ ФАЙЛ — НЕ РЕДАКТИРОВАТЬ.
-Источник правды: .ai/universal/*.md и .ai/project/*.md.
-Отредактируйте модуль, затем выполните: python dev_tools_scripts_runner.py sync-agents
+GENERATED FILE - DO NOT EDIT.
+Source of truth: .ai/universal/*.md and .ai/project/*.md.
+Edit a module, then run: cargo xtask sync-agents
 -->
 
-# codepack — рабочие заметки для Codex
+# codepack - working notes for Codex
 
-Этот файл — точка входа Codex. Он собран из общих модулей правил в `.ai/`, поэтому
-Codex и Claude Code всегда следуют одинаковым правилам. Более поздние секции
-переопределяют более ранние; явная инструкция владельца в текущем диалоге
-переопределяет всё.
-
+This file is the Codex entry point. It is assembled from the shared rule modules in
+`.ai/` so Codex and Claude Code always follow identical rules. Later sections override
+earlier ones; an explicit owner instruction in the current conversation overrides
+everything.
 
 ---
 
 <!-- module: .ai/universal/01-workflow.md -->
 
-# Рабочий цикл: git, ветки, коммиты
+# Workflow: Git, Branches, Commits
 
-Цель: одна предсказуемая процедура на каждую задачу. Исключения — только по явной
-инструкции владельца в текущем диалоге.
+Purpose: every task follows one predictable git cycle. No exceptions without an
+explicit owner instruction in the current conversation.
 
-## Ветки
+## Branch discipline
 
-- НИКОГДА не разрабатывать прямо в `main`.
-- Старт задачи: `git checkout main` → `git pull --ff-only origin main` →
-  `git checkout -b <ветка>`.
-- Имя ветки: `type/краткое-описание` (`feat`, `fix`, `refactor`, `test`, `chore`,
-  `docs`, `ci`, `perf`, `security`). Имена вроде `test`, `work`, `final`, `new` запрещены.
-- Слияние в `main` — только `--ff-only` и только после зелёного полного гейта.
-- Пуш в `origin/main` — только если владелец явно просил публикацию в этой задаче.
-  Пуш рабочей ветки допустим (например, чтобы опубликовать чек-лист до начала работы).
-- После слияния ветку удалить.
+- NEVER develop directly on `main`.
+- Start every task from up-to-date `main`:
+  `git checkout main` → `git pull --ff-only origin main` → `git checkout -b <branch>`.
+- Branch name format: `type/short-task-description`
+  (types: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `ci`, `perf`, `security`).
+- Uninformative branch names (`test`, `fix`, `work`, `final`, `new`) are forbidden.
+- Merge into `main` only fast-forward (`git merge --ff-only`) and only after the
+  project's full quality gate is green.
+- Push to `origin/main` only when the owner explicitly asked for a publish within the
+  current task. Work-in-progress branch pushes are allowed (for example, to publish
+  the task checklist before starting work).
+- Delete the task branch after it is merged.
 
-## Коммиты
+## Commits
 
-- Формат: `type: что и зачем сделано`.
-- Один коммит — одна логически завершённая единица. Не смешивать баг-фикс, рефакторинг,
-  форматирование и новую фичу, если это не одна неразделимая задача.
-- Запрещённые сообщения: `fix`, `update`, `wip`, `changes`, `final`, `123`.
+- Message format: `type: short description of what and why`.
+- One commit = one logically complete unit. Do not mix a bug fix, a refactor,
+  formatting, and new features in a single commit unless they are one inseparable task.
+- Forbidden messages: `fix`, `update`, `wip`, `changes`, `final`, `123`.
+- Keep commits attributable: include the assistant identity trailer the project already
+  uses (check a recent `git log` for the convention).
 
-## Перед слиянием
+## Quality gate before merge
 
-- Прогнать проверки проекта (модуль команд). Красный обязательный гейт запрещает
-  слияние, пока не починено или пока владелец не решил иначе.
-- Самостоятельно просмотреть диф: соответствие задаче, нет лишних файлов, отладочных
-  остатков, секретов и случайных правок.
+- Run the project's checks (see the project commands module) before merging.
+- If mandatory checks fail, merging into `main` is forbidden until fixed or the owner
+  explicitly decides otherwise.
+- Before merging, self-review the diff: changes match the task, no stray files, no
+  debug leftovers, no secrets, no accidental unrelated edits.
 
-Сомневаетесь, «явно ли запрошено» действие, — спросите либо остановитесь после коммита
-в ветку и отчитайтесь, но не пушьте.
+When unsure whether an action counts as "explicitly requested": ask, or stop after the
+branch commit and report instead of pushing.
 
 ---
 
 <!-- module: .ai/universal/02-task-checklist.md -->
 
-# Чек-лист задачи и критерий готовности
+# Task Checklist and Definition of Done
 
-Цель: задача спланирована до старта и честно закрыта после финиша — в файле, который
-читается без доступа к диалогу.
+Purpose: every task is planned before it starts and honestly accounted for after it
+ends, in a file any reviewer can read without the conversation.
 
-## Протокол task-checklist.md
+## task-checklist.md protocol
 
-Файл `task-checklist.md` лежит в корне и всегда отслеживается git (никогда не в
-`.gitignore`).
+A file named `task-checklist.md` lives in the repository root and is always tracked by
+git (never in `.gitignore`).
 
-Перед началом:
+Before starting a task:
 
-1. Очистить или пересоздать файл под новую задачу.
-2. Записать этапы, проверки и ожидаемые результаты пунктами `[ ]` по секциям
-   (подготовка / реализация / проверка / завершение). Детализация — этапы, а не
-   нажатия клавиш.
-3. Закоммитить чек-лист ДО основной работы.
+1. Clear or recreate `task-checklist.md` for the new task.
+2. Write the main stages, checks, and expected outcomes as `[ ]` items, grouped into
+   short sections (preparation / implementation / verification / completion).
+   Moderate detail — stages, not keystrokes.
+3. Commit the checklist BEFORE doing the main work.
 
-После завершения:
+After finishing the task:
 
-4. Отметить каждый пункт: `+` сделано, `-` не сделано или частично.
-5. Закоммитить заполненный чек-лист вместе с работой.
-6. Не прятать невыполненное: `-` с честной пометкой — правильно; молча
-   проигнорированный пункт — нарушение.
+4. Mark every item: `+` done, `-` not done or partially done.
+5. Commit the filled checklist together with the completed work.
+6. Never hide unfinished items — a `-` with an honest note is correct; a silently
+   ignored item is a violation.
 
-## Критерий готовности
+## Definition of Done
 
-Задача завершена, только когда выполнено ВСЁ: код соответствует задаче без
-незапрошенного расширения объёма; отформатирован, линтер и проверка типов проходят;
-тесты добавлены или обновлены там, где разумно, существующие проходят; проект
-собирается без очевидных ошибок в логах; нет секретов, временных файлов и правок в
-посторонних файлах; документы архитектуры обновлены, если архитектура менялась;
-чек-лист заполнен отметками `+`/`-`; написан финальный отчёт.
+A task is complete only when ALL of the following hold:
 
-## Финальный отчёт
+- code written and matching the task, without unrequested scope;
+- code formatted; lint and type checks pass;
+- tests added or updated where reasonable; existing tests pass;
+- project builds; no obvious errors in logs;
+- no secrets, no temp files, no accidental changes in unrelated files;
+- architecture and state docs updated if the task changed the system's shape;
+- task checklist filled with `+`/`-`;
+- final report written.
 
-Всегда последний шаг задачи. Содержит: что сделано; какие файлы и области затронуты;
-какие проверки запускались и с каким результатом; изменения зависимостей, API, БД,
-конфигурации; риски безопасности, производительности, совместимости; и — явно и
-честно — всё, что не сделано или не получилось.
+## Final report
+
+The final report is ALWAYS the last step of a task. It states: what was done; which
+files and areas changed; which checks ran and their results; dependency, API, database,
+or config changes; security, performance, and compatibility risks; and — explicitly and
+honestly — anything that was not done or failed.
+
+---
+
+<!-- module: .ai/universal/03-scope-and-code-style.md -->
+
+# Scope Control and Code Style
+
+Purpose: change only what the task requires, and keep code readable without decoration.
+
+## Minimal changes
+
+- Touch only what the current task needs. Forbidden without necessity:
+  mass-reformatting other files, renaming things outside the task, changing
+  architecture "while at it", rewriting working code without cause, changing UI when
+  the task is not about the interface, deleting existing functionality without a
+  direct requirement.
+- If you discover an unrelated problem, record it separately (report it, or file it per
+  the project's process) — do not mix it into the current diff.
+- Do not create new documentation (README, `.md`, `.txt`) unless the task requires it
+  directly. Exception: the project's designated architecture and progress documents,
+  which must be kept current.
+
+## Comments
+
+- No comments by default. Code must be clear through structure and naming.
+- A comment is allowed only when the task demands it, or when important logic stays
+  non-obvious even with good naming. It explains the non-obvious "why", never restates
+  the code.
+- Stale, false, or misleading comments are forbidden. No doc comments that merely
+  repeat a function name.
+
+## File size
+
+- Regular code files: keep under roughly 1000 lines; split by meaning when approaching
+  the limit. Projects may set a stricter limit — the stricter limit wins.
+- Application entry points (`main`-type files): under roughly 100 lines; extract
+  configuration, startup, and service initialization into modules.
+- Exemptions: test files, developer-tool scripts, and any files the project explicitly
+  exempts.
+
+## Frontend restraint
+
+- No visual polish (styling, animations, decorative elements, redesign) unless the task
+  is explicitly about appearance.
+- When a task needs an interface, build the minimum that exercises the business logic
+  correctly.
+- Never change visual style, interface structure, component behavior, or user flows
+  without a direct requirement.
+
+---
+
+<!-- module: .ai/universal/04-architecture-boundaries.md -->
+
+# Architecture Boundaries, Workarounds, Tech Debt
+
+Purpose: respect the project's layering; make every shortcut visible.
+
+## Boundaries
+
+- Follow the project's existing architecture. Forbidden: business logic in UI or
+  controllers when a service layer exists; direct storage access in handlers when a
+  repository layer exists; bypassing existing services and abstractions without cause;
+  circular module dependencies; dumping unrelated logic into catch-all files.
+- If the architecture genuinely blocks the task, do not hack around it — propose a
+  proper structural change and reflect it in the architecture docs once approved.
+
+## Temporary solutions
+
+- Workarounds are allowed only exceptionally, and every one must be recorded
+  explicitly: why it exists, where it lives, its limits and risks, and when it must be
+  replaced.
+- Hidden workarounds are forbidden. Do not scatter uncontrolled `TODO`/`FIXME` marks;
+  important debt gets a task or an entry in the project's tracking process.
+
+## Tech debt
+
+- Debt found during a task that cannot be fixed now is recorded explicitly (in the
+  final report at minimum), never disguised as a normal solution.
+- Debt touching security, data integrity, performance, or stability is priority debt —
+  call it out loudly.
 
 ---
 
 <!-- module: .ai/universal/05-security-and-secrets.md -->
 
-# Безопасность, секреты, зависимости, переносимость
+# Security, Secrets, Dependencies, Portability
 
-Цель: ничего чувствительного в репозитории; каждое изменение безопасно в своей зоне;
-проект запускается на любой машине.
+Purpose: nothing sensitive in the repo; every change safe within its area; the project
+runs on any machine.
 
-## Секреты — абсолютный запрет
+## Secrets — absolute ban
 
-- НИКОГДА не помещать в код, git, тесты, документацию и примеры: пароли, API-ключи,
-  токены, приватные ключи, реальные учётные данные, cookie, продакшн-`.env`,
-  персональные данные.
-- Секреты живут только в `.env` (вне git), переменных окружения, менеджерах секретов
-  или секретах CI/CD. В репозитории допустим только безопасный `.env.example`.
-- Секрет, попавший в git, скомпрометирован: его нужно ротировать; удаления строки
-  новым коммитом недостаточно.
+- NEVER put in code, git, tests, docs, or examples: passwords, API keys, tokens,
+  private keys, real credentials, cookies, production `.env`, or personal user data.
+- Secrets live only in `.env` (untracked), environment variables, secret managers, or
+  CI/CD secrets. The repo may contain only a safe `.env.example`.
+- A secret that ever reached git is compromised: rotate it; deleting the line in a new
+  commit is not enough.
 
-## Безопасность в каждой задаче
+## Security in every task
 
-В зоне, которую трогаете, проверять: права доступа и авторизацию, валидацию входных
-данных, инъекции, XSS/CSRF где применимо, небезопасные редиректы, загрузку файлов,
-обработку персональных данных, публичные точки входа, хранение и передачу токенов,
-доступ к административным функциям. Безопасность — часть каждой задачи, а не будущей.
+Check within the area you touch: authorization and access rights, input validation,
+injection, XSS and CSRF where applicable, unsafe redirects, file uploads, personal data
+handling, public endpoints, token storage and transport, and access to admin functions.
+Security is part of every task, not a future task.
 
-## Зависимости
+## Dependencies
 
-- Новая зависимость требует обоснования: зачем, можно ли без неё, поддерживается ли,
-  известные уязвимости, совместимость со стеком, не дублирует ли существующую,
-  не тяжела ли для задачи.
-- Не тащить тяжёлую библиотеку ради одной маленькой функции.
-- После изменения зависимостей обновить lock-файл и проверить сборку.
-- Новая продакшн-зависимость обязательно называется в финальном отчёте.
+- No new dependency without justification: what for, can it be done without, is it
+  maintained, known vulnerabilities, stack compatibility, does it duplicate an existing
+  dependency, is it too heavy for the need.
+- Never add a heavy library for one small function.
+- After changing dependencies: update the lock file and verify the build.
+- A new production dependency must be named in the final report.
 
-## Переносимость
+## Portability
 
-- Никаких машинно-специфичных значений в коде: локальных абсолютных путей, имён
-  пользователей, настроек IDE, неконфигурируемых портов. Такое выносится в конфигурацию.
-- Проект должен оставаться запускаемым другим человеком документированными
-  инструментами проекта.
+- No machine-specific values in code: local absolute paths, usernames, IDE settings,
+  unconfigured local ports, or anything environment-dependent. Such values go to
+  configuration.
+- The project must remain runnable by someone else using the project's documented tools.
+
+---
+
+<!-- module: .ai/universal/06-quality-and-testing.md -->
+
+# Quality: Tests, Errors, Data, Contracts, Performance
+
+Purpose: changes are verified, honest about failure, and safe to release.
+
+## Tests
+
+- Cover new or changed code where reasonable: the happy path, validation errors, edge
+  cases, access rights, service and storage behavior, and regressions for fixed bugs.
+- NEVER delete, disable, or weaken tests just to make a build green.
+- If tests were not added, say why in the final report.
+- Prefer the project's designated check runner over ad-hoc command sequences, and keep
+  that runner updated when a task adds an important new part of the system.
+
+## Errors and logging
+
+- Handle errors explicitly. Forbidden: silently swallowed errors, empty catch blocks,
+  debug logs left after the task, secrets or personal data in logs, print-style
+  debugging instead of real handling.
+- Logs must say where it broke, which component, what context matters, and how critical
+  it is. Useful, not noisy.
+
+## Database migrations
+
+- Schema changes happen ONLY through migrations.
+- Never edit or rename an already-applied migration; never delete migrations without a
+  separate decision; never make irreversible changes without risk analysis.
+- Verify each migration on a clean database, on an existing database where applicable,
+  and together with the code that uses the new structure.
+
+## Contracts
+
+- When a task changes an API or an artifact format, update the contract and generated
+  types.
+- Never silently change field names, data types, response structure, error codes,
+  parameter requiredness, or endpoint behavior.
+- Any breaking change must be named explicitly in the final report.
+
+## Performance and releases
+
+- No premature optimization, but no obviously wasteful patterns: N+1 queries, heavy
+  per-request computation, render loops, unpaginated large reads, redundant calls,
+  blocking operations in responsive paths.
+- If a change may affect performance, say so in the final report.
+- Every change should be revertible; for risky changes plan the rollback before merging.
+- Large new features ship behind a feature flag where the project supports them;
+  unfinished functionality must not be reachable by accident; stale flags get removed
+  after stabilization.
+
+---
+
+<!-- module: .ai/universal/07-multi-assistant.md -->
+
+# Multi-Assistant Collaboration
+
+Purpose: several AI assistants and humans work in this repository across separate
+sessions; git is the coordination surface and the rule modules are shared.
+
+## Coordination through git
+
+- Before non-trivial work, check `git log --oneline -10` and
+  `git status --short --branch`: recent commits may be another assistant's finished
+  work — not yours to redo or second-guess.
+- Never rewrite history on another assistant's in-flight branch. Build on top of it or
+  ask first.
+- Keep commits attributable: include the assistant identity trailer the project already
+  uses (see recent `git log` for the convention).
+
+## Shared rule modules
+
+- All assistants obey the same rules from `.ai/universal/` and `.ai/project/`. There is
+  exactly one source of truth.
+- `CLAUDE.md` imports the modules natively; `AGENTS.md` is GENERATED from them. Never
+  hand-edit `AGENTS.md`; edit the module and regenerate (see the project commands
+  module for the sync command).
+- When a task changes shared behavior (workflow, gates, style, guardrails), change the
+  module once — every assistant picks it up. Mirror-maintained per-assistant files
+  (`.claude/` and `.codex/`: agents and skills) still need the same edit on both sides
+  in the same task.
+
+## Session hygiene for any model
+
+- Re-read plans and rule files from disk instead of trusting memory of a previous
+  session — files change between sessions.
+- When context is shaky or the task is large, restate the task's acceptance criteria in
+  the checklist before coding, and verify against files, not recollection.
+- If two rules appear to conflict: the project module wins over the universal module;
+  an explicit owner instruction in the current conversation wins over both. Say out
+  loud which rule you chose and why.
 
 ---
 
 <!-- module: .ai/project/10-project-map.md -->
 
-# Проект: codepack
+# Project: codepack
 
-Кроссплатформенное десктоп-приложение, превращающее папку с кодом в **чистый,
-безопасный снимок**: архив плюс набор отчётов, пригодных для передачи ИИ-ассистенту
-**и человеку** (программисту, команде, джуну, нетехническому специалисту).
+A cross-platform desktop application that turns a source folder into a **clean, safe
+snapshot**: an archive plus a set of reports fit to hand to an AI assistant **and to a
+human** (developer, team, junior, or a non-programmer technical stakeholder).
 
-Главная ценность — **не дать секретам утечь** при передаче проекта наружу. Это не
-архиватор и не генератор README: продукт про безопасную передачу контекста с
-локальной аналитикой.
+The core value is **preventing secret leakage** when a project is shared outward. This
+is not an archiver and not a README generator: the product is about safe context
+handoff with local-only analysis.
 
-## Состояние репозитория
+## Repository map
 
-**Гринфилд**: старая Python-реализация удалена, новая не начата. Есть только документы
-и инфраструктура ИИ-агентов. Каталогов `crates/` и `apps/` пока нет — их создаёт этап S0.
+Rust workspace under `crates/`:
 
-## Целевая карта
+- `codepack-core` — domain types, configuration, errors, progress and cancellation.
+- `codepack-scanner` — tree walking, ignore rules, stack detection, export planning.
+- `codepack-security` — export safety modes, secret redaction, the detector.
+- `codepack-diff` — differential export and snapshots (via `git2`).
+- `codepack-storage` — SQLite: history, snapshots, findings, migrations.
+- `codepack-tokens` — bytes and tokens, budget mode.
+- `codepack-reports` — insight reports, AI context packs, dashboard.
+- `codepack-archive` — ZIP building, splitting, restore.
+- `codepack-engine` — orchestrator of the eight-step pipeline.
+- `codepack-cli` — headless binary.
+- `xtask` — the project's task runner and quality gate.
 
-Крейты в `crates/`: `codepack-core` (типы, конфигурация, ошибки, прогресс и отмена),
-`-scanner` (обход, ignore, детект стека, план экспорта), `-security` (режимы, редактирование
-секретов, сканер), `-diff` (дифф и снапшоты через `git2`), `-storage` (SQLite: история,
-снапшоты, находки, миграции), `-tokens` (байты, токены, бюджет), `-reports` (insight-отчёты,
-AI_CONTEXT, AI_PROMPTS, дашборд), `-archive` (ZIP, части, восстановление), `-engine`
-(оркестратор 8 шагов), `-cli` (headless), `xtask` (проверки и служебные задачи).
+Other areas:
 
-Остальное: `apps/desktop` — Tauri-оболочка и фронтенд на TypeScript; `docs/` — документы
-состояния и решения, `docs/__arch__/` — архив старой реализации; `.ai/`, `.claude/`,
-`.codex/` — правила и рабочие пространства ассистентов.
+- `apps/desktop/ui` — TypeScript frontend (pnpm workspace).
+  `apps/desktop/src-tauri` is added in stage S11; it does not exist yet.
+- `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
+- `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
-Замысел продукта целиком — в `BLUEPRINT.md`, план и прогресс — в `ROADMAP.md`.
-Полная карта документов состояния — в модуле трекинга прогресса.
+The product intent lives in `BLUEPRINT.md`; the plan and progress live in `ROADMAP.md`.
+The full map of state documents is in the progress-tracking module.
 
-## Политика документации
+## Language policy
 
-- `BLUEPRINT.md` — спецификация продукта; меняется только вместе с замыслом и по
-  согласованию с владельцем.
-- `ROADMAP.md` — план и прогресс; обновляется при завершении каждого этапа.
-- Новые документы — только по прямому запросу. Исключение: `docs/architecture/` и
-  `ROADMAP.md` обязаны оставаться актуальными при изменении архитектуры или прогресса.
-- Язык документации, комментариев и отчётов — русский.
+- **Agent-facing infrastructure is English**: `.ai/`, `.claude/`, `.codex/`,
+  `CLAUDE.md`, `AGENTS.md`, `docs/` state documents, `task-checklist.md`, code, code
+  comments, commit messages, and test names.
+- **Owner-facing product documents are Russian**: `BLUEPRINT.md`, `ROADMAP.md`,
+  `README.md`. When you add a `**Status.**` line to `ROADMAP.md`, write it in Russian
+  to match the file.
+- **Reports to the owner are Russian.**
 
-## Продуктовые ограничения
+Do not mix languages inside a single file.
 
-- **Приватность абсолютна.** Аналитика локальна; сеть запрещена везде, кроме явно
-  инициированной пользователем отправки в ИИ (S13).
-- **Источник неизменен.** Экспорт никогда не пишет в папку исходного проекта.
-- **Байты остаются.** Размер в байтах сохраняется везде, где был; токены — дополнение,
-  а не замена (решение владельца).
-- **Паритет прежде новизны.** Внутри этапа сначала воспроизводится поведение старой
-  версии, потом добавляется новое.
-- **Порядок этапов обязателен** (`ROADMAP.md` §1, S0→S14); обгон — только по решению
-  владельца в `docs/decisions/open-questions.md`.
-- **Совместимость форматов**: внешние артефакты обратно совместимы, изменение — только
-  с повышением `schema_version`.
+## Documentation policy
+
+- `BLUEPRINT.md` is the product specification; it changes only when the product intent
+  changes, and only by owner agreement.
+- `ROADMAP.md` is the plan and progress record; update it when a stage completes.
+- New documents are created only on direct request. Exception: `docs/architecture/` and
+  `ROADMAP.md` must stay accurate when architecture or progress changes.
+
+## Product guardrails
+
+- **Privacy is absolute.** Analysis is local; network access is forbidden everywhere
+  except the explicitly user-initiated AI handoff in stage S13.
+- **The source is immutable.** Export never writes into the source project folder.
+- **Bytes stay.** Byte-based size reporting is preserved everywhere it existed; tokens
+  are an addition, never a replacement (owner decision).
+- **Parity before novelty.** Within a stage, reproduce the legacy behavior first, then
+  add new capability.
+- **Stage order is binding** (`ROADMAP.md` §1, S0→S14). Skipping ahead requires an owner
+  decision recorded in `docs/decisions/open-questions.md`.
+- **Artifact formats are backward compatible**; changing one requires bumping
+  `schema_version`.
 
 ---
 
 <!-- module: .ai/project/11-commands.md -->
 
-# Команды проекта и гейты качества
+# Project Commands and Quality Gates
 
-Запуск из корня репозитория (Windows: PowerShell или Git Bash).
+All commands run from the repository root (Windows: PowerShell or Git Bash).
 
-## Что работает сейчас (гринфилд)
-
-До выполнения этапа S0 существует только синхронизация правил:
+## Main entry point — the xtask runner
 
 ```powershell
-python dev_tools_scripts_runner.py sync-agents           # пересобрать AGENTS.md
-python dev_tools_scripts_runner.py sync-agents --check    # проверить актуальность
+cargo xtask gate            # full quality gate — the main verification path
+cargo xtask gate --quick    # quick gate — the minimum before a push
+cargo xtask fmt             # format Rust sources
+cargo xtask lint            # clippy with warnings denied
+cargo xtask test            # workspace tests
+cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
+cargo xtask sync-agents --check   # verify AGENTS.md is in sync
+cargo xtask doctor          # read-only environment diagnostics
 ```
 
-Это временный Python-скрипт с нулевой стоимостью запуска, нужный до появления
-Rust-инструментария. Этап S0 переносит его в `cargo xtask sync-agents` и убирает
-Python из репозитория.
+`cargo xtask gate` runs formatting, clippy, tests, and the `AGENTS.md` sync check.
+Prefer it over ad-hoc command sequences.
 
-## Целевые команды (появляются на S0)
+## Direct commands when targeting one layer
 
 ```powershell
-cargo xtask gate            # полный гейт качества — основной путь проверки
-cargo xtask gate --quick    # быстрый гейт, минимум перед push
-cargo xtask fmt             # форматирование Rust и фронтенда
-cargo xtask doctor          # диагностика окружения без изменения состояния
-cargo xtask sync-agents     # пересборка AGENTS.md
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --workspace
+pnpm install --frozen-lockfile
+pnpm --filter @codepack/ui typecheck
+pnpm --filter @codepack/ui lint
 ```
 
-Прямые команды по слоям: `cargo fmt --all --check`,
-`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
-`cargo deny check`, `cargo tauri dev` (после S11),
-`pnpm --filter ui typecheck` (после S11).
+Frontend commands require `pnpm install` once. The frontend lives in
+`apps/desktop/ui`; the Tauri shell arrives in stage S11.
 
-## Политика гейтов
+## Gate policy
 
-- Перед слиянием в `main` полный гейт обязан быть зелёным.
-- Быстрый гейт — минимум для промежуточных пушей.
-- `sync-agents --check` входит в гейт: рассинхрон `AGENTS.md` с `.ai/` намеренно
-  ломает сборку.
-- Изменения только в документах или конфигурации всё равно проходят проверки.
-- CI гоняет матрицу `windows-latest` / `macos-latest` / `ubuntu-latest`:
-  кроссплатформенность проверяется автоматически, а не на словах.
+- Before merging to `main`, the full gate must be green.
+- The quick gate is the minimum for intermediate pushes.
+- `sync-agents --check` is part of the gate: a drift between `AGENTS.md` and the `.ai/`
+  modules breaks the build on purpose.
+- Documentation-only or configuration-only changes still run the gate.
+- CI runs a matrix of `windows-latest`, `macos-latest`, and `ubuntu-latest`:
+  cross-platform support is verified automatically, not claimed.
 
-## Платформенные замечания
+## Platform notes
 
-- Windows: длинные пути и антивирус мешают тестам с временными каталогами — использовать
-  явный базовый временный каталог внутри репозитория.
-- macOS: сборка Tauri требует Xcode Command Line Tools.
-- Linux: Tauri требует `webkit2gtk` и связанные системные библиотеки.
+- Windows: long paths and antivirus can interfere with temporary directories; prefer a
+  repository-local temp directory in tests.
+- macOS: building the Tauri shell requires Xcode Command Line Tools.
+- Linux: the Tauri shell requires `webkit2gtk` and related system libraries. Core crates
+  and the CLI have no such dependency and build anywhere.
+
+## Toolchain
+
+The Rust toolchain is pinned in `rust-toolchain.toml`; do not bypass it. Node and pnpm
+versions are declared in `package.json` under `engines` and `packageManager`.
 
 ---
 
 <!-- module: .ai/project/12-domain-rules.md -->
 
-# Доменные правила и домашний стиль (codepack)
+# Domain Rules and House Style (codepack)
 
-Уточняют универсальные правила под эту кодовую базу. Более строгое побеждает.
+These sharpen the universal rules for this codebase. Stricter wins.
 
-## Структура кода на Rust
+## Rust code structure
 
-- Модуль свыше ~600 строк (строже универсальных 1000) становится каталогом-модулем;
-  публичная поверхность сохраняется, чтобы внешние импорты не ломались.
-- Крейты не знают о UI: `codepack-*` не зависят ни от Tauri, ни от фронтенда. Ядро
-  собирается и тестируется headless — на этом стоит CLI (S10).
-- Зависимости строго вниз: `engine` → доменные крейты → `core`. Обратные и циклические
-  зависимости запрещены.
-- Ошибки: `thiserror` в библиотеках; `anyhow` только в бинарях и `xtask`.
-- `unsafe` запрещён без явного решения владельца и обоснования в коде.
-- `unwrap()`/`expect()` вне тестов — только там, где инвариант доказан рядом
-  комментарием «почему это не может упасть».
+- A module over roughly 600 lines (stricter than the universal 1000) becomes a
+  directory module; the public surface is preserved so external imports keep working.
+- Crates know nothing about the UI: no `codepack-*` crate depends on Tauri or the
+  frontend. The core must build and test headless — the CLI depends on this.
+- Dependencies point strictly downward: `engine` → domain crates → `core`. Reverse and
+  circular dependencies are forbidden.
+- Errors: `thiserror` in libraries, `anyhow` only in binaries and `xtask`.
+- `unsafe` is forbidden without an explicit owner decision and a justification in code.
+- `unwrap()` and `expect()` outside tests are allowed only where the invariant is proven
+  by an adjacent comment explaining why it cannot fail.
+- Workspace lints are configured centrally in the root `Cargo.toml`; crates inherit them
+  with `[lints] workspace = true` rather than redefining their own.
 
-## Параллелизм и отзывчивость
+## Concurrency and responsiveness
 
-- Длительные операции (обход, хэширование, сканирование, архивация) параллелятся через
-  `rayon` и проверяют токен отмены внутри циклов, а не только между шагами.
-- Прогресс и лог идут через канал; UI никогда не блокируется.
-- Память не растёт линейно от размера файла: большие файлы читаются потоково.
+- Long operations (walking, hashing, scanning, archiving) parallelize with `rayon` and
+  check the cancellation token **inside** loops, not only between steps.
+- Progress and log messages travel over a channel; the UI never blocks.
+- Memory must not grow linearly with file size: large files are read in a streaming
+  fashion.
 
-## Ограничения предметной области
+## Domain constraints
 
-- **Сеть запрещена** во всех крейтах, кроме интеграции S13: добавление HTTP-клиента
-  в любой другой крейт — нарушение.
-- **Симлинки не разыменовываются** при обходе — защита от выхода за пределы дерева.
-- **Распаковка защищена** от path-traversal: путь элемента архива проверяется до записи.
-- **Секреты не логируются**: строка находки редактируется до попадания в лог, отчёт,
-  историю и БД.
-- Наборы констант (расширения текстовых и бинарных файлов, чувствительные имена и
-  суффиксы, режимы безопасности) переносятся из старой версии **дословно**; изменение
-  набора — отдельное решение, а не побочный эффект рефакторинга.
+- **Network access is forbidden** in every crate except the stage S13 integration.
+  Adding an HTTP client anywhere else is a violation.
+- **Symlinks are never followed** while walking — this prevents escaping the tree.
+- **Extraction is path-traversal safe**: an archive entry's target path is validated
+  before writing.
+- **Secrets are never logged**: a finding's text is redacted before it reaches a log,
+  report, history entry, or database row.
+- Constant sets (text and binary extensions, ignored directories, sensitive names and
+  suffixes, safety-mode tables) are ported from the legacy version **verbatim**.
+  Changing a set is a separate decision, never a side effect of refactoring.
 
-## Тесты
+## Tests
 
-- Каждый доменный крейт имеет golden-тесты против поведения старой реализации;
-  фикстуры проектов под каждый стек лежат в тестовых данных крейта.
-- Для `codepack-security` обязателен корпус-тест точности (precision/recall/F1);
-  ослаблять пороги ради зелёного гейта запрещено.
-- Тесты не зависят от установленного `git`: работа идёт через `git2`, репозитории
-  создаются программно.
+- Every domain crate carries golden tests against legacy behavior; per-stack project
+  fixtures live in the crate's test data.
+- `codepack-security` additionally requires an accuracy corpus test
+  (precision / recall / F1). Lowering a threshold to make the gate green is forbidden.
+- Tests must not depend on a `git` binary being installed: git work goes through `git2`
+  and test repositories are created programmatically.
 
-## Форматы артефактов
+## Artifact formats
 
-Имена файлов отчётов, структура JSON-манифестов и SARIF — **контракт**. Менять их можно
-только с повышением `schema_version` и записью в `docs/decisions/open-questions.md`.
+Report file names, JSON manifest structures, and SARIF output are a **contract**.
+Changing one requires bumping `schema_version` and recording the decision in
+`docs/decisions/open-questions.md`.
 
-## Рабочие пространства ассистентов
+## Assistant workspaces
 
-- `.claude/agents|skills` и `.codex/agents|skills` — зеркала по именам; изменение одной
-  стороны требует эквивалентного изменения другой в той же задаче.
-- `.claude/settings.json` разрешает рутинные читающие команды и запрещает разрушительные
-  git-операции. Расширять разрешения можно; удалять запреты — только по явному решению
-  владельца.
+- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors; changing
+  one side requires the equivalent change on the other in the same task.
+- `.claude/settings.json` allowlists routine read and verification commands and denies
+  destructive git operations and crate publishing. Extend the allowlist rather than
+  routing around it; never remove a deny entry without explicit owner approval.
 
 ---
 
 <!-- module: .ai/project/13-progress-tracking.md -->
 
-# Трекинг прогресса проекта
+# Project Progress Tracking
 
-Цель: любой ассистент, в любой сессии, на любой модели определяет, где находится
-проект и куда движется — **по файлам, а не по памяти**. Это главный механизм
-восстановления после потери чата.
+Purpose: any assistant, in any session, on any model, can locate exactly where the
+project stands and where it is going — **from files, not from memory**. This is the
+primary recovery mechanism after a lost conversation.
 
-## Где лежит правда
+## Where the truth lives
 
-| Вопрос | Файл |
+| Question | File |
 |---|---|
-| Что за продукт, логика, форматы, математика | `BLUEPRINT.md` |
-| Что планируем, в каком порядке, что готово | `ROADMAP.md` |
-| Что реально построено сейчас | `docs/architecture/overview.md` |
-| Что нельзя ломать никогда | `docs/architecture/invariants.md` |
-| Решения владельца и открытые вопросы | `docs/decisions/open-questions.md` |
-| Какой была текущая или последняя задача | `task-checklist.md` |
-| Что происходило недавно на самом деле | `git log --oneline -15` |
-| Как работала старая версия | `docs/__arch__/codepack-main.zip` |
+| What the product is: logic, formats, math | `BLUEPRINT.md` |
+| What is planned, in what order, what is done | `ROADMAP.md` |
+| What is actually built right now | `docs/architecture/overview.md` |
+| What must never break | `docs/architecture/invariants.md` |
+| Owner decisions and open questions | `docs/decisions/open-questions.md` |
+| What the current or last task was | `task-checklist.md` |
+| What actually happened recently | `git log --oneline -15` |
+| How the rules themselves changed | `.ai/CHANGELOG.md` |
+| How the legacy version worked | `docs/__arch__/codepack-main.zip` |
 
-## Ритуал ориентации — в начале КАЖДОЙ задачи
+## Orientation ritual — at the start of EVERY task
 
-По порядку, без пропусков:
+In order, without skipping:
 
-1. `git status --short --branch` и `git log --oneline -15`.
-2. `ROADMAP.md` §1 и строки `**Status.**` под этапами: этап со строкой статуса сделан;
-   **первый этап без неё — следующий в работе**.
-3. `docs/architecture/overview.md` — что фактически существует в коде.
-4. `task-checklist.md` — какой была прошлая задача и чем закончилась.
-5. `docs/decisions/open-questions.md` — нет ли решений, меняющих план.
-6. Только после этого планировать новую задачу.
+1. `git status --short --branch` and `git log --oneline -15`.
+2. `ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
+   line is done; **the first stage without one is next**.
+3. `docs/architecture/overview.md` — what exists in the code right now.
+4. `task-checklist.md` — what the previous task was and whether it finished cleanly.
+5. `docs/decisions/open-questions.md` — whether a decision changes the plan.
+6. Only then plan the new task.
 
-Если задача касается поведения, бывшего в старой версии, дополнительно свериться с
-модулем легаси-эталона.
+If the task touches behavior that existed in the legacy version, also consult the legacy
+reference module.
 
-## Обязанности при завершении
+## Update duties when finishing work
 
-- Завершил этап или значимую часть → обновить строку `**Status.**` под этапом в
-  `ROADMAP.md` (что сдано: крейты, модули, команды, тесты) и статус в таблице §1.
-- Изменил форму системы (новый крейт, слой, операционная задача) → обновить
+- Completed a stage or a significant slice → add or refresh the `**Status.**` line under
+  that stage in `ROADMAP.md` (what shipped: crates, modules, commands, tests) and update
+  the status column in §1. Write it in Russian to match that file.
+- Changed the system's shape (new crate, new layer, new operational job) → update
   `docs/architecture/overview.md`.
-- Принял или получил решение владельца, ограничивающее будущее → записать в
-  `docs/decisions/open-questions.md`, а не только в чат.
-- Ввёл инвариант → записать в `docs/architecture/invariants.md`.
+- Made or received an owner decision that constrains the future → record it in
+  `docs/decisions/open-questions.md`, not only in the chat.
+- Introduced an invariant → record it in `docs/architecture/invariants.md`.
+- Changed a rule module → record it in `.ai/CHANGELOG.md` and regenerate `AGENTS.md`.
 
-## Защита от расхождения
+## Drift guard
 
-Если план, документ состояния и код противоречат друг другу: **код — факт, план —
-намерение**. Свести их в той же задаче или явно сообщить о расхождении. Устаревшая
-документация хуже её отсутствия.
+If the plan, the state document, and the code disagree: **the code is the fact, the plan
+is the intent**. Reconcile them in the same task or report the mismatch explicitly.
+Stale documentation is worse than no documentation.
 
-## Правило незавершённой задачи
+## Unfinished-task rule
 
-Если `task-checklist.md` содержит незакрытые пункты `[ ]` от прошлой сессии — сначала
-выяснить их судьбу: доделать либо честно отметить `-` с пояснением. Начинать новую
-задачу поверх молча брошенной — нарушение.
+If `task-checklist.md` still holds open `[ ]` items from a previous session, resolve
+them first: finish them, or mark them `-` with an honest note. Starting a new task on
+top of a silently abandoned one is a violation.
 
 ---
 
 <!-- module index: extended -->
 
-# Модули, подключаемые по требованию
+# Modules loaded on demand
 
-Эти правила действуют наравне с остальными, но не встроены целиком из-за
-бюджета размера инструкций. Ниже — их суть; когда задача касается модуля,
-прочитайте файл целиком. Это обязанность, а не рекомендация.
+These rules bind exactly like the inlined ones; only their full text lives
+outside this file, to stay within the instruction budget. Read the file itself
+when a task touches it — that is an obligation, not a suggestion.
 
-## Объём работ и стиль кода
+## Rules Evolution: Keeping the Instructions Current
 
-Файл: `.ai/universal/03-scope-and-code-style.md`
+File: `.ai/universal/08-rules-evolution.md`
 
-Менять только то, что требует задача: никакого попутного рефакторинга, переименований, редизайна и удаления функциональности. Новую документацию не создавать без прямого запроса. Комментарии — только для неочевидного «почему». Файлы кода до ~1000 строк, точки входа до ~100. Никакой визуальной полировки вне интерфейсных задач.
+Never weaken a rule to make a task easier — propose changes instead; autonomous edits may only clarify or correct, never loosen; every change needs a changelog entry and a regenerated entry point.
 
-## Границы архитектуры, обходные решения, техдолг
+## Legacy Reference: The Previous Python Implementation
 
-Файл: `.ai/universal/04-architecture-boundaries.md`
+File: `.ai/project/14-legacy-reference.md`
 
-Следовать слоям проекта; не обходить архитектуру хаком; каждый обходной путь и каждый техдолг фиксировать явно.
-
-## Качество: тесты, ошибки, данные, контракты, производительность
-
-Файл: `.ai/universal/06-quality-and-testing.md`
-
-Покрывать изменённый код тестами; никогда не ослаблять тесты ради зелёной сборки; ошибки обрабатывать явно; схему менять только миграциями; ломающие изменения контрактов называть в отчёте.
-
-## Совместная работа нескольких ассистентов
-
-Файл: `.ai/universal/07-multi-assistant.md`
-
-Перед работой смотреть `git log`/`git status` — свежие коммиты могут быть чужой законченной работой; не переписывать чужие ветки; `AGENTS.md` не править руками; при конфликте правил проектный модуль сильнее универсального, инструкция владельца сильнее обоих.
-
-## Легаси-эталон: старая реализация на Python
-
-Файл: `.ai/project/14-legacy-reference.md`
-
-`docs/__arch__/codepack-main.zip` — эталон поведения, а не кода; распаковывать только во временный каталог вне репозитория; брать оттуда факты и форматы, не архитектуру.
+`docs/__arch__/codepack-main.zip` is the behavioral reference for exact constants, artifact formats, and ambiguous behavior — consult it, never copy its Python architecture into Rust.

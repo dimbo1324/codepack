@@ -1,5 +1,9 @@
 # Rules Evolution: Keeping the Instructions Current
 
+<!-- tier: extended -->
+
+> **Essence.** Never weaken a rule to make a task easier — propose changes instead; autonomous edits may only clarify or correct, never loosen; every change needs a changelog entry and a regenerated entry point.
+
 Purpose: the rule set is a living system, not a monument. It must absorb what agents
 learn while working, stay factually true, and never silently rot. This module governs
 how the rules change themselves.

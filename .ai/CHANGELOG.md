@@ -8,6 +8,28 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+## 2026-07-22 — Sync tooling moved to `cargo xtask`; two modules marked `extended`
+
+**Changed.** `dev_tools_scripts_runner.py` and `scripts/dev_tools/sync_agents_md.py`
+removed; `cargo xtask sync-agents` (already implemented) is now the only way to
+regenerate `AGENTS.md`. References in `.ai/README.md` and `.claude/settings.json`
+updated. `universal/08-rules-evolution.md` and `project/14-legacy-reference.md` marked
+`<!-- tier: extended -->` with an `> **Essence.**` line each.
+
+**Why.** Stage S0 (`ROADMAP.md` §2) requires the temporary Python sync script to be
+retired in favor of `cargo xtask`. Separately, module growth since the previous entry
+pushed the assembled `AGENTS.md` to 31.7 KiB, over the 30 KiB budget — `sync-agents
+--check` was failing.
+
+**Effect.** `cargo xtask sync-agents --check` passes again (25.7 KiB). Rules-evolution
+and legacy-reference are situational (read when a task actually touches them), so they
+compress well; `CLAUDE.md` still imports them in full for Claude Code regardless of tier.
+
+**Decided by.** Agent, within the autonomous-fix scope of `08-rules-evolution.md`
+(correcting a stale reference and restoring a budget invariant, not loosening a rule).
+
+---
+
 ## 2026-07-22 — Rule system switched to English
 
 **Changed.** All agent-facing configuration translated from Russian to English:
