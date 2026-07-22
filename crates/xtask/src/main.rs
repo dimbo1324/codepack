@@ -46,7 +46,11 @@ fn run(root: &Path, program: &str, args: &[&str]) -> bool {
 
 fn step(root: &Path, label: &str, program: &str, args: &[&str]) -> Result<(), String> {
     println!("\n=== {label} ===");
-    if run(root, program, args) { Ok(()) } else { Err(label.to_string()) }
+    if run(root, program, args) {
+        Ok(())
+    } else {
+        Err(label.to_string())
+    }
 }
 
 fn gate(root: &Path, quick: bool) -> Result<(), String> {
@@ -55,7 +59,14 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
         root,
         "clippy",
         "cargo",
-        &["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+        &[
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
     )?;
     if !quick {
         step(root, "tests", "cargo", &["test", "--workspace"])?;
@@ -87,7 +98,11 @@ fn doctor(root: &Path) {
     let tauri = root.join("apps/desktop/src-tauri");
     println!(
         "  tauri  {}",
-        if tauri.is_dir() { "present" } else { "absent (arrives in stage S11)" }
+        if tauri.is_dir() {
+            "present"
+        } else {
+            "absent (arrives in stage S11)"
+        }
     );
 }
 
@@ -107,7 +122,14 @@ fn main() -> ExitCode {
             &root,
             "clippy",
             "cargo",
-            &["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"],
+            &[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ],
         ),
         "test" => step(&root, "tests", "cargo", &["test", "--workspace"]),
         "sync-agents" => {

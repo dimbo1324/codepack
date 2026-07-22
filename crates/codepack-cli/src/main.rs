@@ -7,5 +7,8 @@
 #![allow(clippy::print_stdout)]
 
 fn main() {
-    println!("codepack {} — not implemented yet (stage S10).", env!("CARGO_PKG_VERSION"));
+    println!(
+        "codepack {} — not implemented yet (stage S10).",
+        env!("CARGO_PKG_VERSION")
+    );
 }

@@ -35,7 +35,10 @@ struct Module {
 
 impl Module {
     fn is_extended(&self) -> bool {
-        self.body.lines().take(5).any(|line| line.contains(TIER_MARKER))
+        self.body
+            .lines()
+            .take(5)
+            .any(|line| line.contains(TIER_MARKER))
     }
 
     fn title(&self) -> &str {
@@ -72,7 +75,10 @@ fn collect_modules(root: &Path) -> Result<Vec<Module>, String> {
             let body = fs::read_to_string(&path)
                 .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
             modules.push(Module {
-                relative_path: format!(".ai/{group}/{}", path.file_name().unwrap().to_string_lossy()),
+                relative_path: format!(
+                    ".ai/{group}/{}",
+                    path.file_name().unwrap().to_string_lossy()
+                ),
                 body: body.trim().to_string(),
             });
         }
@@ -107,7 +113,11 @@ fn render(modules: &[Module]) -> String {
              when a task touches it — that is an obligation, not a suggestion.\n",
         );
         for module in extended {
-            index.push_str(&format!("\n## {}\n\nFile: `{}`\n", module.title(), module.relative_path));
+            index.push_str(&format!(
+                "\n## {}\n\nFile: `{}`\n",
+                module.title(),
+                module.relative_path
+            ));
             if let Some(essence) = module.essence() {
                 index.push_str(&format!("\n{essence}\n"));
             }
@@ -140,8 +150,9 @@ pub(crate) fn run(root: &Path, check_only: bool) -> Result<(), String> {
             println!("AGENTS.md is in sync with .ai/ modules ({size_kib:.1} KiB).");
             return Ok(());
         }
-        return Err("AGENTS.md is out of sync with .ai/ modules. Run: cargo xtask sync-agents"
-            .to_string());
+        return Err(
+            "AGENTS.md is out of sync with .ai/ modules. Run: cargo xtask sync-agents".to_string(),
+        );
     }
 
     if current == content {
@@ -162,7 +173,10 @@ mod tests {
     use super::*;
 
     fn module(path: &str, body: &str) -> Module {
-        Module { relative_path: path.to_string(), body: body.trim().to_string() }
+        Module {
+            relative_path: path.to_string(),
+            body: body.trim().to_string(),
+        }
     }
 
     #[test]
