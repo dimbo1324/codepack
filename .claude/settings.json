@@ -15,7 +15,6 @@
       "Bash(cargo deny check:*)",
       "Bash(cargo tree:*)",
       "Bash(cargo xtask:*)",
-      "Bash(python dev_tools_scripts_runner.py:*)",
       "Bash(pnpm install:*)",
       "Bash(pnpm lint:*)",
       "Bash(pnpm typecheck:*)",

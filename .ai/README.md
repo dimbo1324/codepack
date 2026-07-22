@@ -25,7 +25,7 @@ when they conflict (for example, a stricter file-size limit).
 
 1. Edit or add a module under `.ai/universal/` or `.ai/project/`.
 2. Record the change in `.ai/CHANGELOG.md`.
-3. Regenerate the Codex entry point: `python dev_tools_scripts_runner.py sync-agents`.
+3. Regenerate the Codex entry point: `cargo xtask sync-agents`.
 4. Commit the module, the changelog entry, and the regenerated `AGENTS.md` together.
 
 Never edit `AGENTS.md` directly — it carries a generated-file banner and any manual
@@ -71,9 +71,9 @@ to spare. Reach for `extended` only when the budget actually forces it.
 ## Porting to another project
 
 1. Copy `.ai/universal/` unchanged.
-2. Copy `CLAUDE.md` and the sync script; adjust paths if the layout differs.
+2. Copy `CLAUDE.md` and the `xtask` sync-agents command; adjust paths if the layout differs.
 3. Rewrite everything under `.ai/project/` for the new project.
-4. Run the sync script to produce the new `AGENTS.md`.
+4. Run `cargo xtask sync-agents` to produce the new `AGENTS.md`.
 
 Keep universal modules genuinely universal: if a rule needs a project path or a
 project command to make sense, it belongs in `.ai/project/`.
