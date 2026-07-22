@@ -10,9 +10,20 @@ repository = "https://github.com/dimbo1324/codepack"
 publish = false
 
 # Shared dependency versions. Crates opt in with `dep.workspace = true`.
-# Nothing is enabled yet: stage S0 ships infrastructure only, and every dependency
-# must be justified when the stage that needs it lands.
+# Every dependency here must be justified by the stage that needs it (see the
+# `**Status.**` line under that stage in ROADMAP.md for the justification).
 [workspace.dependencies]
+# S1 (codepack-core): Config and domain types need JSON round-trip and, later,
+# consumption by codepack-reports/-storage/the UI without re-deriving.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# S1: mandated by .ai/project/12-domain-rules.md for library error types.
+thiserror = "2.0"
+# S1: progress/log channel abstraction, reused unchanged by the S9 engine.
+crossbeam-channel = "0.5"
+# S1 (dev-dependency only): hermetic config load/save tests that never touch the
+# developer's real OS config directory.
+tempfile = "3.27"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

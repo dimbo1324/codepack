@@ -1,0 +1,41 @@
+{
+  "last_root": "/home/dev/project",
+  "text_file_size_limit_enabled": true,
+  "max_text_file_mb": 8,
+  "redact_secrets": true,
+  "keep_staging_folder": true,
+  "include_project_in_zip": false,
+  "extra_ignored_dirs": [
+    "vendor",
+    "tmp"
+  ],
+  "export_profile": "security",
+  "safe_export_mode": "balanced",
+  "zip_part_limit_mb": 256,
+  "diff_export_mode": "git_ref",
+  "diff_base_ref": "main",
+  "diff_target_ref": "feature/x",
+  "include_git_patch": true,
+  "custom_excluded_files": [
+    "notes.txt"
+  ],
+  "custom_excluded_extensions": [
+    "log"
+  ],
+  "always_include_files": [
+    "README.md"
+  ],
+  "always_include_dirs": [
+    "docs"
+  ],
+  "incremental_export_enabled": true,
+  "developer_context": "Fix the export pipeline race condition.",
+  "theme": "dark",
+  "watch_enabled": true,
+  "watch_clipboard_auto_update": true,
+  "ui_zoom": 1.25,
+  "language": "en",
+  "prompt_goals": [
+    "bug_hunt"
+  ]
+}

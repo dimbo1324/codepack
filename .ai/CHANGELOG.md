@@ -8,6 +8,21 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+## 2026-07-22 — `cargo xtask deny` documented
+
+**Changed.** `.ai/project/11-commands.md` now lists `cargo xtask deny` and notes that
+`cargo-deny` is a separately-installed binary, not a `rust-toolchain.toml` component.
+
+**Why.** Stage S1 wired `cargo deny check` into `cargo xtask gate` now that the
+workspace has real dependencies (`deny.toml`'s own stated trigger condition).
+
+**Effect.** Contributors and CI both need `cargo-deny` on `PATH` for the gate to pass;
+`cargo xtask doctor` reports its presence.
+
+**Decided by.** Owner (S1 task).
+
+---
+
 ## 2026-07-22 — Sync tooling moved to `cargo xtask`; two modules marked `extended`
 
 **Changed.** `dev_tools_scripts_runner.py` and `scripts/dev_tools/sync_agents_md.py`

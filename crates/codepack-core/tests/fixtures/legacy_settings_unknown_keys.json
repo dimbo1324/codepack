@@ -1,0 +1,10 @@
+{
+  "last_root": "/home/dev/project",
+  "text_file_size_limit_enabled": false,
+  "theme": "dark",
+  "user_export_profiles_path": "/home/dev/.project_exporter_profiles.json",
+  "window_geometry": "1200x800+40+40",
+  "some_future_field": {
+    "nested": true
+  }
+}

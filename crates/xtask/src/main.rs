@@ -20,6 +20,7 @@ Commands:
   fmt                     Format Rust sources
   lint                    Clippy across the workspace with warnings denied
   test                    Run workspace tests
+  deny                    cargo-deny: advisories, bans, licenses, sources
   sync-agents [--check]   Regenerate AGENTS.md from the .ai/ modules
   doctor                  Read-only environment diagnostics
 ";
@@ -71,6 +72,7 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
     if !quick {
         step(root, "tests", "cargo", &["test", "--workspace"])?;
     }
+    step(root, "deny", "cargo", &["deny", "check"])?;
     println!("\n=== agents sync ===");
     sync_agents::run(root, true).map_err(|error| format!("sync-agents: {error}"))?;
     Ok(())
@@ -81,6 +83,7 @@ fn doctor(root: &Path) {
     for (label, program, args) in [
         ("cargo", "cargo", ["--version"]),
         ("rustc", "rustc", ["--version"]),
+        ("cargo-deny", "cargo-deny", ["--version"]),
         ("node", "node", ["--version"]),
         ("pnpm", "pnpm", ["--version"]),
     ] {
@@ -132,6 +135,7 @@ fn main() -> ExitCode {
             ],
         ),
         "test" => step(&root, "tests", "cargo", &["test", "--workspace"]),
+        "deny" => step(&root, "deny", "cargo", &["deny", "check"]),
         "sync-agents" => {
             sync_agents::run(&root, has("--check")).map_err(|error| format!("sync-agents: {error}"))
         }

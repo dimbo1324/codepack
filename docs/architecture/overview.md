@@ -7,22 +7,23 @@
 > новая операционная задача.
 
 **Дата последней ревизии:** 2026-07-22
-**Состояние:** этап S0 завершён — фундамент репозитория собирается, тестируется и
-проверяется гейтом; продуктового кода (S1+) ещё нет.
+**Состояние:** этапы S0 и S1 завершены. `codepack-core` — единственный крейт с
+реальной доменной логикой; остальные крейты «Ядра» пока плейсхолдеры.
 
 ## Что существует
 
 | Область | Состояние |
 |---|---|
 | Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
-| Крейты Rust (`crates/`) | **созданы как плейсхолдеры**: `codepack-core`, `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (все `lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
-| `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `sync-agents [--check]`, `doctor` |
+| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). 56 юнит- + 6 интеграционных тестов |
+| Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
+| `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `deny`, `sync-agents [--check]`, `doctor` |
 | `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |
-| `deny.toml` | **готов** (реальную проверку выполнит с первой зависимостью в S1) |
+| `deny.toml` | **активен с S1**: advisories/bans/licenses/sources все `ok`; собственные крейты исключены из license-проверки (`[licenses.private] ignore = true`) — у них ещё нет решения о лицензии, это отдельный вопрос |
 | Десктоп-приложение (`apps/desktop`) | не создано — этап S11 |
-| CI (`.github/workflows/ci.yml`) | **готов**: матрица `ubuntu-latest` / `macos-latest` / `windows-latest`, запускает `cargo xtask gate` |
-| Гейт качества (`cargo xtask gate`) | **готов и зелёный локально**: fmt, clippy `-D warnings`, тесты, `sync-agents --check` |
-| Инфраструктура ИИ-агентов (`.ai/`, `.claude/`, `.codex/`) | **готова**; синхронизация `AGENTS.md` переведена с временного Python-скрипта на `cargo xtask sync-agents` |
+| CI (`.github/workflows/ci.yml`) | **готов**: матрица `ubuntu-latest` / `macos-latest` / `windows-latest`, устанавливает `cargo-deny` и запускает `cargo xtask gate` |
+| Гейт качества (`cargo xtask gate`) | **зелёный локально и в CI**: fmt, clippy `-D warnings`, тесты, `cargo deny check`, `sync-agents --check` |
+| Инфраструктура ИИ-агентов (`.ai/`, `.claude/`, `.codex/`) | **готова**; синхронизация `AGENTS.md` — `cargo xtask sync-agents` |
 | Спецификация продукта (`BLUEPRINT.md`) | **готова** |
 | План реализации (`ROADMAP.md`) | **готов** |
 | Архив старой реализации | `docs/__arch__/codepack-main.zip` |
@@ -48,4 +49,5 @@
 
 ## Следующий шаг
 
-Этап **S1 — Доменные типы и конфигурация (`codepack-core`)**. См. `ROADMAP.md` §2.
+Этап **S2 — Сканер: обход, ignore, детект стека (`codepack-scanner`)**.
+См. `ROADMAP.md` §2.

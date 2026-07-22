@@ -80,6 +80,23 @@ rather than silently rewriting the already-merged S0 one.
 - [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
 - [ ] Final report to owner (Russian, per language policy)
 
+## Mid-implementation deviations (recorded honestly)
+
+- `cargo deny check` failed on a real license issue: `directories` (planned for
+  `paths.rs`) pulls in `option-ext` (MPL-2.0, copyleft). Asked the owner rather than
+  silently allow-listing a copyleft license or silently dropping the dependency —
+  owner chose to implement `AppPaths` by hand over environment variables instead.
+  `directories` was never added to the workspace; `docs/decisions/open-questions.md`
+  records the decision.
+- `cargo-deny` is not installed by default on a dev machine (not a `rust-toolchain.toml`
+  component) — installed locally to verify the gate for real (`cargo install
+  cargo-deny --locked`), documented the requirement in
+  `.ai/project/11-commands.md`, and CI installs it via `taiki-e/install-action`.
+- `[licenses.private] ignore = true` added to `deny.toml`: our own workspace crates
+  have no `license` field yet (separate, undecided question) and would otherwise fail
+  the license check as "unlicensed" — this is the correct cargo-deny mechanism for
+  unpublished internal crates, not a loosening of the copyleft policy.
+
 ---
 
 ## Next task

@@ -1,5 +1,5 @@
-# cargo-deny configuration.
-# Runs in CI once the workspace has real dependencies (stage S1 onward).
+# cargo-deny configuration. Wired into `cargo xtask gate` and CI from stage S1 onward,
+# now that the workspace has real dependencies.
 
 [advisories]
 yanked = "deny"
@@ -22,6 +22,11 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.9
+# Our own workspace crates (all `publish = false`, never shipped to crates.io) don't
+# carry a `license` field yet — that is a separate, unrelated decision. Don't fail the
+# license check on our own unpublished code.
+[licenses.private]
+ignore = true
 
 [sources]
 unknown-registry = "deny"

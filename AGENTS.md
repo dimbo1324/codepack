@@ -408,13 +408,18 @@ cargo xtask gate --quick    # quick gate — the minimum before a push
 cargo xtask fmt             # format Rust sources
 cargo xtask lint            # clippy with warnings denied
 cargo xtask test            # workspace tests
+cargo xtask deny            # cargo-deny: advisories, bans, licenses, sources
 cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
 cargo xtask sync-agents --check   # verify AGENTS.md is in sync
 cargo xtask doctor          # read-only environment diagnostics
 ```
 
-`cargo xtask gate` runs formatting, clippy, tests, and the `AGENTS.md` sync check.
-Prefer it over ad-hoc command sequences.
+`cargo xtask gate` runs formatting, clippy, tests, `cargo deny check`, and the
+`AGENTS.md` sync check. Prefer it over ad-hoc command sequences.
+
+`cargo deny check` requires the `cargo-deny` binary (`cargo install cargo-deny`,
+not a `rust-toolchain.toml` component — CI installs it via `taiki-e/install-action`).
+`cargo xtask doctor` reports whether it is on `PATH`.
 
 ## Direct commands when targeting one layer
 

@@ -25,5 +25,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
       - name: cargo xtask gate
         run: cargo xtask gate
