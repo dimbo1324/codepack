@@ -1,48 +1,56 @@
 # Чек-лист задачи
 
-**Задача:** Подготовка почвы для новой версии — удаление старой реализации, план
-на новом стеке, инфраструктура ИИ-агентов.
+**Задача:** Этап **S0 — Фундамент репозитория и гейт качества** (`ROADMAP.md` §2).
+Задача была начата в предыдущей сессии (Cargo workspace и крейты-плейсхолдеры уже
+существовали), но не завершена: код ни разу не проходил `cargo fmt`, `cargo xtask
+sync-agents --check` падал (бюджет `AGENTS.md` превышен), CI отсутствовал.
 **Дата:** 2026-07-22
-**Ветка:** main (по прямому указанию владельца)
+**Ветка:** feat/s0-repo-foundation-quality-gate
 
 ## Подготовка
 
-- [+] Изучить эталонный проект `country-decision-atlas-r` (структура `.ai/`, `.claude/`,
-      `.codex/`, `CLAUDE.md`, `AGENTS.md`)
-- [+] Проверить наличие архива старой реализации перед удалением
-      (`docs/__arch__/codepack-main.zip`, 10.2 МБ)
+- [+] Ритуал ориентации: `git status`/`git log`, `ROADMAP.md` §1 (S0 без строки
+      `**Status.**` — первый в очереди), `docs/architecture/overview.md`,
+      `task-checklist.md`, `docs/decisions/open-questions.md`
+- [+] Инвентаризация уже существующей части S0: workspace, 10 крейтов-плейсхолдеров,
+      `crates/xtask` с командами `gate/fmt/lint/test/sync-agents/doctor`,
+      `rust-toolchain.toml`, `rustfmt.toml`, `deny.toml`, `.gitignore`, `.editorconfig`
+- [+] Выявлены незавершённые места: код не отформатирован, `sync-agents --check`
+      падает (31.7 KiB > 30 KiB), `.github/workflows` отсутствует, временный
+      Python-скрипт синхронизации не удалён, `docs/architecture/overview.md` устарел
 
 ## Реализация
 
-- [+] Создать `BLUEPRINT.md` — спецификация продукта (существующее + новое)
-- [+] Создать `ROADMAP.md` — этапы S0–S14 реализации на Rust + Tauri
-- [+] Создать модули правил `.ai/universal/01–07` и `.ai/project/10–14`
-- [+] Создать `CLAUDE.md` — точку входа с `@`-импортами
-- [+] Создать скрипт синхронизации и сгенерировать `AGENTS.md`
-- [+] Ввести механизм уровней модулей (`inline` / `extended`) из-за бюджета 30 KiB
-- [+] Создать рабочее пространство `.claude/` (настройки, 8 агентов, 5 скиллов)
-- [+] Создать зеркальное `.codex/` (конфигурация, 8 агентов, 5 скиллов)
-- [+] Создать документы состояния (`docs/README.md`, `architecture/overview.md`,
-      `architecture/invariants.md`, `decisions/open-questions.md`)
-- [+] Удалить старую реализацию на Python (кроме `docs/`)
-- [+] Очистить `README.md`
-- [+] Настроить `.gitignore` под Rust + Tauri
+- [+] `cargo xtask fmt` — привести весь существующий Rust-код к `rustfmt.toml`
+- [+] Вернуть `AGENTS.md` под бюджет 30 KiB: пометить `.ai/universal/08-rules-
+      evolution.md` и `.ai/project/14-legacy-reference.md` как `tier: extended` с
+      однострочной `> **Essence.**` (обнаружен и исправлен баг: essence не должен
+      переноситься на несколько строк — парсер читает только первую)
+- [+] Удалить `dev_tools_scripts_runner.py` и `scripts/dev_tools/sync_agents_md.py`;
+      обновить ссылки на них в `.ai/README.md` и `.claude/settings.json`
+- [+] Записать изменение модулей в `.ai/CHANGELOG.md`
+- [+] Добавить `.github/workflows/ci.yml` — матрица `ubuntu-latest`/`macos-latest`/
+      `windows-latest`, шаг `cargo xtask gate`
 
 ## Проверка
 
-- [+] `AGENTS.md` помещается в бюджет (27.9 KiB из 30)
-- [+] `sync-agents --check` проходит
-- [+] `docs/` не пострадал, архив на месте
-- [-] Гейт качества не запускался: продуктового кода ещё нет (этап S0)
+- [+] `cargo xtask gate` зелёный локально (fmt, clippy -D warnings, тесты, sync-agents
+      --check; 3/3 юнит-теста xtask проходят)
+- [+] `cargo xtask sync-agents --check` проходит (25.7 KiB из 30 KiB)
+- [-] Гейт в CI на трёх ОС — воркфлоу добавлен, но не подтверждён живым прогоном:
+      подтвердится при первом push ветки/PR в `origin`
+- [+] `docs/architecture/overview.md` обновлён под фактическое состояние кода
+- [+] `ROADMAP.md`: строка `**Status.**` под S0 и статус в таблице §1 обновлены
 
 ## Завершение
 
-- [+] Коммит изменений
+- [+] Коммиты изменений (раздельно: чек-лист, код и правила, CI)
+- [ ] Fast-forward merge в `main` (после явного согласия владельца на публикацию)
 - [+] Финальный отчёт владельцу
 
 ---
 
 ## Следующая задача
 
-Этап **S0 — Фундамент репозитория и гейт качества** (`ROADMAP.md` §2).
+Этап **S1 — Доменные типы и конфигурация (`codepack-core`)** (`ROADMAP.md` §2).
 Начать с ритуала ориентации из `.ai/project/13-progress-tracking.md`.

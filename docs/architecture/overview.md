@@ -7,21 +7,24 @@
 > новая операционная задача.
 
 **Дата последней ревизии:** 2026-07-22
-**Состояние:** гринфилд — продуктового кода нет.
+**Состояние:** этап S0 завершён — фундамент репозитория собирается, тестируется и
+проверяется гейтом; продуктового кода (S1+) ещё нет.
 
 ## Что существует
 
 | Область | Состояние |
 |---|---|
-| Крейты Rust (`crates/`) | не созданы |
-| Десктоп-приложение (`apps/desktop`) | не создано |
-| Cargo workspace | не создан |
-| CI | не настроен |
-| Гейт качества | не настроен |
-| Инфраструктура ИИ-агентов (`.ai/`, `.claude/`, `.codex/`) | **готова** |
+| Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
+| Крейты Rust (`crates/`) | **созданы как плейсхолдеры**: `codepack-core`, `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (все `lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
+| `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `sync-agents [--check]`, `doctor` |
+| `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |
+| `deny.toml` | **готов** (реальную проверку выполнит с первой зависимостью в S1) |
+| Десктоп-приложение (`apps/desktop`) | не создано — этап S11 |
+| CI (`.github/workflows/ci.yml`) | **готов**: матрица `ubuntu-latest` / `macos-latest` / `windows-latest`, запускает `cargo xtask gate` |
+| Гейт качества (`cargo xtask gate`) | **готов и зелёный локально**: fmt, clippy `-D warnings`, тесты, `sync-agents --check` |
+| Инфраструктура ИИ-агентов (`.ai/`, `.claude/`, `.codex/`) | **готова**; синхронизация `AGENTS.md` переведена с временного Python-скрипта на `cargo xtask sync-agents` |
 | Спецификация продукта (`BLUEPRINT.md`) | **готова** |
 | План реализации (`ROADMAP.md`) | **готов** |
-| Синхронизация `AGENTS.md` | **работает** (временный Python-скрипт) |
 | Архив старой реализации | `docs/__arch__/codepack-main.zip` |
 
 ## Что было раньше
@@ -45,4 +48,4 @@
 
 ## Следующий шаг
 
-Этап **S0 — Фундамент репозитория и гейт качества**. См. `ROADMAP.md` §2.
+Этап **S1 — Доменные типы и конфигурация (`codepack-core`)**. См. `ROADMAP.md` §2.

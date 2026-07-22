@@ -45,7 +45,7 @@
 
 | # | Этап | Транш | Зависит от | Статус |
 |---|---|---|---|---|
-| S0 | Фундамент репозитория и гейт качества | Ядро | — | не начат |
+| S0 | Фундамент репозитория и гейт качества | Ядро | — | сделан |
 | S1 | Доменные типы и конфигурация (`codepack-core`) | Ядро | S0 | не начат |
 | S2 | Сканер: обход, ignore, детект стека (`codepack-scanner`) | Ядро | S1 | не начат |
 | S3 | **Безопасность** (`codepack-security`) | Ядро | S1 | не начат |
@@ -91,6 +91,19 @@
 - `cargo xtask gate` зелёный локально и в CI на всех трёх ОС.
 - `cargo xtask sync-agents --check` проходит и включён в гейт.
 - README/докs состояния обновлены.
+
+**Status.** Cargo workspace (`Cargo.toml`, `rust-toolchain.toml` 1.97.1, `rustfmt.toml`,
+центральные workspace-линты) и десять крейтов-плейсхолдеров (`codepack-core` … `-engine`,
+`codepack-cli`) созданы. `cargo xtask` (`gate`, `fmt`, `lint`, `test`, `sync-agents
+[--check]`, `doctor`) реализован и полностью заменил временный Python-скрипт
+(`dev_tools_scripts_runner.py` и `scripts/dev_tools/sync_agents_md.py` удалены).
+`cargo xtask gate` зелёный локально: `fmt --check`, `clippy -D warnings`,
+`cargo test --workspace` (3 юнит-теста в `xtask`), `sync-agents --check`. Добавлен
+`.github/workflows/ci.yml` — матрица `ubuntu-latest` / `macos-latest` / `windows-latest`,
+запускает `cargo xtask gate`; фактический прогон в CI будет подтверждён при первом push
+в `origin`. Модули `.ai/universal/08-rules-evolution.md` и `.ai/project/14-legacy-
+reference.md` помечены `tier: extended`, чтобы вернуть `AGENTS.md` под бюджет 30 KiB
+(разросся до 31.7 KiB) — 2026-07-22.
 
 ---
 
