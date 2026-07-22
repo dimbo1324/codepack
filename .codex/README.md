@@ -1,35 +1,47 @@
-# Рабочее пространство Codex
+# Codex Project Configuration
 
-Проектная конфигурация Codex для codepack.
+Project-scoped Codex configuration for codepack.
 
-Правила живут в общих модулях `.ai/`. Codex читает их через сгенерированный `AGENTS.md`
-в корне репозитория — это скомпилированный однофайловый свод. Claude Code получает те же
-правила через `CLAUDE.md` с нативными `@`-импортами.
+Rules live in the shared modules under `.ai/`. Codex reads them through the generated
+`AGENTS.md` in the repository root — the compiled single-file ruleset. Claude Code gets
+the same rules through `CLAUDE.md` with native `@` imports.
 
-`AGENTS.md` **генерируется** и руками не редактируется. После правки любого модуля `.ai/`:
+`AGENTS.md` is **generated** and never hand-edited. After changing any `.ai/` module:
 
 ```powershell
-python dev_tools_scripts_runner.py sync-agents
+cargo xtask sync-agents
 ```
 
-## Файлы
+## Files
 
-- `config.toml` — проектные настройки модели и агентов. Секретов здесь нет и быть не может.
-- `agents/` — проектные агенты; зеркало `.claude/agents/` один в один по именам.
-- `skills/` — переиспользуемые процессы; зеркало `.claude/skills/`.
+- `config.toml` — project-scoped model and agent defaults. No secrets belong here.
+- `agents/` — project agents; name-for-name mirror of `.claude/agents/`.
+- `skills/` — reusable workflows; mirror of `.claude/skills/`.
 
-## Агенты
+## Agents
 
-- `codepack-stage-planner` — разбор этапа `ROADMAP.md` до написания кода.
-- `codepack-core-engine` — крейты ядра: типы, сканер, дифф, хранилище, токены, архив, движок.
-- `codepack-security` — крейт безопасности: режимы, редактирование секретов, детектор.
-- `codepack-reports` — отчёты, AI-пакеты, дашборд.
-- `codepack-desktop-ui` — Tauri-оболочка и фронтенд.
-- `codepack-quality-reviewer` — ревью дифа до финализации.
-- `codepack-ci-triage` — разбор красной проверки.
-- `codepack-repo-maintainer` — форматирование, документы состояния, публикация.
+- `codepack-stage-planner` — scope a `ROADMAP.md` stage before any code is written.
+- `codepack-core-engine` — core crates: types, scanner, diff, storage, tokens, archive,
+  engine.
+- `codepack-security` — safety modes, redaction, detector.
+- `codepack-reports` — reports, AI context packs, dashboard.
+- `codepack-desktop-ui` — Tauri shell and frontend.
+- `codepack-quality-reviewer` — review a diff before finalizing.
+- `codepack-ci-triage` — debug a failing check.
+- `codepack-repo-maintainer` — formatting, state documents, rule sync, publishing.
 
-## Зеркальность
+## Skills
 
-`.codex/agents|skills` и `.claude/agents|skills` — зеркала по именам. Изменение одной
-стороны требует эквивалентного изменения другой в той же задаче.
+`stage-episode`, `rules-evolution`, `legacy-lookup`, `code-review`, `ci-fix`,
+`project-maintenance`.
+
+## Mirroring
+
+`.codex/agents|skills` and `.claude/agents|skills` are name-for-name mirrors. Changing
+one side requires the equivalent change on the other in the same task.
+
+## Evolving the rules
+
+The rule set is expected to change as the project learns. The protocol lives in
+`.ai/universal/08-rules-evolution.md`; every change is recorded in `.ai/CHANGELOG.md`.
+Never weaken a rule to make the current task pass.

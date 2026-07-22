@@ -1,40 +1,44 @@
-# Чек-лист задачи и критерий готовности
+# Task Checklist and Definition of Done
 
-Цель: задача спланирована до старта и честно закрыта после финиша — в файле, который
-читается без доступа к диалогу.
+Purpose: every task is planned before it starts and honestly accounted for after it
+ends, in a file any reviewer can read without the conversation.
 
-## Протокол task-checklist.md
+## task-checklist.md protocol
 
-Файл `task-checklist.md` лежит в корне и всегда отслеживается git (никогда не в
-`.gitignore`).
+A file named `task-checklist.md` lives in the repository root and is always tracked by
+git (never in `.gitignore`).
 
-Перед началом:
+Before starting a task:
 
-1. Очистить или пересоздать файл под новую задачу.
-2. Записать этапы, проверки и ожидаемые результаты пунктами `[ ]` по секциям
-   (подготовка / реализация / проверка / завершение). Детализация — этапы, а не
-   нажатия клавиш.
-3. Закоммитить чек-лист ДО основной работы.
+1. Clear or recreate `task-checklist.md` for the new task.
+2. Write the main stages, checks, and expected outcomes as `[ ]` items, grouped into
+   short sections (preparation / implementation / verification / completion).
+   Moderate detail — stages, not keystrokes.
+3. Commit the checklist BEFORE doing the main work.
 
-После завершения:
+After finishing the task:
 
-4. Отметить каждый пункт: `+` сделано, `-` не сделано или частично.
-5. Закоммитить заполненный чек-лист вместе с работой.
-6. Не прятать невыполненное: `-` с честной пометкой — правильно; молча
-   проигнорированный пункт — нарушение.
+4. Mark every item: `+` done, `-` not done or partially done.
+5. Commit the filled checklist together with the completed work.
+6. Never hide unfinished items — a `-` with an honest note is correct; a silently
+   ignored item is a violation.
 
-## Критерий готовности
+## Definition of Done
 
-Задача завершена, только когда выполнено ВСЁ: код соответствует задаче без
-незапрошенного расширения объёма; отформатирован, линтер и проверка типов проходят;
-тесты добавлены или обновлены там, где разумно, существующие проходят; проект
-собирается без очевидных ошибок в логах; нет секретов, временных файлов и правок в
-посторонних файлах; документы архитектуры обновлены, если архитектура менялась;
-чек-лист заполнен отметками `+`/`-`; написан финальный отчёт.
+A task is complete only when ALL of the following hold:
 
-## Финальный отчёт
+- code written and matching the task, without unrequested scope;
+- code formatted; lint and type checks pass;
+- tests added or updated where reasonable; existing tests pass;
+- project builds; no obvious errors in logs;
+- no secrets, no temp files, no accidental changes in unrelated files;
+- architecture and state docs updated if the task changed the system's shape;
+- task checklist filled with `+`/`-`;
+- final report written.
 
-Всегда последний шаг задачи. Содержит: что сделано; какие файлы и области затронуты;
-какие проверки запускались и с каким результатом; изменения зависимостей, API, БД,
-конфигурации; риски безопасности, производительности, совместимости; и — явно и
-честно — всё, что не сделано или не получилось.
+## Final report
+
+The final report is ALWAYS the last step of a task. It states: what was done; which
+files and areas changed; which checks ran and their results; dependency, API, database,
+or config changes; security, performance, and compatibility risks; and — explicitly and
+honestly — anything that was not done or failed.

@@ -1,24 +1,29 @@
-# codepack — рабочие заметки для Claude Code
+# codepack — working notes for Claude Code
 
-Этот файл — точка входа Claude Code. Все правила живут в общих модулях внутри `.ai/` —
-единственном источнике правды для каждого ИИ-ассистента в репозитории. Codex читает те
-же модули через сгенерированный `AGENTS.md`; править его руками нельзя (правьте модуль,
-затем запустите `python dev_tools_scripts_runner.py sync-agents`).
+This file is the Claude Code entry point. All rules live in shared modules under `.ai/`
+— the single source of truth for every AI assistant in this repo. Codex reads the same
+modules through the generated `AGENTS.md`; never edit that file by hand (edit a module,
+then run `cargo xtask sync-agents`).
 
-Более поздние модули переопределяют более ранние; явная инструкция владельца в текущем
-диалоге переопределяет всё.
+Later modules override earlier ones; an explicit owner instruction in the current
+conversation overrides everything.
 
-## Быстрый старт в новой сессии
+## Starting a fresh session
 
-Проект разрабатывается почти полностью ИИ-агентами, сессии часто начинаются с нуля.
-Перед любой работой выполните **ритуал ориентации** из `@.ai/project/13-progress-tracking.md`:
-git-статус и лог → `ROADMAP.md` (первый этап без строки `**Status.**` — следующий) →
-`docs/architecture/overview.md` → `task-checklist.md` → `docs/decisions/open-questions.md`.
+This project is built almost entirely by AI agents, so sessions often begin with no
+context. Before any work, run the **orientation ritual** from
+`@.ai/project/13-progress-tracking.md`: git status and log → `ROADMAP.md` (the first
+stage without a `**Status.**` line is next) → `docs/architecture/overview.md` →
+`task-checklist.md` → `docs/decisions/open-questions.md`.
 
-Замысел продукта целиком описан в `BLUEPRINT.md`. Старая реализация на Python лежит
-в `docs/__arch__/codepack-main.zip` и служит эталоном поведения.
+The product intent is described in full in `BLUEPRINT.md`. The legacy Python
+implementation is archived at `docs/__arch__/codepack-main.zip` and serves as the
+behavioral reference.
 
-## Универсальные правила (переносимы в любой проект)
+The rules themselves are meant to evolve: see `@.ai/universal/08-rules-evolution.md`
+for when and how to change them, and `.ai/CHANGELOG.md` for what changed so far.
+
+## Universal rules (portable to any project)
 
 - @.ai/universal/01-workflow.md
 - @.ai/universal/02-task-checklist.md
@@ -27,8 +32,9 @@ git-статус и лог → `ROADMAP.md` (первый этап без стр
 - @.ai/universal/05-security-and-secrets.md
 - @.ai/universal/06-quality-and-testing.md
 - @.ai/universal/07-multi-assistant.md
+- @.ai/universal/08-rules-evolution.md
 
-## Правила проекта (codepack)
+## Project rules (codepack)
 
 - @.ai/project/10-project-map.md
 - @.ai/project/11-commands.md
@@ -36,10 +42,11 @@ git-статус и лог → `ROADMAP.md` (первый этап без стр
 - @.ai/project/13-progress-tracking.md
 - @.ai/project/14-legacy-reference.md
 
-## Рабочее пространство Claude Code
+## Claude Code workspace
 
-- `.claude/settings.json` — списки разрешённых и запрещённых команд.
-- `.claude/agents/` — проектные субагенты (`codepack-*`) для делегирования;
-  зеркалят `.codex/agents/` один в один.
-- `.claude/skills/` — переиспользуемые процессы (`stage-episode`, `legacy-lookup`,
-  `code-review`, `ci-fix`, `project-maintenance`); зеркалят `.codex/skills/`.
+- `.claude/settings.json` — permission allow and deny lists.
+- `.claude/agents/` — project subagents (`codepack-*`) for delegated work; mirrors
+  `.codex/agents/` one-to-one.
+- `.claude/skills/` — reusable workflows (`stage-episode`, `legacy-lookup`,
+  `code-review`, `ci-fix`, `project-maintenance`, `rules-evolution`); mirrors
+  `.codex/skills/`.

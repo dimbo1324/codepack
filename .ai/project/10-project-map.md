@@ -1,53 +1,69 @@
-# Проект: codepack
+# Project: codepack
 
-Кроссплатформенное десктоп-приложение, превращающее папку с кодом в **чистый,
-безопасный снимок**: архив плюс набор отчётов, пригодных для передачи ИИ-ассистенту
-**и человеку** (программисту, команде, джуну, нетехническому специалисту).
+A cross-platform desktop application that turns a source folder into a **clean, safe
+snapshot**: an archive plus a set of reports fit to hand to an AI assistant **and to a
+human** (developer, team, junior, or a non-programmer technical stakeholder).
 
-Главная ценность — **не дать секретам утечь** при передаче проекта наружу. Это не
-архиватор и не генератор README: продукт про безопасную передачу контекста с
-локальной аналитикой.
+The core value is **preventing secret leakage** when a project is shared outward. This
+is not an archiver and not a README generator: the product is about safe context
+handoff with local-only analysis.
 
-## Состояние репозитория
+## Repository map
 
-**Гринфилд**: старая Python-реализация удалена, новая не начата. Есть только документы
-и инфраструктура ИИ-агентов. Каталогов `crates/` и `apps/` пока нет — их создаёт этап S0.
+Rust workspace under `crates/`:
 
-## Целевая карта
+- `codepack-core` — domain types, configuration, errors, progress and cancellation.
+- `codepack-scanner` — tree walking, ignore rules, stack detection, export planning.
+- `codepack-security` — export safety modes, secret redaction, the detector.
+- `codepack-diff` — differential export and snapshots (via `git2`).
+- `codepack-storage` — SQLite: history, snapshots, findings, migrations.
+- `codepack-tokens` — bytes and tokens, budget mode.
+- `codepack-reports` — insight reports, AI context packs, dashboard.
+- `codepack-archive` — ZIP building, splitting, restore.
+- `codepack-engine` — orchestrator of the eight-step pipeline.
+- `codepack-cli` — headless binary.
+- `xtask` — the project's task runner and quality gate.
 
-Крейты в `crates/`: `codepack-core` (типы, конфигурация, ошибки, прогресс и отмена),
-`-scanner` (обход, ignore, детект стека, план экспорта), `-security` (режимы, редактирование
-секретов, сканер), `-diff` (дифф и снапшоты через `git2`), `-storage` (SQLite: история,
-снапшоты, находки, миграции), `-tokens` (байты, токены, бюджет), `-reports` (insight-отчёты,
-AI_CONTEXT, AI_PROMPTS, дашборд), `-archive` (ZIP, части, восстановление), `-engine`
-(оркестратор 8 шагов), `-cli` (headless), `xtask` (проверки и служебные задачи).
+Other areas:
 
-Остальное: `apps/desktop` — Tauri-оболочка и фронтенд на TypeScript; `docs/` — документы
-состояния и решения, `docs/__arch__/` — архив старой реализации; `.ai/`, `.claude/`,
-`.codex/` — правила и рабочие пространства ассистентов.
+- `apps/desktop/ui` — TypeScript frontend (pnpm workspace).
+  `apps/desktop/src-tauri` is added in stage S11; it does not exist yet.
+- `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
+- `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
-Замысел продукта целиком — в `BLUEPRINT.md`, план и прогресс — в `ROADMAP.md`.
-Полная карта документов состояния — в модуле трекинга прогресса.
+The product intent lives in `BLUEPRINT.md`; the plan and progress live in `ROADMAP.md`.
+The full map of state documents is in the progress-tracking module.
 
-## Политика документации
+## Language policy
 
-- `BLUEPRINT.md` — спецификация продукта; меняется только вместе с замыслом и по
-  согласованию с владельцем.
-- `ROADMAP.md` — план и прогресс; обновляется при завершении каждого этапа.
-- Новые документы — только по прямому запросу. Исключение: `docs/architecture/` и
-  `ROADMAP.md` обязаны оставаться актуальными при изменении архитектуры или прогресса.
-- Язык документации, комментариев и отчётов — русский.
+- **Agent-facing infrastructure is English**: `.ai/`, `.claude/`, `.codex/`,
+  `CLAUDE.md`, `AGENTS.md`, `docs/` state documents, `task-checklist.md`, code, code
+  comments, commit messages, and test names.
+- **Owner-facing product documents are Russian**: `BLUEPRINT.md`, `ROADMAP.md`,
+  `README.md`. When you add a `**Status.**` line to `ROADMAP.md`, write it in Russian
+  to match the file.
+- **Reports to the owner are Russian.**
 
-## Продуктовые ограничения
+Do not mix languages inside a single file.
 
-- **Приватность абсолютна.** Аналитика локальна; сеть запрещена везде, кроме явно
-  инициированной пользователем отправки в ИИ (S13).
-- **Источник неизменен.** Экспорт никогда не пишет в папку исходного проекта.
-- **Байты остаются.** Размер в байтах сохраняется везде, где был; токены — дополнение,
-  а не замена (решение владельца).
-- **Паритет прежде новизны.** Внутри этапа сначала воспроизводится поведение старой
-  версии, потом добавляется новое.
-- **Порядок этапов обязателен** (`ROADMAP.md` §1, S0→S14); обгон — только по решению
-  владельца в `docs/decisions/open-questions.md`.
-- **Совместимость форматов**: внешние артефакты обратно совместимы, изменение — только
-  с повышением `schema_version`.
+## Documentation policy
+
+- `BLUEPRINT.md` is the product specification; it changes only when the product intent
+  changes, and only by owner agreement.
+- `ROADMAP.md` is the plan and progress record; update it when a stage completes.
+- New documents are created only on direct request. Exception: `docs/architecture/` and
+  `ROADMAP.md` must stay accurate when architecture or progress changes.
+
+## Product guardrails
+
+- **Privacy is absolute.** Analysis is local; network access is forbidden everywhere
+  except the explicitly user-initiated AI handoff in stage S13.
+- **The source is immutable.** Export never writes into the source project folder.
+- **Bytes stay.** Byte-based size reporting is preserved everywhere it existed; tokens
+  are an addition, never a replacement (owner decision).
+- **Parity before novelty.** Within a stage, reproduce the legacy behavior first, then
+  add new capability.
+- **Stage order is binding** (`ROADMAP.md` §1, S0→S14). Skipping ahead requires an owner
+  decision recorded in `docs/decisions/open-questions.md`.
+- **Artifact formats are backward compatible**; changing one requires bumping
+  `schema_version`.

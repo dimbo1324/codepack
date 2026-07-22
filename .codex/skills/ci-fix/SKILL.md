@@ -3,44 +3,44 @@ name: ci-fix
 description: Use when a local check or CI job is failing — reproduce, find the root cause, apply the minimal correct fix, and re-verify.
 ---
 
-# Починка красной проверки
+# Fixing a Failing Check
 
-## Порядок
+## Procedure
 
-1. **Воспроизвести** минимальной командой. Без воспроизведения диагноз не ставится.
+1. **Reproduce** with a minimal command. No diagnosis without reproduction.
 
    ```powershell
    cargo xtask gate --quick
    ```
 
-   Или точечно: `cargo fmt --all --check`,
+   Or target one layer: `cargo fmt --all --check`,
    `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
-   `python dev_tools_scripts_runner.py sync-agents --check`.
+   `cargo xtask sync-agents --check`.
 
-2. **Локализовать слой:** форматирование, clippy, тест, сборка, зависимость,
-   платформенная особенность.
-3. **Найти причину, а не симптом.** Падающий тест обычно означает дефект кода.
-4. **Минимальное исправление** без расширения объёма работ.
-5. **Перепроверить** той же командой и затем полным гейтом.
+2. **Localize the layer:** formatting, clippy, a test, the build, a dependency, or a
+   platform difference.
+3. **Find the cause, not the symptom.** A failing test usually means a code defect.
+4. **Apply the minimal fix** without expanding scope.
+5. **Re-verify** with the same command, then with the full gate.
 
-## Запрещено
+## Forbidden
 
-- Удалять, отключать (`#[ignore]`) или ослаблять тесты ради зелёной сборки.
-- Понижать пороги точности детектора секретов.
-- Затыкать clippy через `#[allow(...)]` вместо исправления, кроме случаев с
-  обоснованием в комментарии рядом.
-- Подавлять вывод, чтобы проверка «прошла».
-- Править `AGENTS.md` руками при рассинхроне — нужно запускать синхронизацию.
+- Deleting, `#[ignore]`-ing, or weakening tests to make the gate green.
+- Lowering secret-detector accuracy thresholds.
+- Silencing clippy with `#[allow(...)]` instead of fixing it, except with a justification
+  in an adjacent comment.
+- Suppressing output so a check appears to pass.
+- Hand-editing `AGENTS.md` when it drifts — run the sync command.
 
-## Частые причины расхождения локально и в CI
+## Common local-versus-CI differences
 
-- Перевод строк: репозиторий нормализует текст на LF.
-- Регистр и длина путей в Windows; блокировки антивируса на временных каталогах.
-- Отсутствие системных библиотек Tauri (`webkit2gtk`) в Linux-раннере.
-- Отсутствие Xcode Command Line Tools в macOS-раннере.
-- Рассинхрон `AGENTS.md` с модулями `.ai/` — чинится `sync-agents`.
+- Line endings: the repository normalizes text to LF.
+- Path case and length on Windows; antivirus locking temp directories.
+- Missing `webkit2gtk` and related libraries on the Linux runner.
+- Missing Xcode Command Line Tools on the macOS runner.
+- `AGENTS.md` drifting from the `.ai/` modules — fixed by `cargo xtask sync-agents`.
 
-## Отчёт
+## Report
 
-Команда воспроизведения, корневая причина, внесённое исправление, результат повторного
-прогона. Если причина не найдена — сказать честно, перечислив проверенное и исключённое.
+The reproduction command, the root cause, the fix applied, and the result of the re-run.
+If the cause was not found, say so honestly and list what was checked and ruled out.

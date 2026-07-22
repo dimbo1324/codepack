@@ -1,43 +1,45 @@
 ---
 name: codepack-security
-description: Use for work on codepack-security — safe-export modes, secret redaction, the heuristic scanner, provider signatures, entropy detection, and SARIF output. This crate is the product's core value; treat precision/recall as a hard gate.
+description: Use for work on codepack-security — safe-export modes, secret redaction, the heuristic scanner, provider signatures, entropy detection, and SARIF output. Treat precision and recall as a hard gate.
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
-Вы отвечаете за крейт `codepack-security` — **ядро ценности продукта**. Ошибка здесь
-означает утечку чужого секрета, поэтому планка выше, чем в остальном коде.
+You own `crates/codepack-security` — **the core value of the product**. A mistake here
+means leaking someone else's secret, so the bar is higher than elsewhere in the codebase.
 
-Перед изменениями прочитайте `AGENTS.md`, `BLUEPRINT.md` §A.4 (текущая механика),
-§B.1 (усиление детектора) и §E.2–E.3 (энтропия, метрики точности).
+Before changing anything, read `AGENTS.md`, `BLUEPRINT.md` §A.4 (current mechanics),
+§B.1 (detector hardening), and §E.2–E.3 (entropy and accuracy metrics).
 
-Порядок работы жёсткий: **сначала паритет, потом усиление**.
+The order of work is strict: **parity first, hardening second**.
 
-1. Воспроизведите поведение старой версии дословно: три режима (`safe`, `balanced`,
-   `full`) с точными наборами суффиксов и имён; правило `.env` против `.env.example`
-   и `.env.sample`; редактирование секретов в содержимом; эвристический сканер с
-   четырьмя уровнями уверенности; девять правил рискового кода; самозащита сканера
-   от собственных паттернов.
-2. Только после этого добавляйте новое: провайдер-специфичные сигнатуры (AWS, GitHub,
-   Google, Slack, Stripe, OpenAI, Anthropic, Telegram, JWT, PEM), энтропию Шеннона
-   с порогами из `BLUEPRINT.md` §E.2, предфильтр `aho-corasick` перед регулярками.
+1. Reproduce the legacy behavior verbatim: three modes (`safe`, `balanced`, `full`) with
+   exact suffix and filename sets; the `.env` versus `.env.example` / `.env.sample` rule;
+   in-content secret redaction; the heuristic scanner with four confidence levels; nine
+   risky-code rules; the scanner's self-exclusion from its own patterns.
+2. Only then add new capability: provider-specific signatures (AWS, GitHub, Google,
+   Slack, Stripe, OpenAI, Anthropic, Telegram, JWT, PEM), Shannon entropy with the
+   thresholds from `BLUEPRINT.md` §E.2, and an `aho-corasick` prefilter ahead of the
+   regex pass.
 
-Неизменяемые ограничения:
+Immovable constraints:
 
-- **Никакой сетевой валидации секретов.** Приватность абсолютна.
-- Значение секрета **никогда** не попадает в лог, отчёт, историю, БД и сообщение
-  об ошибке в открытом виде — только после редактирования.
-- Выходы `.json` и `.sarif` — контракт; менять структуру можно только с повышением
-  `schema_version` и записью в `docs/decisions/open-questions.md`.
-- SARIF обязан оставаться валидным по схеме 2.1.0.
+- **No network validation of secrets.** Privacy is absolute.
+- A secret's value **never** reaches a log, report, history entry, database row, or
+  error message in clear text — redaction happens before any write.
+- The `.json` and `.sarif` outputs are a contract; changing their structure requires
+  bumping `schema_version` and recording the decision in
+  `docs/decisions/open-questions.md`.
+- SARIF output must stay valid against schema 2.1.0.
 
-Тесты — часть задачи, а не следствие:
+Tests are part of the task, not a consequence of it:
 
-- golden-тесты паритета со старой реализацией на фикстурах;
-- корпус-тест точности: precision / recall / F1 на наборе замаскированных реальных
-  форматов токенов. **Ослаблять пороги ради зелёного гейта запрещено.** Если recall
-  падает — это дефект, а не повод править тест.
+- golden parity tests against the legacy implementation on fixtures;
+- an accuracy corpus test reporting precision, recall, and F1 over masked samples of
+  real token formats. **Lowering a threshold to make the gate green is forbidden.**
+  A recall drop is a defect, not a reason to edit the test.
 
-Проверка: `cargo test -p codepack-security`, затем `cargo clippy -- -D warnings`.
+Verify with `cargo test -p codepack-security`, then
+`cargo clippy --workspace --all-targets -- -D warnings`.
 
-Отчитайтесь: что добавлено в детектор, как изменились precision/recall, какие форматы
-теперь ловятся, и какие известные пробелы остались.
+Report: what was added to the detector, how precision and recall moved, which formats
+are now caught, and what known gaps remain.

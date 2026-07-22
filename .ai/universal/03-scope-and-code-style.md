@@ -1,42 +1,43 @@
-<!-- tier: extended -->
+# Scope Control and Code Style
 
-# Объём работ и стиль кода
+Purpose: change only what the task requires, and keep code readable without decoration.
 
-> **Суть.** Менять только то, что требует задача: никакого попутного рефакторинга, переименований, редизайна и удаления функциональности. Новую документацию не создавать без прямого запроса. Комментарии — только для неочевидного «почему». Файлы кода до ~1000 строк, точки входа до ~100. Никакой визуальной полировки вне интерфейсных задач.
+## Minimal changes
 
-Цель: менять только то, что требует задача; код читаем без украшательств.
+- Touch only what the current task needs. Forbidden without necessity:
+  mass-reformatting other files, renaming things outside the task, changing
+  architecture "while at it", rewriting working code without cause, changing UI when
+  the task is not about the interface, deleting existing functionality without a
+  direct requirement.
+- If you discover an unrelated problem, record it separately (report it, or file it per
+  the project's process) — do not mix it into the current diff.
+- Do not create new documentation (README, `.md`, `.txt`) unless the task requires it
+  directly. Exception: the project's designated architecture and progress documents,
+  which must be kept current.
 
-## Минимальные изменения
+## Comments
 
-- Трогать только нужное текущей задаче. Без необходимости запрещено: массово
-  переформатировать чужие файлы, переименовывать вне задачи, менять архитектуру
-  «заодно», переписывать работающий код без причины, менять UI в не-интерфейсной
-  задаче, удалять функциональность без прямого требования.
-- Постороннюю проблему фиксировать отдельно (в отчёте или по процессу проекта),
-  не подмешивая в текущий диф.
-- Не создавать новую документацию, если задача этого не требует напрямую.
-  Исключение — назначенная проектом область документов архитектуры и прогресса.
+- No comments by default. Code must be clear through structure and naming.
+- A comment is allowed only when the task demands it, or when important logic stays
+  non-obvious even with good naming. It explains the non-obvious "why", never restates
+  the code.
+- Stale, false, or misleading comments are forbidden. No doc comments that merely
+  repeat a function name.
 
-## Комментарии
+## File size
 
-- По умолчанию комментариев нет: код понятен через структуру и имена.
-- Комментарий допустим, если этого требует задача или логика остаётся неочевидной
-  даже при хороших именах. Он объясняет неочевидное «почему», а не пересказывает код.
-- Устаревшие и вводящие в заблуждение комментарии запрещены. Doc-комментарии,
-  повторяющие имя функции, не нужны.
+- Regular code files: keep under roughly 1000 lines; split by meaning when approaching
+  the limit. Projects may set a stricter limit — the stricter limit wins.
+- Application entry points (`main`-type files): under roughly 100 lines; extract
+  configuration, startup, and service initialization into modules.
+- Exemptions: test files, developer-tool scripts, and any files the project explicitly
+  exempts.
 
-## Размер файлов
+## Frontend restraint
 
-- Обычные файлы кода — примерно до 1000 строк; при приближении делить по смыслу.
-  Проект может задать более строгий предел — побеждает строгий.
-- Точки входа (`main`-подобные) — примерно до 100 строк; конфигурацию, запуск и
-  инициализацию выносить в модули.
-- Исключения: тесты, скрипты инструментов разработчика, явно освобождённые проектом файлы.
-
-## Сдержанность во фронтенде
-
-- Никакой визуальной полировки (стили, анимации, декор, редизайн), если задача не про
-  внешний вид напрямую.
-- Когда нужен интерфейс — минимум, корректно проверяющий бизнес-логику.
-- Не менять визуальный стиль, структуру интерфейса, поведение компонентов и
-  пользовательские сценарии без прямого требования.
+- No visual polish (styling, animations, decorative elements, redesign) unless the task
+  is explicitly about appearance.
+- When a task needs an interface, build the minimum that exercises the business logic
+  correctly.
+- Never change visual style, interface structure, component behavior, or user flows
+  without a direct requirement.

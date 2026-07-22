@@ -1,55 +1,58 @@
-# Трекинг прогресса проекта
+# Project Progress Tracking
 
-Цель: любой ассистент, в любой сессии, на любой модели определяет, где находится
-проект и куда движется — **по файлам, а не по памяти**. Это главный механизм
-восстановления после потери чата.
+Purpose: any assistant, in any session, on any model, can locate exactly where the
+project stands and where it is going — **from files, not from memory**. This is the
+primary recovery mechanism after a lost conversation.
 
-## Где лежит правда
+## Where the truth lives
 
-| Вопрос | Файл |
+| Question | File |
 |---|---|
-| Что за продукт, логика, форматы, математика | `BLUEPRINT.md` |
-| Что планируем, в каком порядке, что готово | `ROADMAP.md` |
-| Что реально построено сейчас | `docs/architecture/overview.md` |
-| Что нельзя ломать никогда | `docs/architecture/invariants.md` |
-| Решения владельца и открытые вопросы | `docs/decisions/open-questions.md` |
-| Какой была текущая или последняя задача | `task-checklist.md` |
-| Что происходило недавно на самом деле | `git log --oneline -15` |
-| Как работала старая версия | `docs/__arch__/codepack-main.zip` |
+| What the product is: logic, formats, math | `BLUEPRINT.md` |
+| What is planned, in what order, what is done | `ROADMAP.md` |
+| What is actually built right now | `docs/architecture/overview.md` |
+| What must never break | `docs/architecture/invariants.md` |
+| Owner decisions and open questions | `docs/decisions/open-questions.md` |
+| What the current or last task was | `task-checklist.md` |
+| What actually happened recently | `git log --oneline -15` |
+| How the rules themselves changed | `.ai/CHANGELOG.md` |
+| How the legacy version worked | `docs/__arch__/codepack-main.zip` |
 
-## Ритуал ориентации — в начале КАЖДОЙ задачи
+## Orientation ritual — at the start of EVERY task
 
-По порядку, без пропусков:
+In order, without skipping:
 
-1. `git status --short --branch` и `git log --oneline -15`.
-2. `ROADMAP.md` §1 и строки `**Status.**` под этапами: этап со строкой статуса сделан;
-   **первый этап без неё — следующий в работе**.
-3. `docs/architecture/overview.md` — что фактически существует в коде.
-4. `task-checklist.md` — какой была прошлая задача и чем закончилась.
-5. `docs/decisions/open-questions.md` — нет ли решений, меняющих план.
-6. Только после этого планировать новую задачу.
+1. `git status --short --branch` and `git log --oneline -15`.
+2. `ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
+   line is done; **the first stage without one is next**.
+3. `docs/architecture/overview.md` — what exists in the code right now.
+4. `task-checklist.md` — what the previous task was and whether it finished cleanly.
+5. `docs/decisions/open-questions.md` — whether a decision changes the plan.
+6. Only then plan the new task.
 
-Если задача касается поведения, бывшего в старой версии, дополнительно свериться с
-модулем легаси-эталона.
+If the task touches behavior that existed in the legacy version, also consult the legacy
+reference module.
 
-## Обязанности при завершении
+## Update duties when finishing work
 
-- Завершил этап или значимую часть → обновить строку `**Status.**` под этапом в
-  `ROADMAP.md` (что сдано: крейты, модули, команды, тесты) и статус в таблице §1.
-- Изменил форму системы (новый крейт, слой, операционная задача) → обновить
+- Completed a stage or a significant slice → add or refresh the `**Status.**` line under
+  that stage in `ROADMAP.md` (what shipped: crates, modules, commands, tests) and update
+  the status column in §1. Write it in Russian to match that file.
+- Changed the system's shape (new crate, new layer, new operational job) → update
   `docs/architecture/overview.md`.
-- Принял или получил решение владельца, ограничивающее будущее → записать в
-  `docs/decisions/open-questions.md`, а не только в чат.
-- Ввёл инвариант → записать в `docs/architecture/invariants.md`.
+- Made or received an owner decision that constrains the future → record it in
+  `docs/decisions/open-questions.md`, not only in the chat.
+- Introduced an invariant → record it in `docs/architecture/invariants.md`.
+- Changed a rule module → record it in `.ai/CHANGELOG.md` and regenerate `AGENTS.md`.
 
-## Защита от расхождения
+## Drift guard
 
-Если план, документ состояния и код противоречат друг другу: **код — факт, план —
-намерение**. Свести их в той же задаче или явно сообщить о расхождении. Устаревшая
-документация хуже её отсутствия.
+If the plan, the state document, and the code disagree: **the code is the fact, the plan
+is the intent**. Reconcile them in the same task or report the mismatch explicitly.
+Stale documentation is worse than no documentation.
 
-## Правило незавершённой задачи
+## Unfinished-task rule
 
-Если `task-checklist.md` содержит незакрытые пункты `[ ]` от прошлой сессии — сначала
-выяснить их судьбу: доделать либо честно отметить `-` с пояснением. Начинать новую
-задачу поверх молча брошенной — нарушение.
+If `task-checklist.md` still holds open `[ ]` items from a previous session, resolve
+them first: finish them, or mark them `-` with an honest note. Starting a new task on
+top of a silently abandoned one is a violation.

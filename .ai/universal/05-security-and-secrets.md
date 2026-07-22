@@ -1,37 +1,36 @@
-# Безопасность, секреты, зависимости, переносимость
+# Security, Secrets, Dependencies, Portability
 
-Цель: ничего чувствительного в репозитории; каждое изменение безопасно в своей зоне;
-проект запускается на любой машине.
+Purpose: nothing sensitive in the repo; every change safe within its area; the project
+runs on any machine.
 
-## Секреты — абсолютный запрет
+## Secrets — absolute ban
 
-- НИКОГДА не помещать в код, git, тесты, документацию и примеры: пароли, API-ключи,
-  токены, приватные ключи, реальные учётные данные, cookie, продакшн-`.env`,
-  персональные данные.
-- Секреты живут только в `.env` (вне git), переменных окружения, менеджерах секретов
-  или секретах CI/CD. В репозитории допустим только безопасный `.env.example`.
-- Секрет, попавший в git, скомпрометирован: его нужно ротировать; удаления строки
-  новым коммитом недостаточно.
+- NEVER put in code, git, tests, docs, or examples: passwords, API keys, tokens,
+  private keys, real credentials, cookies, production `.env`, or personal user data.
+- Secrets live only in `.env` (untracked), environment variables, secret managers, or
+  CI/CD secrets. The repo may contain only a safe `.env.example`.
+- A secret that ever reached git is compromised: rotate it; deleting the line in a new
+  commit is not enough.
 
-## Безопасность в каждой задаче
+## Security in every task
 
-В зоне, которую трогаете, проверять: права доступа и авторизацию, валидацию входных
-данных, инъекции, XSS/CSRF где применимо, небезопасные редиректы, загрузку файлов,
-обработку персональных данных, публичные точки входа, хранение и передачу токенов,
-доступ к административным функциям. Безопасность — часть каждой задачи, а не будущей.
+Check within the area you touch: authorization and access rights, input validation,
+injection, XSS and CSRF where applicable, unsafe redirects, file uploads, personal data
+handling, public endpoints, token storage and transport, and access to admin functions.
+Security is part of every task, not a future task.
 
-## Зависимости
+## Dependencies
 
-- Новая зависимость требует обоснования: зачем, можно ли без неё, поддерживается ли,
-  известные уязвимости, совместимость со стеком, не дублирует ли существующую,
-  не тяжела ли для задачи.
-- Не тащить тяжёлую библиотеку ради одной маленькой функции.
-- После изменения зависимостей обновить lock-файл и проверить сборку.
-- Новая продакшн-зависимость обязательно называется в финальном отчёте.
+- No new dependency without justification: what for, can it be done without, is it
+  maintained, known vulnerabilities, stack compatibility, does it duplicate an existing
+  dependency, is it too heavy for the need.
+- Never add a heavy library for one small function.
+- After changing dependencies: update the lock file and verify the build.
+- A new production dependency must be named in the final report.
 
-## Переносимость
+## Portability
 
-- Никаких машинно-специфичных значений в коде: локальных абсолютных путей, имён
-  пользователей, настроек IDE, неконфигурируемых портов. Такое выносится в конфигурацию.
-- Проект должен оставаться запускаемым другим человеком документированными
-  инструментами проекта.
+- No machine-specific values in code: local absolute paths, usernames, IDE settings,
+  unconfigured local ports, or anything environment-dependent. Such values go to
+  configuration.
+- The project must remain runnable by someone else using the project's documented tools.

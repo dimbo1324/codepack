@@ -1,46 +1,37 @@
-# Рабочее пространство Claude Code
+# Claude Code Project Configuration
 
-Проектная конфигурация Claude Code для codepack.
+Project-scoped Claude Code configuration for codepack.
 
-Долговременные правила живут в общих модулях `.ai/` (универсальные + проектные).
-`CLAUDE.md` импортирует их нативным `@`-синтаксисом. Codex получает те же правила
-через сгенерированный `AGENTS.md` (пересборка —
-`python dev_tools_scripts_runner.py sync-agents`; руками не править).
-Субагентам следует читать `AGENTS.md` — это скомпилированный однофайловый свод.
+Durable rules live in the shared modules under `.ai/` (universal + project).
+`CLAUDE.md` imports them natively via `@` syntax. Codex consumes the same modules
+through the generated `AGENTS.md` (regenerate with `cargo xtask sync-agents`; never edit
+it by hand). Subagents should read `AGENTS.md` — it is the compiled single-file ruleset.
 
-## Файлы
+## Files
 
-- `settings.json` — список разрешённых рутинных читающих и проверочных команд плюс
-  явный запрет разрушительных git-операций и публикации крейтов.
-- `agents/` — проектные субагенты для точечного делегирования; зеркало `.codex/agents/`
-  один в один по именам.
-- `skills/` — переиспользуемые процессы; зеркало `.codex/skills/`.
+- `settings.json` — permission allowlist for routine read and verification commands,
+  and an explicit denylist for destructive git operations and crate publishing.
+- `agents/` — project-scoped subagents for focused delegation; name-for-name mirror of
+  `.codex/agents/`.
+- `skills/` — reusable project workflows; mirror of `.codex/skills/`.
 
-## Когда делегировать
+## Recommended delegation
 
-Задачу целиком ведите в основном потоке; субагента поднимайте только под независимую
-работу, которой не нужен полный контекст основного потока:
+Do task-owning work on the main thread; spawn a subagent only for independent work that
+does not need the main thread's full context:
 
-- `codepack-stage-planner` — разобрать этап `ROADMAP.md` до написания кода: границы,
-  риски, критерии приёмки.
-- `codepack-core-engine` — крейты ядра: типы, сканер, дифф, хранилище, токены, архив,
-  оркестратор.
-- `codepack-security` — крейт безопасности: режимы, редактирование секретов, детектор.
-- `codepack-reports` — крейт отчётов и AI-пакетов.
-- `codepack-desktop-ui` — Tauri-оболочка и фронтенд.
-- `codepack-quality-reviewer` — ревью дифа до финализации.
-- `codepack-ci-triage` — разбор красной локальной или CI-проверки.
-- `codepack-repo-maintainer` — форматирование, поддержка документов, публикация.
+- `codepack-stage-planner` — scope a `ROADMAP.md` stage before any code is written:
+  boundaries, parity requirements, risks, acceptance criteria.
+- `codepack-core-engine` — core crates: types, scanner, diff, storage, tokens, archive,
+  orchestrator.
+- `codepack-security` — the security crate: safety modes, redaction, detector.
+- `codepack-reports` — reports and AI context packs.
+- `codepack-desktop-ui` — Tauri shell and frontend.
+- `codepack-quality-reviewer` — review a diff before finalizing it.
+- `codepack-ci-triage` — debug a failing local or CI check.
+- `codepack-repo-maintainer` — formatting, docs upkeep, rule sync, explicit publishing.
 
-## Быстрые команды
-
-Пока не выполнен этап S0 (гринфилд):
-
-```powershell
-python dev_tools_scripts_runner.py sync-agents --check
-```
-
-После S0:
+## Quality shortcuts
 
 ```powershell
 cargo xtask gate --quick
@@ -49,4 +40,11 @@ cargo xtask doctor
 cargo xtask sync-agents --check
 ```
 
-Пуш в `main` — только по явной просьбе владельца в текущей задаче.
+Push to `main` only when the owner explicitly asked for it in the current task.
+
+## Evolving the rules
+
+The rule set is expected to change as the project learns. The protocol — mandatory
+triggers, what may change autonomously, what needs owner approval — is in
+`.ai/universal/08-rules-evolution.md`. Every rule change is recorded in
+`.ai/CHANGELOG.md`. Never weaken a rule to make the current task pass.

@@ -1,34 +1,36 @@
-<!-- tier: extended -->
+# Multi-Assistant Collaboration
 
-# Совместная работа нескольких ассистентов
+Purpose: several AI assistants and humans work in this repository across separate
+sessions; git is the coordination surface and the rule modules are shared.
 
-> **Суть.** Перед работой смотреть `git log`/`git status` — свежие коммиты могут быть чужой законченной работой; не переписывать чужие ветки; `AGENTS.md` не править руками; при конфликте правил проектный модуль сильнее универсального, инструкция владельца сильнее обоих.
+## Coordination through git
 
-Цель: несколько ИИ-ассистентов и людей работают в репозитории в разных сессиях;
-git — поверхность координации, модули правил общие.
+- Before non-trivial work, check `git log --oneline -10` and
+  `git status --short --branch`: recent commits may be another assistant's finished
+  work — not yours to redo or second-guess.
+- Never rewrite history on another assistant's in-flight branch. Build on top of it or
+  ask first.
+- Keep commits attributable: include the assistant identity trailer the project already
+  uses (see recent `git log` for the convention).
 
-## Координация через git
+## Shared rule modules
 
-- Перед нетривиальной работой смотреть `git log --oneline -10` и
-  `git status --short --branch`: свежие коммиты могут быть законченной работой другого
-  ассистента — её не нужно переделывать или оспаривать.
-- Не переписывать историю чужой незавершённой ветки: строить поверх или спросить.
-- Держать коммиты атрибутируемыми: добавлять трейлер идентичности ассистента,
-  принятый в проекте (см. свежий `git log`).
+- All assistants obey the same rules from `.ai/universal/` and `.ai/project/`. There is
+  exactly one source of truth.
+- `CLAUDE.md` imports the modules natively; `AGENTS.md` is GENERATED from them. Never
+  hand-edit `AGENTS.md`; edit the module and regenerate (see the project commands
+  module for the sync command).
+- When a task changes shared behavior (workflow, gates, style, guardrails), change the
+  module once — every assistant picks it up. Mirror-maintained per-assistant files
+  (`.claude/` and `.codex/`: agents and skills) still need the same edit on both sides
+  in the same task.
 
-## Общие модули правил
+## Session hygiene for any model
 
-- Все ассистенты подчиняются `.ai/universal/` и `.ai/project/`. Источник правды один.
-- `CLAUDE.md` импортирует модули нативно; `AGENTS.md` ГЕНЕРИРУЕТСЯ. Никогда не править
-  `AGENTS.md` руками: правится модуль, затем запускается синхронизация.
-- Меняя общее поведение (цикл, гейты, стиль, ограничения), править модуль один раз —
-  оба ассистента подхватят. Зеркальные файлы (`.claude/` и `.codex/`: агенты и скиллы)
-  требуют одинаковой правки с обеих сторон в той же задаче.
-
-## Гигиена сессии
-
-- Перечитывать планы и правила с диска, а не полагаться на память прошлой сессии.
-- При шатком контексте или крупной задаче переписать критерии приёмки в чек-лист до
-  начала кода и сверяться с файлами, а не с воспоминаниями.
-- Конфликт правил: проектный модуль сильнее универсального; явная инструкция владельца
-  в текущем диалоге сильнее обоих. Вслух назвать выбранное правило и причину.
+- Re-read plans and rule files from disk instead of trusting memory of a previous
+  session — files change between sessions.
+- When context is shaky or the task is large, restate the task's acceptance criteria in
+  the checklist before coding, and verify against files, not recollection.
+- If two rules appear to conflict: the project module wins over the universal module;
+  an explicit owner instruction in the current conversation wins over both. Say out
+  loud which rule you chose and why.

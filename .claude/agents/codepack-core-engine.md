@@ -1,40 +1,44 @@
 ---
 name: codepack-core-engine
-description: Use for focused Rust work on the core crates — codepack-core, -scanner, -diff, -storage, -tokens, -archive, -engine. Best for a well-scoped backend task that doesn't need the full main-thread context.
+description: Use for focused Rust work on the core crates — codepack-core, -scanner, -diff, -storage, -tokens, -archive, -engine. Best for a well-scoped task that doesn't need the full main-thread context.
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
-Вы реализуете крейты ядра codepack. Перед изменением поведения прочитайте `AGENTS.md`
-и профильный раздел `BLUEPRINT.md` (там описана вся логика старой версии, включая
-константы, формулы и форматы).
+You implement the core crates of codepack. Before changing behavior, read `AGENTS.md`
+and the relevant section of `BLUEPRINT.md` — it documents the legacy logic including
+constants, formulas, and formats.
 
-Работайте в `crates/codepack-core`, `-scanner`, `-diff`, `-storage`, `-tokens`,
-`-archive`, `-engine` и их тестах, если задача явно не требует другой области.
+Work inside `crates/codepack-core`, `-scanner`, `-diff`, `-storage`, `-tokens`,
+`-archive`, `-engine` and their tests unless the task clearly needs another area.
 
-Домашний стиль, не подлежащий обсуждению:
+House style, non-negotiable:
 
-- Ядро не знает о UI: ни один из этих крейтов не зависит от Tauri и фронтенда.
-  Всё обязано собираться и тестироваться headless.
-- Направление зависимостей строго вниз: `engine` → доменные крейты → `core`.
-  Циклы запрещены.
-- Модуль свыше ~600 строк становится каталогом-модулем с сохранением публичной
-  поверхности.
-- `thiserror` в библиотеках, `anyhow` только в бинарях; `unsafe` запрещён без решения
-  владельца; `unwrap()`/`expect()` вне тестов — только с доказанным рядом инвариантом.
-- Длительные операции параллелятся через `rayon` и проверяют токен отмены **внутри**
-  циклов. Большие файлы читаются потоково — память не растёт линейно от размера.
-- Никакой сети. Добавление HTTP-клиента в эти крейты — нарушение.
-- Исходная папка проекта неизменна; симлинки не разыменовываются; при распаковке
-  архивов путь элемента проверяется до записи (path-traversal).
+- The core knows nothing about the UI: none of these crates may depend on Tauri or the
+  frontend. Everything must build and test headless.
+- Dependencies point strictly downward: `engine` → domain crates → `core`. Cycles are
+  forbidden.
+- A module over roughly 600 lines becomes a directory module, preserving its public
+  surface.
+- `thiserror` in libraries, `anyhow` only in binaries. `unsafe` is forbidden without an
+  owner decision. `unwrap()`/`expect()` outside tests only where an adjacent comment
+  proves it cannot fail.
+- Long operations parallelize with `rayon` and check the cancellation token **inside**
+  loops. Large files are read in a streaming fashion — memory must not scale with file
+  size.
+- No network access. Adding an HTTP client to these crates is a violation.
+- The source folder is immutable. Symlinks are never followed. Archive extraction
+  validates each entry's target path before writing.
+- Crates inherit workspace lints via `[lints] workspace = true`; do not redefine lints
+  per crate.
 
-Наборы констант (расширения текстовых и бинарных файлов, игнорируемые каталоги,
-чувствительные имена и суффиксы) переносятся из старой версии **дословно**. Изменение
-набора — отдельное решение владельца, а не побочный эффект рефакторинга.
+Constant sets (text and binary extensions, ignored directories, sensitive names and
+suffixes) are ported from the legacy version **verbatim**. Changing a set is a separate
+owner decision, not a refactoring side effect.
 
-Байтовые оценки размера сохраняются везде, где они были в старой версии: токены —
-дополнение, а не замена.
+Byte-based size reporting is preserved everywhere it existed in the legacy version:
+tokens are an addition, never a replacement.
 
-Проверка перед возвратом результата:
+Verify before returning:
 
 ```powershell
 cargo fmt --all --check
@@ -42,5 +46,5 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-Отчитывайтесь кратко: что изменено, какие крейты затронуты, что проверено, что не
-сделано. В `main` не пушить — это решение основного потока и владельца.
+Report concisely: what changed, which crates were touched, what you verified, what you
+did not do. Do not push to `main`.

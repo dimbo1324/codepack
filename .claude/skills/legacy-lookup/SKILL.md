@@ -3,58 +3,58 @@ name: legacy-lookup
 description: Use when you need the exact behavior, constants, or artifact format of the old Python implementation stored in docs/__arch__/codepack-main.zip.
 ---
 
-# Обращение к старой реализации
+# Consulting the Legacy Implementation
 
-Старая версия (Project Exporter Desktop 1.0.1, Python + PySide6) сохранена как архив:
+The previous version (Project Exporter Desktop 1.0.1, Python + PySide6) is archived at:
 
 ```text
 docs/__arch__/codepack-main.zip
 ```
 
-Это **эталон поведения, а не образец кода**.
+It is a **behavioral reference, not a code model**.
 
-## Сначала — BLUEPRINT
+## Check BLUEPRINT first
 
-`BLUEPRINT.md` описывает всю логику старой версии: конвейер из 8 шагов, все 25 полей
-конфигурации, режимы безопасности с наборами суффиксов, детектор стека, каталог из
-~30 отчётов, параметры архивации, формулы. **В большинстве случаев ответ там.**
+`BLUEPRINT.md` documents the legacy logic in full: the eight-step pipeline, all 25
+configuration fields, safety modes with their suffix sets, stack detection, the catalog
+of ~30 reports, archiving parameters, and formulas. **In most cases the answer is there.**
 
-Архив нужен, только когда требуется буквальная точность: полный список констант,
-дословный формат артефакта, порядок секций в отчёте.
+Reach for the archive only when literal precision is required: a complete constant list,
+an exact artifact layout, the ordering of report sections.
 
-## Порядок работы с архивом
+## How to work with the archive
 
-1. Распаковывайте **во временный каталог вне репозитория**:
+1. Extract into a **temporary directory outside the repository**:
 
    ```powershell
    $tmp = Join-Path $env:TEMP "codepack-legacy"
    Expand-Archive -Path docs\__arch__\codepack-main.zip -DestinationPath $tmp -Force
    ```
 
-2. Никогда не распаковывайте в рабочее дерево и не коммитьте распакованное содержимое.
-3. Берите из архива только факты: значения констант, форматы, порядок шагов.
-4. Не переносите архитектуру Python-версии в Rust: слои и организация кода задаются
-   `ROADMAP.md` и `.ai/project/12-domain-rules.md`.
+2. Never extract into the working tree and never commit extracted content.
+3. Take facts only: constant values, formats, step ordering.
+4. Do not carry the Python architecture into Rust. Layering is defined by `ROADMAP.md`
+   and `.ai/project/12-domain-rules.md`.
 
-## Где что лежало в старой версии
+## Where things lived
 
-| Что ищете | Файл в архиве |
+| What you need | File in the archive |
 |---|---|
-| Константы, наборы расширений, чувствительные имена | `src/project_exporter_desktop/constants.py` |
-| Поля конфигурации и их нормализация | `config.py` |
-| Конвейер экспорта | `services/exporter.py` |
-| Режимы безопасности | `services/export_policy.py` |
-| Редактирование секретов | `utils/text_utils.py` |
-| Сканер безопасности | `reports/insights/security.py` |
-| Детектор стека | `services/stack_detector.py` |
-| Дифференциальный экспорт | `services/diff_service.py` |
-| Архивация и разбиение | `services/archive_service.py` |
-| Каталог отчётов | `reports/insights/orchestrator.py` |
-| Оценка токенов | `utils/token_counter.py` |
+| Constants, extension sets, sensitive names | `src/project_exporter_desktop/constants.py` |
+| Configuration fields and normalization | `config.py` |
+| Export pipeline | `services/exporter.py` |
+| Safety modes | `services/export_policy.py` |
+| Secret redaction | `utils/text_utils.py` |
+| Security scanner | `reports/insights/security.py` |
+| Stack detection | `services/stack_detector.py` |
+| Differential export | `services/diff_service.py` |
+| Archiving and splitting | `services/archive_service.py` |
+| Report catalog | `reports/insights/orchestrator.py` |
+| Token estimation | `utils/token_counter.py` |
 
-## Что не переносить
+## What not to carry over
 
-- Известные слабости: keyword-детект секретов усиливается (S3), плоские JSON заменяются
-  на SQLite (S5), Windows-специфика убирается.
-- Русскоязычные строки интерфейса — они проходят через новую систему локализации.
-  Дословно сохраняются только строки, являющиеся частью контракта формата.
+- Known weaknesses: keyword-only secret detection is strengthened in S3, flat JSON
+  storage becomes SQLite in S5, Windows-specific assumptions are removed.
+- Russian interface strings go through the new localization system. Only strings that
+  are part of an artifact format contract are preserved verbatim.

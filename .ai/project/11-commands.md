@@ -1,48 +1,57 @@
-# Команды проекта и гейты качества
+# Project Commands and Quality Gates
 
-Запуск из корня репозитория (Windows: PowerShell или Git Bash).
+All commands run from the repository root (Windows: PowerShell or Git Bash).
 
-## Что работает сейчас (гринфилд)
-
-До выполнения этапа S0 существует только синхронизация правил:
+## Main entry point — the xtask runner
 
 ```powershell
-python dev_tools_scripts_runner.py sync-agents           # пересобрать AGENTS.md
-python dev_tools_scripts_runner.py sync-agents --check    # проверить актуальность
+cargo xtask gate            # full quality gate — the main verification path
+cargo xtask gate --quick    # quick gate — the minimum before a push
+cargo xtask fmt             # format Rust sources
+cargo xtask lint            # clippy with warnings denied
+cargo xtask test            # workspace tests
+cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
+cargo xtask sync-agents --check   # verify AGENTS.md is in sync
+cargo xtask doctor          # read-only environment diagnostics
 ```
 
-Это временный Python-скрипт с нулевой стоимостью запуска, нужный до появления
-Rust-инструментария. Этап S0 переносит его в `cargo xtask sync-agents` и убирает
-Python из репозитория.
+`cargo xtask gate` runs formatting, clippy, tests, and the `AGENTS.md` sync check.
+Prefer it over ad-hoc command sequences.
 
-## Целевые команды (появляются на S0)
+## Direct commands when targeting one layer
 
 ```powershell
-cargo xtask gate            # полный гейт качества — основной путь проверки
-cargo xtask gate --quick    # быстрый гейт, минимум перед push
-cargo xtask fmt             # форматирование Rust и фронтенда
-cargo xtask doctor          # диагностика окружения без изменения состояния
-cargo xtask sync-agents     # пересборка AGENTS.md
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build --workspace
+pnpm install --frozen-lockfile
+pnpm --filter @codepack/ui typecheck
+pnpm --filter @codepack/ui lint
 ```
 
-Прямые команды по слоям: `cargo fmt --all --check`,
-`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
-`cargo deny check`, `cargo tauri dev` (после S11),
-`pnpm --filter ui typecheck` (после S11).
+Frontend commands require `pnpm install` once. The frontend lives in
+`apps/desktop/ui`; the Tauri shell arrives in stage S11.
 
-## Политика гейтов
+## Gate policy
 
-- Перед слиянием в `main` полный гейт обязан быть зелёным.
-- Быстрый гейт — минимум для промежуточных пушей.
-- `sync-agents --check` входит в гейт: рассинхрон `AGENTS.md` с `.ai/` намеренно
-  ломает сборку.
-- Изменения только в документах или конфигурации всё равно проходят проверки.
-- CI гоняет матрицу `windows-latest` / `macos-latest` / `ubuntu-latest`:
-  кроссплатформенность проверяется автоматически, а не на словах.
+- Before merging to `main`, the full gate must be green.
+- The quick gate is the minimum for intermediate pushes.
+- `sync-agents --check` is part of the gate: a drift between `AGENTS.md` and the `.ai/`
+  modules breaks the build on purpose.
+- Documentation-only or configuration-only changes still run the gate.
+- CI runs a matrix of `windows-latest`, `macos-latest`, and `ubuntu-latest`:
+  cross-platform support is verified automatically, not claimed.
 
-## Платформенные замечания
+## Platform notes
 
-- Windows: длинные пути и антивирус мешают тестам с временными каталогами — использовать
-  явный базовый временный каталог внутри репозитория.
-- macOS: сборка Tauri требует Xcode Command Line Tools.
-- Linux: Tauri требует `webkit2gtk` и связанные системные библиотеки.
+- Windows: long paths and antivirus can interfere with temporary directories; prefer a
+  repository-local temp directory in tests.
+- macOS: building the Tauri shell requires Xcode Command Line Tools.
+- Linux: the Tauri shell requires `webkit2gtk` and related system libraries. Core crates
+  and the CLI have no such dependency and build anywhere.
+
+## Toolchain
+
+The Rust toolchain is pinned in `rust-toolchain.toml`; do not bypass it. Node and pnpm
+versions are declared in `package.json` under `engines` and `packageManager`.

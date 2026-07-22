@@ -1,32 +1,36 @@
 ---
 name: codepack-reports
-description: Use for work on codepack-reports — the ~30 insight reports, PROJECT_PROFILE, manifest, AI_CONTEXT/AI_PROMPTS folders, HTML dashboard, and artifact localization.
+description: Use for work on codepack-reports — the ~30 insight reports, PROJECT_PROFILE, manifest, AI_CONTEXT and AI_PROMPTS folders, HTML dashboard, and artifact localization.
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
-Вы реализуете крейт `codepack-reports`: аналитические отчёты и пакеты контекста.
+You implement `crates/codepack-reports`: analytical reports and context packs.
 
-Перед работой прочитайте `AGENTS.md` и `BLUEPRINT.md` §A.7 — там полный каталог
-отчётов с точными именами файлов и назначением каждого.
+Before starting, read `AGENTS.md` and `BLUEPRINT.md` §A.7 — the full report catalog with
+exact file names and the purpose of each.
 
-Ключевые требования:
+Key requirements:
 
-- **Имена файлов отчётов — контракт.** `01_summary.txt` … `29_export_comparison_report.md`,
-  `PROJECT_PROFILE.json`, `manifest.json`, `INDEX.md`, `REPORT_DASHBOARD.html`,
-  `14_dependency_graph.mmd`. Переименование — только с решением владельца.
-- **Профили экспорта** (`quick`, `full`, `ai_review`, `security`, `minimal`) управляют
-  тем, какие отчёты создаются. Профиль `full` создаёт всё.
-- **Отказоустойчивость обязательна.** Падение одного отчёта не рушит экспорт: пишется
-  `ERROR_<имя>.txt` с диагностикой, остальные отчёты продолжают работу. Это поведение
-  покрывается тестом с принудительной ошибкой.
-- **Секреты не попадают в отчёты** в открытом виде: любая строка проходит редактирование.
-- Отчёты не обращаются к сети. Вся аналитика локальна.
-- Аудитория отчётов двойная — ИИ и человек. Формулировки должны быть понятны
-  и разработчику, и техническому специалисту без доступа к коду.
+- **Report file names are a contract**: `01_summary.txt` through
+  `29_export_comparison_report.md`, plus `PROJECT_PROFILE.json`, `manifest.json`,
+  `INDEX.md`, `REPORT_DASHBOARD.html`, `14_dependency_graph.mmd`. Renaming requires an
+  owner decision.
+- **Export profiles** (`quick`, `full`, `ai_review`, `security`, `minimal`) select which
+  reports are produced. The `full` profile produces everything.
+- **Fault tolerance is mandatory.** One failing report must not break the export: write
+  `ERROR_<name>.txt` with diagnostics and continue with the rest. Cover this with a test
+  that forces a report to fail.
+- **Secrets never appear in clear text** in a report: every line passes through
+  redaction.
+- Reports make no network calls. All analysis is local.
+- The audience is dual — AI and human. Wording must be usable by a developer and by a
+  technical stakeholder who cannot read the code.
 
-Локализация артефактов (этап S7): язык отчётов отделён от языка интерфейса.
-Строки, являющиеся частью контракта формата, не переводятся.
+Artifact localization (stage S7): the report language is independent of the interface
+language. Strings that are part of a format contract are never translated.
 
-Проверка: `cargo test -p codepack-reports`, `cargo clippy -- -D warnings`.
+Verify with `cargo test -p codepack-reports` and
+`cargo clippy --workspace --all-targets -- -D warnings`.
 
-Отчитайтесь: какие отчёты добавлены или изменены, какие форматы затронуты, что проверено.
+Report: which reports were added or changed, which formats were touched, what you
+verified.

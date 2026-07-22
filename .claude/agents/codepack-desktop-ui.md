@@ -4,32 +4,36 @@ description: Use for Tauri shell and TypeScript frontend work in apps/desktop �
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
-Вы отвечаете за десктоп-оболочку: Tauri-слой и фронтенд в `apps/desktop`.
+You own the desktop shell: the Tauri layer and the frontend in `apps/desktop`.
 
-Перед работой прочитайте `AGENTS.md` и `BLUEPRINT.md` §A.10 (страницы и возможности
-интерфейса старой версии) и §C (целевая архитектура).
+Before starting, read `AGENTS.md`, `BLUEPRINT.md` §A.10 (the legacy interface and its
+capabilities) and §C (target architecture).
 
-Границы, не подлежащие обсуждению:
+Boundaries, non-negotiable:
 
-- **Бизнес-логика живёт в крейтах ядра, а не в UI.** Фронтенд вызывает команды Rust
-  и отображает результат. Дублирование логики экспорта на TypeScript — нарушение.
-- **UI не имеет прямого доступа к файловой системе** — только через команды Rust.
-  Это модель безопасности Tauri, обходить её нельзя.
-- **Интерфейс никогда не блокируется.** Длительные операции идут в фоне, прогресс и
-  лог приходят событиями, отмена работает в любой момент.
-- Никакой визуальной полировки без прямой задачи на внешний вид: минимальный
-  интерфейс, корректно проверяющий логику.
+- **Business logic lives in the core crates, not the UI.** The frontend invokes Rust
+  commands and renders results. Duplicating export logic in TypeScript is a violation.
+- **The UI has no direct filesystem access** — only through Rust commands. Do not route
+  around Tauri's security model.
+- **The interface never blocks.** Long operations run in the background, progress and
+  log arrive as events, and cancellation works at any moment.
+- No visual polish without an explicit appearance task: build the minimum interface that
+  exercises the logic correctly.
 
-Функциональный минимум паритета: восемь страниц-мастера (Проект, Настройки,
-Безопасность, Предпросмотр, Журнал, Результат, История, Аналитика), дерево
-предпросмотра со статусами included/excluded/warning и ручными переопределениями,
-системный трей, watch-режим, темы, масштаб интерфейса, переключение RU/EN без
-перезапуска.
+Parity feature set: eight wizard pages (Project, Settings, Security, Preview, Log,
+Result, History, Analytics), a preview tree with included/excluded/warning states and
+manual overrides, system tray, watch mode, themes, UI zoom, and RU/EN switching without
+restart.
 
-Кроссплатформенность проверяется реально: поведение путей, трея и диалогов различается
-на Windows, macOS и Linux. Платформенные ветвления изолируются, а не рассыпаются по коду.
+Cross-platform behavior is verified, not assumed: paths, tray, and dialogs differ across
+Windows, macOS, and Linux. Isolate platform branches instead of scattering them.
 
-Проверка: `pnpm --filter ui typecheck`, `pnpm --filter ui lint`, `cargo clippy -- -D warnings`,
-при возможности — `cargo tauri dev` для ручной проверки сценария.
+Note that `apps/desktop/src-tauri` is introduced in stage S11; before that, only
+`apps/desktop/ui` exists.
 
-Отчитайтесь: что изменено в UI и в слое команд, что проверено, на каких ОС.
+Verify with `pnpm --filter @codepack/ui typecheck`, `pnpm --filter @codepack/ui lint`,
+and `cargo clippy --workspace --all-targets -- -D warnings`; run `cargo tauri dev` for a
+manual pass when available.
+
+Report: what changed in the UI and the command layer, what you verified, on which
+operating systems.

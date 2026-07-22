@@ -1,56 +1,47 @@
 ---
 name: project-maintenance
-description: Use for routine codepack upkeep — formatting, rule-module sync, mirror consistency, state-document updates, and explicitly requested publishing.
+description: Use for routine codepack upkeep — formatting, quality gates, rule sync, mirror consistency, state-document updates, and explicitly requested publishing.
 ---
 
-# Поддержка репозитория
+# Repository Maintenance
 
-Используйте автоматизацию проекта вместо ручных наборов команд.
+Use the project's automation instead of hand-rolled command sequences.
 
-## Быстрые пути
-
-Синхронизация правил после правки модулей `.ai/` (обязательна):
+## Fast paths
 
 ```powershell
-python dev_tools_scripts_runner.py sync-agents
+cargo xtask fmt                   # format Rust sources
+cargo xtask gate --quick          # quick local gate
+cargo xtask gate                  # full gate before merging
+cargo xtask doctor                # read-only environment diagnostics
+cargo xtask sync-agents           # regenerate AGENTS.md from .ai/
+cargo xtask sync-agents --check   # verify it is in sync
 ```
 
-Проверка, что точка входа Codex актуальна:
+## Rules
 
-```powershell
-python dev_tools_scripts_runner.py sync-agents --check
-```
+- `AGENTS.md` is **generated** and never hand-edited. Edit the module in `.ai/`, then
+  run the sync command.
+- The `AGENTS.md` budget is 30 KiB. If the build hits the limit: tighten a module, or
+  mark a situational one with `<!-- tier: extended -->` and give it an
+  `> **Essence.**` line.
+- Rule changes follow the `rules-evolution` skill and
+  `.ai/universal/08-rules-evolution.md`, including the `.ai/CHANGELOG.md` entry.
+- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors. Changing
+  one side requires the equivalent change on the other **in the same task**.
+- `.claude/settings.json`: extending the allowlist is fine; removing a deny entry needs
+  explicit owner approval.
 
-После этапа S0 те же операции доступны как `cargo xtask sync-agents`, плюс:
+## State documents
 
-```powershell
-cargo xtask fmt
-cargo xtask gate --quick
-cargo xtask doctor
-```
+- Stage completed → `**Status.**` line under that stage in `ROADMAP.md` (in Russian, to
+  match the file) plus the §1 table.
+- System shape changed → `docs/architecture/overview.md`.
+- Owner decision → `docs/decisions/open-questions.md`.
+- New invariant → `docs/architecture/invariants.md`.
+- Task closed → `task-checklist.md` with honest `+`/`-` marks.
 
-## Правила
+## Publishing
 
-- `AGENTS.md` **генерируется** — руками не редактируется никогда. Правится модуль
-  в `.ai/`, затем запускается синхронизация.
-- Бюджет `AGENTS.md` — 30 KiB. Если сборка упёрлась в лимит: уплотнить модуль либо
-  пометить ситуативный маркером `<!-- tier: extended -->` и добавить ему строку
-  `> **Суть.**` с однострочным резюме.
-- `.claude/agents|skills` и `.codex/agents|skills` — зеркала по именам. Изменение одной
-  стороны требует эквивалентного изменения другой **в той же задаче**.
-- `.claude/settings.json`: разрешения расширять можно, запреты удалять — только по
-  явному решению владельца.
-
-## Документы состояния
-
-- Завершён этап → строка `**Status.**` под этапом в `ROADMAP.md` + статус в таблице §1.
-- Изменилась форма системы → `docs/architecture/overview.md`.
-- Решение владельца → `docs/decisions/open-questions.md`.
-- Новый инвариант → `docs/architecture/invariants.md`.
-- Задача закрыта → `task-checklist.md` с честными отметками `+`/`-`.
-
-## Публикация
-
-Пуш в `main` — только когда владелец явно попросил об этом в текущей задаче.
-Маршрут по умолчанию: ветка → гейт → ff-слияние → отчёт. Красный гейт запрещает
-публикацию.
+Push to `main` only when the owner explicitly asked in the current task. The default
+route is branch → gate → fast-forward merge → report. A red gate forbids publishing.

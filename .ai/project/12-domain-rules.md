@@ -1,57 +1,62 @@
-# Доменные правила и домашний стиль (codepack)
+# Domain Rules and House Style (codepack)
 
-Уточняют универсальные правила под эту кодовую базу. Более строгое побеждает.
+These sharpen the universal rules for this codebase. Stricter wins.
 
-## Структура кода на Rust
+## Rust code structure
 
-- Модуль свыше ~600 строк (строже универсальных 1000) становится каталогом-модулем;
-  публичная поверхность сохраняется, чтобы внешние импорты не ломались.
-- Крейты не знают о UI: `codepack-*` не зависят ни от Tauri, ни от фронтенда. Ядро
-  собирается и тестируется headless — на этом стоит CLI (S10).
-- Зависимости строго вниз: `engine` → доменные крейты → `core`. Обратные и циклические
-  зависимости запрещены.
-- Ошибки: `thiserror` в библиотеках; `anyhow` только в бинарях и `xtask`.
-- `unsafe` запрещён без явного решения владельца и обоснования в коде.
-- `unwrap()`/`expect()` вне тестов — только там, где инвариант доказан рядом
-  комментарием «почему это не может упасть».
+- A module over roughly 600 lines (stricter than the universal 1000) becomes a
+  directory module; the public surface is preserved so external imports keep working.
+- Crates know nothing about the UI: no `codepack-*` crate depends on Tauri or the
+  frontend. The core must build and test headless — the CLI depends on this.
+- Dependencies point strictly downward: `engine` → domain crates → `core`. Reverse and
+  circular dependencies are forbidden.
+- Errors: `thiserror` in libraries, `anyhow` only in binaries and `xtask`.
+- `unsafe` is forbidden without an explicit owner decision and a justification in code.
+- `unwrap()` and `expect()` outside tests are allowed only where the invariant is proven
+  by an adjacent comment explaining why it cannot fail.
+- Workspace lints are configured centrally in the root `Cargo.toml`; crates inherit them
+  with `[lints] workspace = true` rather than redefining their own.
 
-## Параллелизм и отзывчивость
+## Concurrency and responsiveness
 
-- Длительные операции (обход, хэширование, сканирование, архивация) параллелятся через
-  `rayon` и проверяют токен отмены внутри циклов, а не только между шагами.
-- Прогресс и лог идут через канал; UI никогда не блокируется.
-- Память не растёт линейно от размера файла: большие файлы читаются потоково.
+- Long operations (walking, hashing, scanning, archiving) parallelize with `rayon` and
+  check the cancellation token **inside** loops, not only between steps.
+- Progress and log messages travel over a channel; the UI never blocks.
+- Memory must not grow linearly with file size: large files are read in a streaming
+  fashion.
 
-## Ограничения предметной области
+## Domain constraints
 
-- **Сеть запрещена** во всех крейтах, кроме интеграции S13: добавление HTTP-клиента
-  в любой другой крейт — нарушение.
-- **Симлинки не разыменовываются** при обходе — защита от выхода за пределы дерева.
-- **Распаковка защищена** от path-traversal: путь элемента архива проверяется до записи.
-- **Секреты не логируются**: строка находки редактируется до попадания в лог, отчёт,
-  историю и БД.
-- Наборы констант (расширения текстовых и бинарных файлов, чувствительные имена и
-  суффиксы, режимы безопасности) переносятся из старой версии **дословно**; изменение
-  набора — отдельное решение, а не побочный эффект рефакторинга.
+- **Network access is forbidden** in every crate except the stage S13 integration.
+  Adding an HTTP client anywhere else is a violation.
+- **Symlinks are never followed** while walking — this prevents escaping the tree.
+- **Extraction is path-traversal safe**: an archive entry's target path is validated
+  before writing.
+- **Secrets are never logged**: a finding's text is redacted before it reaches a log,
+  report, history entry, or database row.
+- Constant sets (text and binary extensions, ignored directories, sensitive names and
+  suffixes, safety-mode tables) are ported from the legacy version **verbatim**.
+  Changing a set is a separate decision, never a side effect of refactoring.
 
-## Тесты
+## Tests
 
-- Каждый доменный крейт имеет golden-тесты против поведения старой реализации;
-  фикстуры проектов под каждый стек лежат в тестовых данных крейта.
-- Для `codepack-security` обязателен корпус-тест точности (precision/recall/F1);
-  ослаблять пороги ради зелёного гейта запрещено.
-- Тесты не зависят от установленного `git`: работа идёт через `git2`, репозитории
-  создаются программно.
+- Every domain crate carries golden tests against legacy behavior; per-stack project
+  fixtures live in the crate's test data.
+- `codepack-security` additionally requires an accuracy corpus test
+  (precision / recall / F1). Lowering a threshold to make the gate green is forbidden.
+- Tests must not depend on a `git` binary being installed: git work goes through `git2`
+  and test repositories are created programmatically.
 
-## Форматы артефактов
+## Artifact formats
 
-Имена файлов отчётов, структура JSON-манифестов и SARIF — **контракт**. Менять их можно
-только с повышением `schema_version` и записью в `docs/decisions/open-questions.md`.
+Report file names, JSON manifest structures, and SARIF output are a **contract**.
+Changing one requires bumping `schema_version` and recording the decision in
+`docs/decisions/open-questions.md`.
 
-## Рабочие пространства ассистентов
+## Assistant workspaces
 
-- `.claude/agents|skills` и `.codex/agents|skills` — зеркала по именам; изменение одной
-  стороны требует эквивалентного изменения другой в той же задаче.
-- `.claude/settings.json` разрешает рутинные читающие команды и запрещает разрушительные
-  git-операции. Расширять разрешения можно; удалять запреты — только по явному решению
-  владельца.
+- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors; changing
+  one side requires the equivalent change on the other in the same task.
+- `.claude/settings.json` allowlists routine read and verification commands and denies
+  destructive git operations and crate publishing. Extend the allowlist rather than
+  routing around it; never remove a deny entry without explicit owner approval.

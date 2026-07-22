@@ -1,0 +1,17 @@
+[package]
+name = "codepack-cli"
+description = "Headless command-line interface for codepack."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "codepack"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true

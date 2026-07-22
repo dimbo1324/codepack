@@ -1,0 +1,4 @@
+# `cargo xtask <command>` is the project's task runner.
+# See .ai/project/11-commands.md for the command list.
+[alias]
+xtask = "run --package xtask --quiet --"

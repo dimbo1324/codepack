@@ -3,42 +3,43 @@ name: code-review
 description: Use to review the current diff before finalizing a task — scope, architecture boundaries, security, invariants, test honesty, and documentation drift.
 ---
 
-# Ревью изменений
+# Reviewing Changes
 
-Проводится **до** слияния и до финального отчёта.
+Run this **before** merging and before the final report.
 
-## Что смотреть
+## What to look at
 
 ```powershell
 git status --short --branch
 git diff
 ```
 
-Для независимого взгляда поднимите субагента `codepack-quality-reviewer`.
+For an independent pass, delegate to the `codepack-quality-reviewer` subagent.
 
-## Обязательный список проверок
+## Mandatory checklist
 
-1. **Объём.** Нет изменений, которых задача не требовала: попутного рефакторинга,
-   переименований, переформатирования чужих файлов, редизайна, удалённой
-   функциональности.
-2. **Архитектура.** Зависимости идут вниз (`engine` → домен → `core`); ядро не знает
-   о UI; нет циклов; бизнес-логика не утекла во фронтенд; модули не разрослись
-   свыше ~600 строк.
-3. **Безопасность.** Нет секретов в коде, тестах и фикстурах. Находки редактируются
-   до попадания в лог, отчёт, историю и БД. Нет сетевых обращений вне S13. Защита от
-   path-traversal и неразыменование симлинков на месте.
-4. **Инварианты** (`docs/architecture/invariants.md`): источник неизменен, приватность,
-   байтовые оценки сохранены, форматы артефактов совместимы.
-5. **Тесты.** Не удалены, не отключены, не ослаблены. Пороги точности детектора
-   секретов не понижены. Новое поведение покрыто.
-6. **Отмена.** Длительные циклы проверяют токен отмены внутри, а не только между шагами.
-7. **Документы.** Изменилась форма системы — обновлён `docs/architecture/overview.md`;
-   завершён этап — есть строка `**Status.**` в `ROADMAP.md`.
-8. **Мусор.** Отладочные остатки, временные файлы, закомментированный код,
-   комментарии, повторяющие имя функции.
+1. **Scope.** No changes the task did not require: incidental refactoring, renames,
+   reformatting unrelated files, redesign, removed functionality.
+2. **Architecture.** Dependencies point downward (`engine` → domain → `core`); the core
+   does not know about the UI; no cycles; business logic has not leaked into the
+   frontend; modules stay under roughly 600 lines.
+3. **Security.** No secrets in code, tests, or fixtures. Findings are redacted before
+   reaching a log, report, history entry, or database row. No network calls outside
+   stage S13. Path-traversal checks and symlink non-following intact.
+4. **Invariants** (`docs/architecture/invariants.md`): source immutability, privacy,
+   preserved byte reporting, artifact format compatibility.
+5. **Tests.** Not deleted, disabled, or weakened. Secret-detector accuracy thresholds
+   not lowered. New behavior covered.
+6. **Cancellation.** Long loops check the cancellation token inside, not only between
+   steps.
+7. **Documents.** Shape changed → `docs/architecture/overview.md` updated; stage
+   completed → `**Status.**` line in `ROADMAP.md`; rule module changed →
+   `.ai/CHANGELOG.md` updated and `AGENTS.md` regenerated.
+8. **Leftovers.** Debug remnants, temp files, commented-out code, comments restating a
+   function name.
 
-## Как поступать с находками
+## Handling findings
 
-Серьёзные (безопасность, данные, инварианты) чинятся в этой же задаче. Посторонние
-проблемы фиксируются отдельно, а не подмешиваются в текущий диф. Если находок нет —
-так и сказать, не выдумывая замечаний.
+Serious findings — security, data, invariants — are fixed in the same task. Unrelated
+problems are recorded separately rather than mixed into the current diff. If there are
+no findings, say so plainly instead of inventing remarks.

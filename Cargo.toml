@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "2.0.0-dev"
+edition = "2024"
+rust-version = "1.90"
+repository = "https://github.com/dimbo1324/codepack"
+publish = false
+
+# Shared dependency versions. Crates opt in with `dep.workspace = true`.
+# Nothing is enabled yet: stage S0 ships infrastructure only, and every dependency
+# must be justified when the stage that needs it lands.
+[workspace.dependencies]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+# The core must stay portable and offline; these catch accidental regressions early.
+dbg_macro = "warn"
+print_stdout = "warn"
+todo = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
