@@ -1,0 +1,12 @@
+# Проектные настройки Codex по умолчанию для codepack.
+# Личные учётные данные, авторизация плагинов и машинно-специфичные абсолютные пути
+# принадлежат ~/.codex/config.toml, а не этому репозиторию.
+
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "default"
+
+[agents]
+max_threads = 6
+max_depth = 1
+job_max_runtime_seconds = 3600
