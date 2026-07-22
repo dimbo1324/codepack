@@ -100,10 +100,10 @@
 `cargo xtask gate` зелёный локально: `fmt --check`, `clippy -D warnings`,
 `cargo test --workspace` (3 юнит-теста в `xtask`), `sync-agents --check`. Добавлен
 `.github/workflows/ci.yml` — матрица `ubuntu-latest` / `macos-latest` / `windows-latest`,
-запускает `cargo xtask gate`; фактический прогон в CI будет подтверждён при первом push
-в `origin`. Модули `.ai/universal/08-rules-evolution.md` и `.ai/project/14-legacy-
-reference.md` помечены `tier: extended`, чтобы вернуть `AGENTS.md` под бюджет 30 KiB
-(разросся до 31.7 KiB) — 2026-07-22.
+запускает `cargo xtask gate`; прогон подтверждён живьём (run #36, коммит `d76d702`,
+все три ОС — `success`). Модули `.ai/universal/08-rules-evolution.md` и
+`.ai/project/14-legacy-reference.md` помечены `tier: extended`, чтобы вернуть
+`AGENTS.md` под бюджет 30 KiB (разросся до 31.7 KiB) — 2026-07-22.
 
 ---
 

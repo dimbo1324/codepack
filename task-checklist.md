@@ -37,15 +37,17 @@ sync-agents --check` падал (бюджет `AGENTS.md` превышен), CI 
 - [+] `cargo xtask gate` зелёный локально (fmt, clippy -D warnings, тесты, sync-agents
       --check; 3/3 юнит-теста xtask проходят)
 - [+] `cargo xtask sync-agents --check` проходит (25.7 KiB из 30 KiB)
-- [-] Гейт в CI на трёх ОС — воркфлоу добавлен, но не подтверждён живым прогоном:
-      подтвердится при первом push ветки/PR в `origin`
+- [+] Гейт в CI на трёх ОС подтверждён живым прогоном: run #36
+      (https://github.com/dimbo1324/codepack/actions/runs/29922474762),
+      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
+      `success` на коммите `d76d702` (push в `main` от 2026-07-22)
 - [+] `docs/architecture/overview.md` обновлён под фактическое состояние кода
 - [+] `ROADMAP.md`: строка `**Status.**` под S0 и статус в таблице §1 обновлены
 
 ## Завершение
 
 - [+] Коммиты изменений (раздельно: чек-лист, код и правила, CI)
-- [ ] Fast-forward merge в `main` (после явного согласия владельца на публикацию)
+- [+] Fast-forward merge в `main` и push в `origin` (по явному согласию владельца)
 - [+] Финальный отчёт владельцу
 
 ---
