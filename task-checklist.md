@@ -1,58 +1,89 @@
-# Чек-лист задачи
+# Task Checklist
 
-**Задача:** Этап **S0 — Фундамент репозитория и гейт качества** (`ROADMAP.md` §2).
-Задача была начата в предыдущей сессии (Cargo workspace и крейты-плейсхолдеры уже
-существовали), но не завершена: код ни разу не проходил `cargo fmt`, `cargo xtask
-sync-agents --check` падал (бюджет `AGENTS.md` превышен), CI отсутствовал.
-**Дата:** 2026-07-22
-**Ветка:** feat/s0-repo-foundation-quality-gate
+**Task:** Stage **S1 — Domain types and configuration (`codepack-core`)** (`ROADMAP.md` §2).
+**Date:** 2026-07-22
+**Branch:** feat/s1-core-domain-types-config
 
-## Подготовка
+Note: this checklist is written in English. `.ai/project/10-project-map.md` lists
+`task-checklist.md` as agent-facing infrastructure (English); the S0 checklist was
+written in Russian, which was drift against that same policy line. Correcting it here
+rather than silently rewriting the already-merged S0 one.
 
-- [+] Ритуал ориентации: `git status`/`git log`, `ROADMAP.md` §1 (S0 без строки
-      `**Status.**` — первый в очереди), `docs/architecture/overview.md`,
-      `task-checklist.md`, `docs/decisions/open-questions.md`
-- [+] Инвентаризация уже существующей части S0: workspace, 10 крейтов-плейсхолдеров,
-      `crates/xtask` с командами `gate/fmt/lint/test/sync-agents/doctor`,
-      `rust-toolchain.toml`, `rustfmt.toml`, `deny.toml`, `.gitignore`, `.editorconfig`
-- [+] Выявлены незавершённые места: код не отформатирован, `sync-agents --check`
-      падает (31.7 KiB > 30 KiB), `.github/workflows` отсутствует, временный
-      Python-скрипт синхронизации не удалён, `docs/architecture/overview.md` устарел
+## Preparation
 
-## Реализация
+- [+] Orientation ritual: git status/log, ROADMAP.md §1 (S1 is the first stage without
+      a `**Status.**` line), docs/architecture/overview.md, task-checklist.md,
+      docs/decisions/open-questions.md — no open items blocking S1
+- [+] Delegated stage planning to `codepack-stage-planner`: legacy archive extracted to
+      a session-scratchpad temp dir (outside the repo) and read (`config.py`,
+      `constants.py`, `models.py`, config-edge-case and AI-preset tests)
+- [+] Resolved scope ambiguities from the plan:
+      - `BLUEPRINT.md` §A.3's own field table already lists **26** rows (last_root
+        through prompt_goals) — the "25" figure is a miscount that exists only in
+        `ROADMAP.md` (two places), not in BLUEPRINT's table itself. Fixed the
+        `ROADMAP.md` wording as routine doc maintenance; `BLUEPRINT.md` needed no edit.
+      - AI presets (5-entry static table, ROADMAP §6 lists S1+S7): included in S1 as
+        data-only (`AiPreset` type + table), no application/wiring logic — that is S7.
+      - Project-level `.codepack.toml` (BLUEPRINT §B.7, no legacy counterpart): out of
+        S1 scope; recorded as an open question (which stage owns it) rather than built
+        or silently dropped.
+      - `cargo deny` wiring into the gate: `deny.toml` already says "runs once the
+        workspace has real dependencies (stage S1 onward)" — S1 is that stage, so wired
+        it into `cargo xtask gate` and CI now.
 
-- [+] `cargo xtask fmt` — привести весь существующий Rust-код к `rustfmt.toml`
-- [+] Вернуть `AGENTS.md` под бюджет 30 KiB: пометить `.ai/universal/08-rules-
-      evolution.md` и `.ai/project/14-legacy-reference.md` как `tier: extended` с
-      однострочной `> **Essence.**` (обнаружен и исправлен баг: essence не должен
-      переноситься на несколько строк — парсер читает только первую)
-- [+] Удалить `dev_tools_scripts_runner.py` и `scripts/dev_tools/sync_agents_md.py`;
-      обновить ссылки на них в `.ai/README.md` и `.claude/settings.json`
-- [+] Записать изменение модулей в `.ai/CHANGELOG.md`
-- [+] Добавить `.github/workflows/ci.yml` — матрица `ubuntu-latest`/`macos-latest`/
-      `windows-latest`, шаг `cargo xtask gate`
+## Implementation
 
-## Проверка
+- [+] Added `serde`, `serde_json`, `thiserror`, `directories`, `crossbeam-channel` to
+      `[workspace.dependencies]`; `tempfile` as a dev-dependency; wired into
+      `crates/codepack-core/Cargo.toml` via `dep.workspace = true`
+- [+] `crates/codepack-core/src/error.rs` — `CoreError` (thiserror) + `Result<T>` alias
+- [+] `crates/codepack-core/src/types.rs` — `ExportPaths`, `CopyStats`, `TextDumpStats`,
+      `RiskPreviewItem`, `RiskPreviewReport` (+ `has_warnings`), `ArchiveBuildResult`
+      (+ `primary_result`)
+- [+] `crates/codepack-core/src/cancellation.rs` — `CancellationToken`
+- [+] `crates/codepack-core/src/progress.rs` — `ProgressEvent`/`LogEvent` +
+      crossbeam-channel aliases
+- [+] `crates/codepack-core/src/paths.rs` — `AppPaths` over `directories`, injectable
+      base dir for hermetic tests, legacy settings-file location resolver
+- [+] `crates/codepack-core/src/config/` directory module: `mod.rs` (26-field struct,
+      declaration order matches legacy), `normalize.rs` (methods on `&Config`, handles
+      the `diff_export_mode`/`incremental_export_enabled` coupling), `valid_sets.rs`
+      (export profiles / safe modes / diff modes + legacy aliases), `legacy.rs`
+      (tolerant load + the one real migration rule), `presets.rs` (5 AI presets, data
+      only), `io.rs` (load/save via `paths.rs`)
+- [+] `crates/codepack-core/src/lib.rs` — replaced the placeholder, re-exported the
+      public surface
+- [+] `crates/codepack-core/tests/fixtures/` — 4 legacy-settings fixtures (full,
+      missing-flag, unknown-keys, corrupt) + `legacy_migration.rs` integration test
+- [+] Wired `cargo deny check` into `cargo xtask gate` and `.github/workflows/ci.yml`
 
-- [+] `cargo xtask gate` зелёный локально (fmt, clippy -D warnings, тесты, sync-agents
-      --check; 3/3 юнит-теста xtask проходят)
-- [+] `cargo xtask sync-agents --check` проходит (25.7 KiB из 30 KiB)
-- [+] Гейт в CI на трёх ОС подтверждён живым прогоном: run #36
-      (https://github.com/dimbo1324/codepack/actions/runs/29922474762),
-      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
-      `success` на коммите `d76d702` (push в `main` от 2026-07-22)
-- [+] `docs/architecture/overview.md` обновлён под фактическое состояние кода
-- [+] `ROADMAP.md`: строка `**Status.**` под S0 и статус в таблице §1 обновлены
+## Verification
 
-## Завершение
+- [+] Unit tests for all 26 `Config` fields: valid passthrough + invalid/out-of-range
+      fallback, including the diff-mode/incremental coupling, `ui_zoom` clamp/parse
+      fallback, the two legacy diff-mode aliases
+- [+] Round-trip test (`Config` → JSON → `Config`) + JSON-shape/contract test (26 keys
+      present, `schema_version` field)
+- [+] Legacy-import tests against the 4 checked-in fixtures
+- [+] `cargo xtask gate` green locally: fmt, clippy `-D warnings`, tests, `cargo deny
+      check`, `sync-agents --check`
+- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a proven-invariant
+      comment
+- [+] `docs/architecture/overview.md` updated
+- [+] `ROADMAP.md`: `**Status.**` line under S1 + §1 table status updated; "25 полей"
+      corrected to "26" in both places
 
-- [+] Коммиты изменений (раздельно: чек-лист, код и правила, CI)
-- [+] Fast-forward merge в `main` и push в `origin` (по явному согласию владельца)
-- [+] Финальный отчёт владельцу
+## Completion
+
+- [ ] CI green on all three OSes (confirm after push)
+- [+] Commits: checklist first, then implementation, separated logically
+- [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
+- [ ] Final report to owner (Russian, per language policy)
 
 ---
 
-## Следующая задача
+## Next task
 
-Этап **S1 — Доменные типы и конфигурация (`codepack-core`)** (`ROADMAP.md` §2).
-Начать с ритуала ориентации из `.ai/project/13-progress-tracking.md`.
+Stage **S2 — Scanner: tree walking, ignore rules, stack detection (`codepack-scanner`)**
+(`ROADMAP.md` §2). Start with the orientation ritual from
+`.ai/project/13-progress-tracking.md`.
