@@ -49,6 +49,11 @@ git2 = { version = "0.21", default-features = false, features = ["vendored-libgi
 # content (with a header prefix) rather than raw bytes, and would silently diverge from
 # legacy's `hashlib.sha256()` computed over the same file's raw bytes.
 sha2 = "0.10"
+# S5 (codepack-storage): history/snapshots/findings persistence needs transactions,
+# indexes, and WAL-mode concurrent access (BLUEPRINT §D). `bundled` statically compiles
+# SQLite via the `cc` crate at build time, mirroring S4's `git2`/`vendored-libgit2`
+# precedent — no system libsqlite3/pkg-config required on any of the three CI OSes.
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

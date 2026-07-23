@@ -4,7 +4,9 @@ use crate::error::{CoreError, Result};
 
 const APP_NAME: &str = "codepack";
 const LEGACY_SETTINGS_FILE_NAME: &str = ".project_exporter_desktop.json";
+const LEGACY_HISTORY_FILE_NAME: &str = ".project_exporter_history.json";
 const SETTINGS_FILE_NAME: &str = "settings.json";
+const DB_FILE_NAME: &str = "codepack.db";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Os {
@@ -114,6 +116,18 @@ impl AppPaths {
     pub fn legacy_settings_file(&self) -> PathBuf {
         self.home_dir.join(LEGACY_SETTINGS_FILE_NAME)
     }
+
+    /// Mirrors legacy's `HISTORY_FILE = SETTINGS_FILE.with_name(".project_exporter_history.json")`
+    /// (`export_history.py`): a flat JSON file sitting next to the legacy settings
+    /// file in the user's home directory, read-only from this crate's perspective —
+    /// `codepack-storage` (S5) imports it once, explicitly, into SQLite.
+    pub fn legacy_history_file(&self) -> PathBuf {
+        self.home_dir.join(LEGACY_HISTORY_FILE_NAME)
+    }
+
+    pub fn db_file(&self) -> PathBuf {
+        self.settings_dir.join(DB_FILE_NAME)
+    }
 }
 
 #[cfg(test)]
@@ -192,5 +206,29 @@ mod tests {
         let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
         assert_eq!(paths.settings_file().parent(), Some(paths.settings_dir()));
         assert_eq!(paths.settings_file().file_name().unwrap(), "settings.json");
+    }
+
+    #[test]
+    fn legacy_history_file_is_a_flat_file_in_home_next_to_legacy_settings() {
+        let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
+        assert_eq!(
+            paths.legacy_history_file().file_name().unwrap(),
+            ".project_exporter_history.json"
+        );
+        assert_eq!(
+            paths.legacy_history_file().parent(),
+            Some(paths.home_dir.as_path())
+        );
+        assert_eq!(
+            paths.legacy_history_file().parent(),
+            paths.legacy_settings_file().parent()
+        );
+    }
+
+    #[test]
+    fn db_file_lives_under_settings_dir() {
+        let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
+        assert_eq!(paths.db_file().parent(), Some(paths.settings_dir()));
+        assert_eq!(paths.db_file().file_name().unwrap(), "codepack.db");
     }
 }
