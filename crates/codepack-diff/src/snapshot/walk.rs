@@ -233,6 +233,33 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_project_cancelled_mid_pass_yields_cancelled_not_a_partial_snapshot() {
+        // Regression for a review finding: the earlier cancellation test only cancelled
+        // the token *before* calling `snapshot_project`, so it only exercised the very
+        // first check in the sequential collection loop. This test lets the walk
+        // collect every candidate file first (uncancelled), then flips the token partway
+        // through the per-file (hash + LOC) pass — proving cancellation firing mid-walk
+        // still yields `Err(Cancelled)`, never a `Snapshot` that silently looks complete
+        // with only the files processed before the flip.
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..20 {
+            std_fs::write(dir.path().join(format!("file{i}.txt")), "x").unwrap();
+        }
+        let cancel = CancellationToken::new();
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let is_countable = |_: &Path| -> bool {
+            if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 5 {
+                cancel.cancel();
+            }
+            true
+        };
+
+        let result = snapshot_project(dir.path(), &no_ignored(), &is_countable, &cancel);
+
+        assert!(matches!(result, Err(DiffError::Cancelled)));
+    }
+
+    #[test]
     fn snapshot_project_never_descends_into_a_directory_symlink() {
         let dir = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
