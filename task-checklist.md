@@ -95,8 +95,11 @@ filtering (S3) and no diff/incremental filtering (S4).
       against the legacy archive. Two findings fixed: removed a dead `ScannerError::Read`
       variant; recorded the `*.egg-info` glob-matching deviation in
       `docs/decisions/open-questions.md` (was only in code comments/ROADMAP before)
-- [ ] CI green on all three OSes (confirm after push)
-- [ ] Fast-forward merge into `main` and push (pending explicit owner sign-off)
+- [+] CI green on all three OSes: run #40
+      (https://github.com/dimbo1324/codepack/actions/runs/29984698173),
+      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
+      `success` на коммите `5d215ab`
+- [+] Fast-forward merge into `main` and push to `origin` (explicit owner sign-off)
 - [+] Final report to owner (Russian, per language policy)
 
 ## Deviations recorded honestly
