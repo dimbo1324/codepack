@@ -1,154 +1,151 @@
 # Task Checklist
 
-**Task:** Stage **S2 — Scanner: tree walking, ignore rules, stack detection
-(`codepack-scanner`)** (`ROADMAP.md` §2).
+**Task:** Stage **S3 — Security (`codepack-security`)** (`ROADMAP.md` §2). ⭐ core
+value of the whole project.
 **Date:** 2026-07-23
-**Branch:** feat/s2-scanner-walk-ignore-stack
+**Branch:** feat/s3-security-policy-redact-scanner
 
-Scope boundary (binding for this task): `build_export_plan()` applies base-ignore +
-stack-ignore + `.exportignore`/custom-rule filtering only. No safe-export-mode
-filtering (S3) and no diff/incremental filtering (S4).
+Scope boundary (binding for this task): `codepack-security` depends only on
+`codepack-core` (ROADMAP §1 dependency table: S3 → S1). No production dependency on
+`codepack-scanner`. No wiring into `ExportPlan.severity` (S9's job). No tree-walking in
+production code — the scan API takes a caller-supplied file list; `walkdir` is a
+dev-dependency only, for building this crate's own test fixtures. No SQLite persistence
+(S5), no clipboard/text-dump call sites (S9), no network validation ever (I1, permanent).
 
 ## Preparation
 
-- [+] Orientation ritual: git status/log, ROADMAP.md §1 (S2 is the first stage without
-      a `**Status.**` line), docs/architecture/overview.md, task-checklist.md (stale
-      S1 content carried onto this branch — recreated here), docs/decisions/open-questions.md
-- [+] Legacy archive extracted to a session-scratchpad temp dir (outside the repo) and
-      read directly: `constants.py`, `utils/text_utils.py`, `utils/path_utils.py`,
-      `services/stack_detector.py`, `services/export_ignore.py`, `services/export_plan.py`,
-      `services/exporter.py` (to see how `build_export_plan`'s `ignored_dirs` argument
-      is actually assembled: `config.effective_ignored_dirs() | merged_extra_ignored_dirs(root)`),
-      `config.py::effective_ignored_dirs`, and the corresponding legacy test files
-      (`test_stack_detector.py`, `test_export_ignore.py`, `test_export_ignore_edge_cases.py`,
-      `test_export_plan.py`, `test_export_plan_edge_cases.py`)
+- [+] Orientation ritual: git status/log, ROADMAP.md §1 (S3 first stage without
+      `**Status.**`), docs/architecture/overview.md, task-checklist.md,
+      docs/decisions/open-questions.md — no open items blocking S3
+- [+] Delegated stage planning to `codepack-stage-planner`: legacy archive extracted to
+      a scratchpad temp dir and read directly (`constants.py`, `services/export_policy.py`,
+      `utils/text_utils.py`, `reports/insights/security.py`, `services/risk_preview.py`,
+      matching legacy test files as behavioral oracles)
+- [+] Resolved a real porting blocker ahead of coding: legacy's keyword/value redaction
+      regex uses a backreference (`(\2)` requiring the closing quote to match the
+      opening quote) — Rust's `regex` crate has no backreference support. The plan
+      supplies a behavior-preserving, backreference-free rewrite (three alternatives:
+      double-quoted / single-quoted / unquoted, each still forbidding embedded
+      whitespace) to implement, with a dedicated match-span-equivalence test.
+- [+] Resolved scope tension: `codepack-security` must depend only on `codepack-core`
+      per ROADMAP's own dependency table (S3 → S1, not S2) — this forces duplicating
+      `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`TEXT_FILENAMES_WITHOUT_EXTENSION`/
+      `should_consider_text_file`/`looks_binary` from `codepack-scanner` rather than
+      sharing them. Recorded as tech debt (hoist candidate for `codepack-core`, likely
+      at S9 when both crates are first combined) rather than doing an unrequested
+      refactor of S2's merged code inside this task.
+- [+] Resolved scope gap: legacy tries 6 encodings when reading file content
+      (utf-8, utf-8-sig, cp1251, cp866, utf-16, latin-1); S3 reads UTF-8 (+ lossy
+      fallback) only — the full chain's real owner is S9's text-dump step, pulling in
+      an encoding-detection dependency for S3 alone would be scope creep. Recorded
+      honestly, not silently dropped.
+- [+] Resolved: no legacy precision/recall/F1 baseline exists anywhere in the archive —
+      S3 establishes the first baseline itself; the corpus test's measured numbers
+      become what invariant I9 subsequently protects.
 
-## Implementation
+## Implementation — parity first
 
-- [+] `Cargo.toml`: added `walkdir`, `rayon`, `regex` to `[workspace.dependencies]`
-      with justification comments; wired into `crates/codepack-scanner/Cargo.toml`
-      via `dep.workspace = true` (plus already-justified `serde`/`serde_json`/`thiserror`
-      reused from S1, and `tempfile` as a dev-dependency)
-- [+] `error.rs` — `ScannerError` (thiserror) + `Result<T>` alias
-- [+] `constants.rs` — `IGNORED_DIR_NAMES` (18), `TEXT_EXTENSIONS` (133, not the
-      135 the task prompt claimed — recounted from the archive, see deviations),
-      `BINARY_EXTENSIONS` (84, not 89, same correction), `TEXT_FILENAMES_WITHOUT_EXTENSION`
-      (15); all four sets diffed byte-for-byte against the extracted archive
-- [+] `classify.rs` — `should_consider_text_file`, `looks_binary` ports
-- [+] `stack.rs` — `StackInfo`, the 12-stack rule table, `detect_stacks()`,
-      `merged_extra_ignored_dirs()`
-- [+] `ignore/` — `ExportIgnoreRules`, `ScanOptions` (+ `From<&codepack_core::Config>`),
-      `.exportignore` loader (`mod.rs`); hand-rolled `fnmatch.translate`-equivalent
-      matcher backed by `regex` (`pattern.rs`); `should_skip_dir`/`should_skip_file`
-      with exact legacy precedence, including the always-include-vs-base-ignore
-      subtlety (`rules.rs`)
-- [+] `walk.rs` — `IgnoredDirMatcher` (base ∪ stack ∪ config-extra, with the one
-      documented glob exception for `*.egg-info`), `walk_project()`: walkdir-based,
-      `follow_links(false)` + independent `path_is_symlink()` check, prunes top-down,
-      checks `CancellationToken` inside the sequential directory loop; rayon
-      parallelizes the per-file `stat()` pass after candidates are collected
-- [+] `plan/` (split from a single `plan.rs` — see file-size note below) —
-      `PlannedFile`, `ExportPlan`, `PlanSummary`, `build_export_plan()` (S2-scoped
-      only), `write_export_plan_files()` (JSON via serde field order + Markdown
-      renderer)
-- [+] `lib.rs` — crate doc stating the S2 scope boundary explicitly, public
+- [ ] `Cargo.toml`: add `aho-corasick` to `[workspace.dependencies]` with a
+      justification comment; wire `codepack-core`/`serde`/`serde_json`/`thiserror`/
+      `regex`/`aho-corasick` into `crates/codepack-security/Cargo.toml`;
+      `walkdir`/`tempfile` as dev-dependencies only — **verify with `cargo build -p
+      codepack-security` from a clean state, not just by inspecting the diff** (S2's
+      integration found a real bug where deps were added to `Cargo.lock` but never
+      declared in either `Cargo.toml`)
+- [ ] `error.rs` — `SecurityError` (thiserror) + `Result<T>`
+- [ ] `constants.rs` — `SENSITIVE_FILENAMES`, `SENSITIVE_SUFFIXES`,
+      `HIGH_RISK_FILENAMES`, `SAFE_MODE_EXCLUDED_SUFFIXES`,
+      `BALANCED_MODE_EXCLUDED_SUFFIXES` — diffed byte-for-byte against the legacy
+      archive, not eyeballed
+- [ ] `classify.rs` — duplicated `should_consider_text_file`/`looks_binary` +
+      `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`TEXT_FILENAMES_WITHOUT_EXTENSION`
+      (documented duplication, see tech-debt note above)
+- [ ] `policy/` — `SafetyDecision`, `normalise_mode`, `is_env_example`,
+      `classify_sensitive_file`, `should_skip_file_for_safety` (exact precedence:
+      full never skips; balanced checks `.env`/`HIGH_RISK_FILENAMES` then
+      `BALANCED_MODE_EXCLUDED_SUFFIXES`; safe delegates to `classify_sensitive_file`),
+      `SecurityOptions` + `From<&codepack_core::config::Config>`
+- [ ] `redact.rs` — `redact_secrets`, including the backreference-free rewrite,
+      documented inline as a deliberate behavior-preserving syntax change
+- [ ] `patterns/keyword.rs` — `SECRET_PATTERNS`-equivalent, `SECRET_KEY_PATTERN`,
+      `ASSIGNMENT_SECRET_RE`, `PRIVATE_KEY_RE`, `secret_confidence` (5-level cascade:
+      self-protection exemption → critical PEM → high SECRET_PATTERNS → medium
+      assignment-shaped → low bare-keyword-outside-comment → none), `redacted_line`
+      (redacts the whole line, never just the matched span), self-protection hint list
+- [ ] `patterns/risky_code.rs` — the 9 risky-code rules verbatim (including the
+      intentional python-eval/js-eval regex duplication — do not deduplicate),
+      confidence fixed at `"medium"` for all risky-code findings regardless of rule
+      severity (legacy quirk, ported not "fixed")
+- [ ] `scan/` — `Finding`/`FindingKind`/`ScanResult`, `scan_project()` (caller-supplied
+      file list, no walking), `.txt`/`.json`/`.sarif` writers matching legacy's exact
+      structure (SARIF: minimal-but-valid 2.1.0, `level` = error for critical/high,
+      warning otherwise, never "note" — port the omission too)
+- [ ] `lib.rs` — crate doc stating the S3 scope boundary explicitly, public
       re-exports, under 100 lines
+
+## Implementation — then new (🎯)
+
+- [ ] `patterns/provider.rs` — 10 provider-signature rules (AWS, GitHub, Google,
+      Slack, Stripe, OpenAI, Anthropic, Telegram, JWT, PEM-reuse); Anthropic's
+      `sk-ant-` pattern must be checked/ordered so it never gets shadowed by the
+      OpenAI `sk-` pattern; each authored-not-ported regex flagged as such in a
+      comment (BLUEPRINT gives 4 exact patterns, the rest are authored from public
+      provider-format documentation, no network calls needed to write or test them)
+- [ ] `patterns/entropy.rs` — Shannon entropy calculator; base64-like (H≥4.0 bits/char,
+      len≥20) and hex-like (H≥3.0, len≥32) thresholds; alphabet-conformance
+      tokenization (split on non-alphabet chars, score each token); context boost
+      (adjacent `=`/`:`/secret-shaped identifier raises confidence one bucket;
+      bare high-entropy token with no context caps at `low`, never discarded)
+- [ ] `patterns/prefilter.rs` — `aho-corasick` literal prefilter (keyword roots +
+      provider literal prefixes + `-----BEGIN` + `eyJ`) gating the regex/entropy pass;
+      superset-safety regression test proving it never misses a corpus positive;
+      entropy-only findings (no keyword/provider literal) documented as the
+      prefilter's known scope limit — entropy scanning must still run unconditionally
+- [ ] Wire provider/entropy findings into `scan::scan_project` at the documented
+      confidence levels
 
 ## Verification
 
-- [+] Unit tests colocated in each module (constants counts, classify table-driven
-      cases, stack detection per stack + mono-repo, pattern.rs glob-translate edge
-      cases, ignore/rules.rs precedence — including the two explicitly required
-      always-include tests: one proving it overrides `.exportignore`/custom exclusion,
-      a separate one proving it does NOT override base/stack directory pruning)
-- [+] `tests/` integration tests: per-stack fixtures (Node, Python with an ignored
-      dir containing a file, to exercise base-ignore pruning end-to-end), a mono-repo
-      fixture (Node.js + Python, proves the *union* of both stacks' extra ignored
-      dirs is applied, not just the primary one's), a symlink-escape test (I7, created
-      programmatically — see deviations, not a static fixture directory), four
-      `.exportignore` end-to-end tests, four I5 JSON-contract tests asserting the
-      literal serialized key sequence (top-level, `PlannedFile`, `RulesReport`,
-      `PlanSummary`), plus a self-check that the contract test would actually catch
-      a reorder
-- [+] `cargo xtask gate`: fmt, clippy `-D warnings`, tests, `cargo deny check`,
-      `sync-agents --check`
-- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+- [ ] Unit tests colocated per module (policy precedence table incl. `.env`/
+      `.env.example`/`.env.sample` and `HIGH_RISK_FILENAMES` vs `SENSITIVE_FILENAMES`
+      distinction, `redact_secrets` match-span equivalence to the backreference
+      original, each of the 9 risky-code rules, self-protection hint list, entropy
+      thresholds + context boost)
+- [ ] Golden fixture test: end-to-end scan reproduces the legacy finding set
+      (sensitive files + all 4 confidence levels + all 9 risky-code rules +
+      self-protection) with matching types/severities/confidence/messages
+- [ ] SARIF structural validity against the 2.1.0 core-required fields
+- [ ] Corpus test (`tests/corpus.rs`): synthetic labeled positives/negatives (never
+      real leaked credentials), legacy-parity-mode vs full-mode comparison, asserts
+      `recall(full) > recall(parity)` and `precision(full) >= precision(parity)`;
+      numbers captured for the ROADMAP Status line as the new I9 baseline
+- [ ] I3 audit: a dedicated test asserting no `Finding` produced by any detector
+      (keyword, provider, entropy) contains a substring of the original unredacted
+      secret value in its serialized output
+- [ ] Confirm zero network-capable dependency in the resolved dependency tree (I1)
+- [ ] `cargo xtask gate` green **verified in the main working directory** (fmt,
+      clippy `-D warnings`, tests, `cargo deny check`, `sync-agents --check`)
+- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
       proven-invariant comment
-- [+] `docs/architecture/overview.md` updated
-- [+] `ROADMAP.md`: `**Status.**` line under S2 + §1 table status flipped to "сделан",
-      honestly stating the S2 scope boundary and the `walkdir`-not-`ignore`-crate
-      deviation from the S2 "Состав" bullet's own wording
 
 ## Completion
 
-- [+] Commits: checklist first, then implementation, separated logically
-- [+] Reconciled the implementing subagent's worktree branch onto
-      `feat/s2-scanner-walk-ignore-stack` via cherry-pick (task-checklist.md conflict
-      resolved in favor of the agent's completed version)
-- [+] Caught and fixed a real bug before merge: the implementation commit added
-      `walkdir`/`rayon`/`regex`/`codepack-core` to `Cargo.lock` but never declared them
-      in either `Cargo.toml` — the crate silently failed to build from a clean lockfile.
-      Fixed in a follow-up commit; `cargo xtask gate` is now genuinely green (verified
-      in the main working directory, not just the agent's worktree)
-- [+] Independent review via `codepack-quality-reviewer`: constant sets, 12-stack
-      table, and the always-include-vs-base-ignore precedence all verified correct
-      against the legacy archive. Two findings fixed: removed a dead `ScannerError::Read`
-      variant; recorded the `*.egg-info` glob-matching deviation in
-      `docs/decisions/open-questions.md` (was only in code comments/ROADMAP before)
-- [+] CI green on all three OSes: run #40
-      (https://github.com/dimbo1324/codepack/actions/runs/29984698173),
-      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
-      `success` на коммите `5d215ab`
-- [+] Fast-forward merge into `main` and push to `origin` (explicit owner sign-off)
-- [+] Final report to owner (Russian, per language policy)
+- [ ] `docs/architecture/overview.md` updated
+- [ ] `ROADMAP.md`: `**Status.**` line under S3 + §1 table status updated, honestly
+      listing every deviation (backreference rewrite, encoding-chain scope gap,
+      constant duplication + hoist candidate, provider-regex authorship vs literal
+      port, corpus baseline numbers, no `schema_version` bump)
+- [ ] Independent review pass (`codepack-quality-reviewer`) before merge — constants
+      byte-for-byte, policy precedence, SARIF shape, I3 audit of every
+      Finding-producing path
+- [ ] CI green on all three OSes (confirm after push)
+- [ ] Commits: checklist first, then implementation, separated logically
+- [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
+- [ ] Final report to owner (Russian, per language policy)
 
-## Deviations recorded honestly
+---
 
-- `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS` have 133/84 entries in the actual legacy
-  archive, not the 135/89 the task prompt stated — recounted directly from
-  `docs/__arch__/codepack-main.zip` (line-range `sed`/`grep`, then diffed sorted lists
-  byte-for-byte against my Rust arrays; both matched exactly once corrected). All four
-  constant sets (including `IGNORED_DIR_NAMES` and `TEXT_FILENAMES_WITHOUT_EXTENSION`)
-  verified this way, not just eyeballed.
-- `*.egg-info` (Python stack's one glob-shaped extra-ignored-dir entry) is made to
-  actually glob-match in `IgnoredDirMatcher`. Legacy's own `should_ignore_dir` only
-  does exact-string set membership, so that entry never really prunes anything in the
-  original — the task instructions explicitly asked for the *intended* (working)
-  behavior here rather than the literal (inert) legacy behavior; documented inline in
-  `walk.rs` and in the `ROADMAP.md` Status line as a deliberate deviation, not a silent
-  behavior change.
-- No `.exportignore`/`safe_export_mode` semantic changed from legacy — only that one
-  glob-matching fix and the walkdir-vs-`ignore`-crate substitution (both required by
-  the task's own instructions, not opportunistic).
-- Symlink-escape coverage exists as a unit test (`walk.rs`) and an integration test
-  (`tests/symlink_escape.rs`), both creating the symlink *programmatically* inside a
-  `tempfile::tempdir()` rather than as a static fixture under `tests/fixtures/` — a
-  checked-in directory symlink is not reliably portable through a `git` checkout
-  across OSes and `core.symlinks` settings, so it would risk breaking `git clone` on
-  some machines. Both tests gracefully skip (with an `eprintln!`, not a hard failure)
-  if the current environment cannot create a directory symlink (e.g. Windows without
-  Developer Mode/admin) — on this dev machine symlink creation succeeded and both
-  tests actually exercised the assertion, not just the skip path.
-- `cargo-deny` needed `[bans] allow-wildcard-paths = true` added to `deny.toml` — the
-  first internal path dependency between workspace crates (`codepack-scanner ->
-  codepack-core`) tripped the wildcard-version ban. Recorded as a decision in
-  `docs/decisions/open-questions.md` (2026-07-23) since it affects every future
-  in-workspace path dependency (`engine -> domain crates -> core`), not just this one.
-- `generated_at` renders in UTC via a small dependency-free civil-calendar formatter
-  (Howard Hinnant's `civil_from_days` algorithm) instead of legacy's local-time
-  `datetime.now().isoformat(...)` — no timezone-database crate is in this stage's
-  approved dependency list, and this field is cosmetic (nothing parses it back).
-- `PlanSummary` omits legacy's `estimated_included_size` (formatted-bytes string —
-  `codepack-core` has no byte formatter until S6) and `skipped_dirs_count` (redundant
-  with `skipped_dirs.len()`), exactly as the task instructions asked; documented in
-  `plan/mod.rs`'s doc comment.
-- Markdown rendering (`plan/render.rs`) shows raw byte counts (`"1234 bytes"`) instead
-  of legacy's `format_bytes()` (`"1.21 KB"`) for the same reason — no formatter exists
-  yet in `codepack-core`; the task instructions explicitly said not to invent one.
-- Did not implement `format_export_plan_for_user` or `format_stack_label` — legacy
-  helpers that render a plan/stack summary as plain text for a GUI confirmation
-  dialog. Neither was named in the task's file-layout spec (only
-  `write_export_plan_files` and `detect_stacks`/`merged_extra_ignored_dirs` were), and
-  they are UI-facing text, which is out of scope for a UI-agnostic core crate at this
-  stage — `primary_stack` was kept since it is a one-line wrapper already exercised by
-  a legacy test and costs nothing to keep for a later stage's use.
+## Next task
+
+Stage **S4 — Diff и снапшоты (`codepack-diff`)** (`ROADMAP.md` §2). Start with the
+orientation ritual from `.ai/project/13-progress-tracking.md`.

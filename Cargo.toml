@@ -34,6 +34,9 @@ rayon = "1.10"
 # S2: backs a hand-rolled fnmatch.translate-equivalent matcher for .exportignore
 # (ignore/globset rejected — see crates/codepack-scanner/src/ignore/pattern.rs).
 regex = "1.11"
+# S3 (codepack-security): literal-set prefilter before the regex/entropy pass, named
+# explicitly in BLUEPRINT §E.6 for this crate. Small, maintained (same author as regex).
+aho-corasick = "1.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
