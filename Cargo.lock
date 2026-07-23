@@ -139,6 +139,10 @@ dependencies = [
 [[package]]
 name = "codepack-tokens"
 version = "2.0.0-dev"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "cpufeatures"
