@@ -8,6 +8,16 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+codepack-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+rayon.workspace = true
+git2.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -37,6 +37,18 @@ regex = "1.11"
 # S3 (codepack-security): literal-set prefilter before the regex/entropy pass, named
 # explicitly in BLUEPRINT §E.6 for this crate. Small, maintained (same author as regex).
 aho-corasick = "1.1"
+# S4 (codepack-diff): git_ref/uncommitted diff modes need read-only, local-only Git
+# access. `default-features = false` plus `vendored-libgit2` deliberately excludes the
+# `https`/`ssh`/`cred` features — those exist only for remote git operations
+# (fetch/clone/push), which this crate must never perform (invariant I1).
+# `vendored-libgit2` statically compiles libgit2 via the `cc` crate at build time, so
+# no system libgit2/pkg-config/cmake is required on any of the three CI OSes.
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+# S4: streamed SHA-256 over raw file bytes for `snapshot_project` (BLUEPRINT §A.6).
+# Deliberately not git2's internal object-hashing, which hashes git-blob-formatted
+# content (with a header prefix) rather than raw bytes, and would silently diverge from
+# legacy's `hashlib.sha256()` computed over the same file's raw bytes.
+sha2 = "0.10"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
