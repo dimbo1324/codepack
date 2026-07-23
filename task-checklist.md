@@ -40,60 +40,80 @@ confirmed dead code (zero call sites outside its own module) and is out of scope
 
 ## Implementation — parity first
 
-- [ ] `Cargo.toml`: `git2` (vendored-libgit2 only) and `sha2` added to
+- [+] `Cargo.toml`: `git2` (vendored-libgit2 only) and `sha2` added to
       `[workspace.dependencies]` with justification comments; wired into
-      `crates/codepack-diff/Cargo.toml` — verify with a clean `cargo build -p
+      `crates/codepack-diff/Cargo.toml` — verified with a clean `cargo build -p
       codepack-diff` from a clean state
-- [ ] `error.rs` — `DiffError` (thiserror), wraps `git2::Error`/`std::io::Error`
-- [ ] `snapshot/` — `Snapshot`/`SnapshotFile` (serde, fields matching `SNAPSHOT_FILE`
+- [+] `error.rs` — `DiffError` (thiserror), wraps `git2::Error`/`std::io::Error`
+- [+] `snapshot/` — `Snapshot`/`SnapshotFile` (serde, fields matching `SNAPSHOT_FILE`
       schema: `rel_path`, `sha256`, `size`, `loc`, `mtime_ns`), streamed 1 MiB-chunk
       SHA-256, minimal ignored-dir-name (caller-supplied) + no-symlink walk with
       `CancellationToken` checked inside the loop, backslash-normalized relative
       paths matching legacy
-- [ ] `selection/` — `DiffSelection`/`DiffFile`/`FileStatus`; `all` (no filter);
+- [+] `selection/` — `DiffSelection`/`DiffFile`/`FileStatus`; `all` (no filter);
       `last_export` as `diff_against_snapshot(current, previous: Option<&Snapshot>)`;
       `git_ref` and `uncommitted` via `git2` (rename detection, added/modified/
       deleted/renamed classification, `base` default `"HEAD"`); git-error/not-a-repo
-      fallback to `all` + warning, one shared implementation reused by both the
-      export-path and any future preview call site
-- [ ] `report.rs` — `write_diff_report()` → Markdown matching legacy's
+      fallback to `all` + warning, one shared implementation (`git_common.rs`) reused
+      by both modes
+- [+] `report.rs` — `write_diff_report()` → Markdown matching legacy's
       `29_export_comparison_report.md` section structure and 500-item truncation
-- [ ] `DiffOptions` + `From<&codepack_core::config::Config>` (mirrors
-      `SecurityOptions`/`ScanOptions`)
-- [ ] `lib.rs` — crate doc stating the S4 scope boundary explicitly, public re-exports,
-      under 100 lines
+- [+] `DiffOptions` + `From<&codepack_core::config::Config>` (mirrors
+      `SecurityOptions`/`ScanOptions`); `diff_target_ref` deliberately absent as a
+      field, not merely unused
+- [+] `lib.rs` — crate doc stating the S4 scope boundary explicitly, public re-exports,
+      41 lines
 
 ## Verification
 
-- [ ] Git-mode tests use `git2`-created repositories only (no `git` binary
-      dependency, no skip-if-missing-tool weakness inherited from legacy)
-- [ ] Golden-equivalent cases: add/modify/delete for `last_export`; uncommitted
-      including untracked; rename with `old_path` preserved; paths with spaces and
-      Unicode; `git_ref` diffs `base..HEAD` only
-- [ ] Streamed-hash memory test (large file, flat memory) and symlink-not-followed
-      test
-- [ ] Cancellation test: `snapshot_project()` cancelled mid-walk surfaces a
-      distinguishable non-complete result, not a false-complete `Snapshot`
-- [ ] `cargo tree -p codepack-diff` audited: no network-capable dependency, no
-      `https`/`ssh`/`cred` git2 features present
-- [ ] `cargo xtask gate` green locally (fmt, clippy `-D warnings`, tests, `cargo deny
-      check`, `sync-agents --check`)
-- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+- [+] Git-mode tests use `git2`-created repositories only (`Repository::init` +
+      `Index`/commits) — no `git` binary dependency, no skip-if-missing-tool weakness
+      inherited from legacy
+- [+] Golden-equivalent cases: add/modify/delete for `last_export`; uncommitted
+      including untracked; rename with `old_path` preserved (a real `git2` quirk was
+      found and fixed here — `StatusEntry::path()` returns a rename's *old* path;
+      fixed by deriving new/old paths from the `DiffDelta` directly); paths with
+      spaces and Cyrillic Unicode; `git_ref` diffs `base..HEAD` only
+- [+] Streamed-hash test (multi-chunk-boundary correctness) and a symlink-not-followed
+      test (programmatic dir-symlink escape, honest skip-and-log when the OS/
+      permissions can't create one)
+- [+] Cancellation test — **strengthened after independent review**: the first version
+      only cancelled the token *before* calling `snapshot_project`, covering just the
+      loop's first check. Added a genuine mid-walk regression
+      (`snapshot_project_cancelled_mid_pass_yields_cancelled_not_a_partial_snapshot`)
+      that lets candidate collection finish, then flips the token partway through the
+      per-file hash+LOC pass via the caller-supplied predicate, proving the result is
+      still `Err(Cancelled)`, never a `Snapshot` that looks complete.
+- [+] `cargo tree -p codepack-diff` audited: only `bitflags`/`libc`/`libgit2-sys`/
+      `log`/`libz-sys`/`cc`/`pkg-config`/`vcpkg` under `git2` — no `openssl-sys`,
+      `libssh2-sys`, `curl`, `reqwest`, `hyper`; no `https`/`ssh`/`cred` features
+      resolved. Source grepped for `Remote`/`fetch`/`push`/`clone`/`Cred` — zero hits.
+- [+] `cargo xtask gate` green locally (fmt, clippy `-D warnings`, tests — 40 passing
+      in `codepack-diff`, `cargo deny check`, `sync-agents --check`)
+- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
       proven-invariant comment
 
 ## Completion
 
-- [ ] `docs/architecture/overview.md` updated (first C-library dependency in the
+- [+] `docs/architecture/overview.md` updated (first C-library dependency in the
       workspace, noted explicitly)
-- [ ] `ROADMAP.md` `**Status.**` line under S4 + §1 table, honestly listing: the
+- [+] `ROADMAP.md` `**Status.**` line under S4 + §1 table, honestly listing: the
       incremental.py dead-code finding, the diff_target_ref dead-field finding, the
       baseline-as-parameter resolution, the narrower I6 scope at this stage
-- [ ] Any new open question (e.g., whether to later honor `diff_target_ref`) recorded
-      in `docs/decisions/open-questions.md`
-- [ ] Independent review pass (`codepack-quality-reviewer`) before merge
-- [ ] CI green on all three OSes; merge only after explicit owner sign-off
-- [ ] Commits: checklist first, then implementation, separated logically
-- [ ] Final report to owner (Russian, per language policy)
+- [+] New open question recorded in `docs/decisions/open-questions.md`: **Q9** — whether
+      to later honor `diff_target_ref` as new (🎯) capability instead of replicating
+      its legacy dead-field limitation
+- [+] Independent review pass (`codepack-quality-reviewer`) before merge — confirmed
+      I1/I2/I6/I7 compliance, the `git2` rename-path fix, and both legacy dead-code
+      claims independently against the archive. One real gap found and fixed: the
+      cancellation test didn't actually test mid-walk cancellation (see Verification
+      above). Two findings were about this checklist/ROADMAP/overview not being
+      filled in yet at review time — resolved by this very completion pass.
+- [ ] CI green on all three OSes — pending merge/push, needs owner sign-off first
+- [+] Commits: checklist first, then implementation, then the review-driven test fix,
+      separated logically
+- [ ] Fast-forward merge into `main` — pending owner sign-off
+- [+] Final report to owner (Russian, per language policy)
 
 ---
 
