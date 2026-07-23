@@ -77,10 +77,13 @@ rather than silently rewriting the already-merged S0 one.
 
 ## Completion
 
-- [ ] CI green on all three OSes (confirm after push)
+- [+] CI green on all three OSes: run #38
+      (https://github.com/dimbo1324/codepack/actions/runs/29981484227),
+      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
+      `success` на коммите `67f2513`
 - [+] Commits: checklist first, then implementation, separated logically
-- [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
-- [ ] Final report to owner (Russian, per language policy)
+- [+] Fast-forward merge into `main` and push to `origin` (explicit owner sign-off)
+- [+] Final report to owner (Russian, per language policy)
 
 ## Mid-implementation deviations (recorded honestly)
 
