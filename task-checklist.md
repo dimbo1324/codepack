@@ -1,164 +1,159 @@
 # Task Checklist
 
-**Task:** Stage **S5 — Хранилище SQLite (`codepack-storage`)** (`ROADMAP.md` §2).
+**Task:** Stages **S6 — Байты, токены, бюджет (`codepack-tokens`)** AND **S7 — Отчёты
+и аналитика (`codepack-reports`)** (`ROADMAP.md` §2), combined into **one branch, one
+task** per explicit owner instruction in this conversation — a deliberate one-off
+deviation from the project's normal "one stage = one task/branch" rule
+(`.ai/universal/07-multi-assistant.md`: an explicit owner instruction in the current
+conversation overrides both project and universal modules). Both stages still get
+their own `**Status.**` line in `ROADMAP.md` and are tracked as logically separate
+within this one checklist.
 **Date:** 2026-07-23
-**Branch:** feat/s5-storage-sqlite-history-snapshots
+**Branch:** feat/s6-s7-tokens-and-reports
 
-Scope boundary (binding for this task): `codepack-storage` depends only on
-`codepack-core` (ROADMAP §1: S5 → S1) *conceptually* — in practice the crate ended up
-needing zero runtime dependency on `codepack-core`'s code (see the deviation note
-below). It never depends on `codepack-scanner`/`codepack-security`/`codepack-diff` as
-crates — it persists their output *shapes* via its own locally-defined `New*` structs,
-which S9 (not yet built) will populate from those crates' real types by copying
-fields, not via a `From` impl living here. No wiring into the pipeline (S9's job). No
-computation of `Snapshot`/`Finding`/`ExportPlan` values (S1-S4/S9's job).
-
-## Preparation
+## Preparation (both stages)
 
 - [+] Orientation ritual confirmed (git status/log, ROADMAP §1, overview.md,
-      task-checklist.md, open-questions.md) — no blocking open item for S5
-- [+] Delegated stage planning to `codepack-stage-planner`: legacy archive extracted to
-      a scratchpad temp dir and read directly (`services/export_history.py`,
-      `services/exporter.py`'s history-append site, `services/diff_service.py`'s
-      `_last_history_snapshot`)
-- [+] Confirmed via source inspection: legacy retention is `MAX_HISTORY_ITEMS = 50`,
-      global across ALL projects combined, not per-project/configurable — BLUEPRINT
-      overstates this the same way it overstated `incremental.py` for S4. The new
-      per-project relational retention is a deliberate, logged improvement, not a
-      literal port.
-- [+] Confirmed via source inspection: a real legacy bug — a run that fails with copy
-      errors but isn't explicitly cancelled has `cancelled: false` and `snapshot: {}`
-      in its history entry; `_last_history_snapshot` returns this empty dict as if it
-      were a valid (if empty) baseline, instead of falling back to "no baseline".
-      Legacy JSON import must faithfully reproduce this historical shape (not "fix"
-      old data), while the new write API structurally prevents the bug for new runs
-      going forward (an `Option<Snapshot>` that is `None` can never be confused with
-      an empty-but-present snapshot, unlike a JSON `{}`).
-- [+] SQLite driver decided and justified: `rusqlite` (`bundled` feature) — no async
-      runtime introduced anywhere in the workspace (matches every other crate being
-      synchronous); mirrors S4's `git2`/`vendored-libgit2` precedent (statically
-      compiled, no system SQLite needed); MIT/dual MIT-Apache-2.0, already in
-      `deny.toml`'s allow-list, no new exception expected
-- [+] Migration-runner shape decided: embedded numbered SQL strings + `schema_version`
-      table, no external migration framework (`refinery`/`sqlx-migrate` would be
-      overkill and the latter pulls `sqlx`)
+      task-checklist.md, open-questions.md) — S6 is the first stage without a
+      `**Status.**` line; no blocking open item
+- [+] Delegated planning to `codepack-stage-planner` for S6 and S7 in parallel
+      (legacy archive extracted to scratchpad and read directly for both)
+- [+] Reconciled the two plans: S7 has a real, justified Cargo dependency on S6's
+      public API (`format_bytes`, token estimates) for `01_summary`/
+      `16_key_files_report`/`22_project_health_report` — this is new capability
+      riding along with parity content (legacy shows bytes only in these reports),
+      and it means ROADMAP §1's "S7 depends on S2, S3, S4" table entry is now
+      incomplete (should read "..., S6") purely as a consequence of the owner's
+      stage-merge decision, to be noted honestly in S7's Status text, not silently
+      absorbed
+- [+] S6 confirmed: legacy's fallback token formula is `max(1, round(B/3.5))` —
+      **`round`, not `ceil`** as BLUEPRINT §E.1's prose simplifies it to; the archive
+      wins per `.ai/project/14-legacy-reference.md`. No "Fit to budget" or per-file
+      token estimation exists anywhere in legacy — both are genuinely new (🎯).
+      `tiktoken-rs` deliberately deferred (no acceptance criterion needs exact BPE).
+      `codepack-tokens` designed as a pure, config-agnostic crate (no `Config`
+      bridge struct — no token/budget field exists in `Config` and none is needed).
+- [+] S7 scope correction confirmed against the legacy archive (ROADMAP's "Состав"
+      line is not literally accurate): `28_export_plan` is already `codepack-scanner`
+      (S2)'s job, done; `29_export_comparison_report` is already `codepack-diff`
+      (S4)'s job, done; `27_archive_plan.md` cannot exist yet (S8 comes after S7) —
+      legacy's own dashboard already tolerates its absence at this pipeline point,
+      not a gap S7 introduces. S7 actually owns 26 numbered reports (01–26, excluding
+      27/28/29) + `PROJECT_PROFILE.json` + `REPORT_PLUGINS.json` + `AI_CONTEXT/` +
+      `AI_PROMPTS/` + `REPORT_DASHBOARD.html` + `manifest.json`/`INDEX.md` writers.
+- [+] S7's `06_security_scan.*` will be a thin adapter over `codepack_security::scan`
+      (S3) — legacy's own independent, weaker re-implementation of a scanner inside
+      `reports/insights/security.py` is confirmed NOT to be ported (I3: no re-scanning
+      raw content for secrets outside the one real detector).
+- [+] S7's `05_git_deep`/`21_git_timeline_report` will use `git2` directly (workspace
+      dependency already pinned by S4, vendored-libgit2, no https/ssh/cred) rather
+      than depending on `codepack-diff` as a crate (that crate's surface is
+      diff/selection-shaped, not general repo introspection) or shelling out to `git`
+      (forbidden by domain rules)
+- [+] `AI_PROMPTS/`'s other prompt files (beyond `CUSTOM_PROMPT.md`) are confirmed
+      legacy-empty (the `PROMPTS` dict has no other entries in production) — BLUEPRINT's
+      description of ready-made review/refactor/security/bug-hunt prompt files is
+      aspirational, not a literal legacy feature; left as legacy left it, not invented
+- [+] Realistic sizing accepted: S7 is sequenced by data-dependency group (G → A → B →
+      D → C → E → F → G-finish), each with its own build/test checkpoint, rather than
+      attempted as one unstructured pass — this is how the full stage stays achievable
+      in one task, not a scope cut
 
-## Implementation — schema and API (BLUEPRINT §D.2/§D.3, column-for-column)
+## Implementation — S6 (`codepack-tokens`)
 
-- [+] `Cargo.toml`: `rusqlite` (`bundled`) added to `[workspace.dependencies]` with a
-      justification comment (mirrors the `git2`/`sha2` comment convention); wired into
-      `crates/codepack-storage/Cargo.toml` — verified with a clean `cargo build -p
-      codepack-storage` from a clean state
-- [+] `error.rs` — `StorageError` (thiserror), wraps `rusqlite::Error`/
-      `std::io::Error`/`serde_json::Error` (legacy import parsing)
-- [+] `migrations.rs` — DDL for all 7 tables (`project`, `export_run`, `run_file`,
-      `finding`, `archive_part`, `snapshot`, `snapshot_file`) + `schema_version`, all
-      4 indexes (`project(root_path)` UNIQUE, `export_run(project_id, started_at)`,
-      `snapshot_file(snapshot_id, rel_path)`, `finding(run_id, severity)`), `ON DELETE
-      CASCADE` on every FK; `PRAGMA foreign_keys=ON`/`journal_mode=WAL` set
-      explicitly on every connection open via a single `open()` entry point
-- [+] `project.rs` — find-or-create by `root_path` (unique)
-- [+] `run.rs` — `record_export_run(conn, NewExportRun, files, findings,
-      archive_parts, snapshot: Option<(NewSnapshot, &[NewSnapshotFile])>) ->
-      Result<i64>`: one transaction; batched multi-row snapshot-file insert; snapshot
-      only ever inserted, **never updated** — the concrete I6 mechanism (an
-      `export_run` row is always written regardless of outcome, matching legacy's
-      "always append a history entry"; a `snapshot` row is written iff the caller
-      passes `Some`)
-- [+] `baseline.rs` — `latest_snapshot(conn, project_id) -> Result<Option<..>>`,
-      ordered `created_at DESC LIMIT 1`
-- [+] `retention.rs` — `cleanup_old_runs(conn, project_id, keep_last_n) ->
-      Result<usize>`, relies entirely on `ON DELETE CASCADE`, no manual multi-table
-      deletes
-- [+] `import/` — `import_legacy_history(history_json_path, conn) ->
-      Result<ImportReport>`: explicit opt-in call (not automatic on project open);
-      skip-and-warn per malformed *entry* (a totally unreadable/non-JSON/non-array
-      top-level file is a hard `Err`, not a silent empty report — see deviation
-      note); faithful (not "fixed") mapping of the poisoned-empty-snapshot case;
-      `mtime_ns` left `NULL` for imported snapshot files (legacy history never
-      persisted it); `run_file`/`finding` left empty for imported runs (legacy
-      history never had per-file/per-finding data); one `archive_part` row per
-      legacy `archives[]` entry, `compressed_bytes`/`groups = NULL`
-- [+] `codepack-core`: small additive extension to `AppPaths` — a
-      `legacy_history_file()` accessor mirroring the existing
-      `legacy_settings_file()`, and a settings-dir-rooted `db_file()` helper — reused
-      by a future caller (S9), not by this crate itself (see deviation note: this
-      crate's `open()` takes a plain `&Path`, so it never actually calls into
-      `codepack-core`)
-- [+] `lib.rs` — crate doc stating the S5 scope boundary explicitly, public
-      re-exports, 45 lines
+- [ ] `bytes.rs` — `format_bytes` ported 1:1 (binary units B/KB/MB/GB/TB, no PB tier,
+      `.2f` for non-B units) — byte-parity regression test against legacy fixture
+      values is the acceptance gate (I4)
+- [ ] `tokens.rs` — `estimate_tokens_fallback` (`max(1, round(B/3.5))`, matching
+      legacy's actual `round`, documented inline as a correction to BLUEPRINT's
+      `ceil` prose) and `estimate_tokens_refined` (calibrated `b`/`k` coefficients,
+      ASCII vs Cyrillic UTF-8 presets) — both public, fallback never replaced (I4)
+- [ ] `model_limits.rs` — `ModelContextLimits` default table (4 legacy entries:
+      Claude 200K, GPT-4o 128K, GPT-4 Turbo 128K, Gemini 1.5 Pro 1M), serde
+      round-trip shape; no file-loading/override mechanism this stage (documented
+      extension point for S9/S11)
+- [ ] `budget.rs` — `BudgetCandidate { id, importance, tokens }`,
+      `fit_to_budget(candidates, budget_tokens) -> BudgetSelection` with an
+      inspectable `ExclusionReason`, deterministic tie-breaking rule chosen and
+      tested — takes importance as a caller-supplied value, never computes it
+      (S7's `16_key_files_report`/`22_project_health_report` own that)
+- [ ] `lib.rs` — crate-scope doc: no importance computation, no pipeline wiring, no
+      network, no override-file loading, under 100 lines
 
-## Verification
+## Verification — S6
 
-- [+] Migration test: clean DB reaches `schema_version = 1`; running the runner twice
-      is idempotent (safe no-op); no fictitious "migrate from an older version" test
-      invented — documented as N/A at this stage (S5 is schema_version 1, nothing
-      predates it)
-- [+] Legacy import test against a realistic fixture history JSON (a cancelled entry,
-      a successful entry, one entry shaped like the poisoned-empty-snapshot bug, one
-      malformed entry) — correct `imported`/`skipped` counts and correct
-      (gap-documented) row mapping
-- [+] I6 regression test: recording a run with `snapshot = None` leaves the
-      previously-stored baseline snapshot completely unchanged (row-for-row, not
-      just a row-count check)
-- [+] Concurrency test: two REAL on-disk-file connections (never `:memory:`), WAL
-      concurrent-read-during-write; plus a multi-threaded interleaved-write test
-      followed by `PRAGMA foreign_key_check` returning zero violations
-- [+] Retention test: seed N+k runs for a project, `cleanup_old_runs(.., N)` leaves
-      exactly N runs and cascades every child table (`run_file`/`finding`/
-      `archive_part`/`snapshot`+`snapshot_file`) correctly — verified by direct
-      row-count assertions per table, not just "no FK errors"
-- [+] Round-trip test: `NewFinding`/`NewSnapshotFile` fixtures shaped like real
-      `codepack-security::Finding`/`codepack-diff::SnapshotFile` values map onto the
-      `finding`/`snapshot_file` columns field-for-field
-- [+] `cargo tree -p codepack-storage` audited: no network-capable crate, no license
-      outside `deny.toml`'s existing allow-list
-- [+] `cargo xtask gate` green locally (fmt, clippy `-D warnings`, tests — 22 passing
-      in `codepack-storage` across 3 test binaries, `cargo deny check`,
-      `sync-agents --check`)
-- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+- [ ] Byte-parity test (unit-boundary values) matches legacy exactly
+- [ ] Token fallback test matches legacy `round`-based values
+- [ ] Refined-vs-fallback test proves a meaningfully lower estimate for Cyrillic
+      UTF-8 content than the crude fallback
+- [ ] Budget selector determinism test (repeat-run equality) + explainability test
+- [ ] `ModelContextLimits` JSON round-trip test
+- [ ] `cargo tree -p codepack-tokens` audited: no network-capable crate, no
+      unjustified new dependency
+- [ ] `cargo xtask gate --quick` green before moving to S7 implementation
+
+## Implementation — S7 (`codepack-reports`), by group
+
+- [ ] Group G (glue, built first): shared `Inventory`, `ReportContext`, plugin
+      table + runner (profile gating, `catch_unwind` + `Result` handling,
+      `ERROR_<name>.txt` fault isolation), `REPORT_PLUGINS.json`,
+      `PROJECT_PROFILE.json` builder
+- [ ] Group A (pure plan/byte reports): `01_summary`, `02_file_statistics`,
+      `07_todo_fixme`, `08_code_metrics`, `25_large_files_report`
+- [ ] Group B (security wrapper): `06_security_scan.{txt,json,sarif}` as a thin
+      adapter over `codepack_security::scan::ScanResult`
+- [ ] Group D (manifest parsers): `go.mod`/`package.json`/`requirements*.txt`/
+      compose-YAML-subset parsers; `03_dependencies`, `04_scripts`, `09_config`,
+      `10_docker`, `26_dependency_intelligence`
+- [ ] Group C (git2 reports): `05_git_deep`, `21_git_timeline_report` — read-only
+      `git2` queries, output redacted via `codepack_security::redact::redact_secrets`
+- [ ] Group E (heuristic/derived reports): shared dependency-graph primitive;
+      `11_routes_and_pages`, `14_dependency_graph`, `15_architecture_report`,
+      `16_key_files_report`, `17_code_quality_report`, `18_api_surface_report`,
+      `19_frontend_report`, `20_backend_report`, `22_project_health_report`,
+      `23_refactoring_opportunities`, `24_architecture_map`
+- [ ] Group F (AI bundle): `12_ai_context_pack`, `13_runbook`, `AI_CONTEXT/` (11
+      files), `AI_PROMPTS/CUSTOM_PROMPT.md`
+- [ ] Group G finish: `REPORT_DASHBOARD.html` (tolerates missing
+      `27_archive_plan.md`/`28_export_plan.md`), `manifest.json`/`INDEX.md` writer
+      functions, RU/EN string-table localization piloted on one report
+
+## Verification — S7
+
+- [ ] Golden-structure tests per group against stack fixtures (right files, right
+      top-level shape — not byte-identical, since content is project-dependent)
+- [ ] Profile-gating test for all 5 profiles against the reconstructed table
+- [ ] Fault-tolerance test: forced single-report failure → exactly one
+      `ERROR_<name>.txt`, every other report/artifact still completes
+- [ ] I3 audit: planted secret in a fixture never appears raw in any report output;
+      `<REDACTED>` placeholder appears where expected
+- [ ] Confirmed no `std::process::Command` invoking `git` anywhere in this crate
+- [ ] `PROJECT_PROFILE.json`/`manifest.json` field sets matched against the
+      extracted legacy archive, not from memory
+- [ ] `cargo xtask gate` green (fmt, clippy `-D warnings`, full test suite, `cargo
+      deny check`, `sync-agents --check`)
+- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
       proven-invariant comment
 
-## Completion
+## Completion (both stages)
 
-- [+] `docs/architecture/overview.md` updated
-- [+] `ROADMAP.md` `**Status.**` line under S5 + §1 table, honestly listing: the
-      `MAX_HISTORY_ITEMS=50`-global-not-per-project legacy finding, the
-      poisoned-empty-snapshot legacy bug and how the new schema structurally avoids
-      it going forward while faithfully importing historical data as-is, the
-      `mtime_ns`/`run_file`/`finding` import gaps, the `rusqlite`/`bundled` choice,
-      and the review-driven fixes below
-- [+] `docs/decisions/open-questions.md` updated: **Q10** — `keep_last_n` retention is
-      a plain function parameter, not a new `Config` field; recorded as an open
-      question for whether/when it should become one
-- [+] Independent review pass (`codepack-quality-reviewer`) before merge — found and
-      fixed: (1) the branch had diverged from `main` (not just fallen behind) —
-      rebased cleanly onto current `main`; (2) `project.last_export_at` was updated
-      on every run regardless of outcome with no rationale recorded — changed to
-      only advance on a run that produced a snapshot (a successful run), matching
-      BLUEPRINT §A.9's "last export" framing, with an inline comment and two tests
-      (one confirming a cancelled/failed run does *not* advance it, one confirming a
-      successful run does); (3) `codepack-core` was declared as a dependency but
-      never actually used anywhere in the crate's source — removed, and `lib.rs`'s
-      scope-boundary doc comment corrected to state the crate has no dependency on
-      any other `codepack-*` crate rather than overclaiming one that didn't exist in
-      the code; (4) the hand-rolled `days_from_civil` date algorithm had no
-      leap-year test despite its own doc comment calling out leap-year correctness
-      as the exact risk to guard against — added three cases (a divisible-by-4 leap
-      year, a divisible-by-400 leap year, and the day immediately after a leap day).
-      Everything else the review checked (I6 mechanism, legacy-bug parity, import
-      fidelity, migration idempotency, PRAGMA consistency, WAL/concurrency test
-      genuineness, retention cascade, dependency boundaries) was independently
-      re-derived and confirmed correct on first pass — nothing else needed changing.
-- [ ] CI green on all three OSes — pending merge/push, needs owner sign-off first
-- [+] Commits: checklist first, then implementation, then the review-driven fix
-      commit, separated logically
-- [ ] Fast-forward merge into `main` — pending owner sign-off
-- [+] Final report to owner (Russian, per language policy)
+- [ ] `docs/architecture/overview.md` updated (both crates move from placeholder)
+- [ ] `ROADMAP.md` — separate `**Status.**` lines for S6 and S7 + §1 table, each
+      honestly listing its own deviations (S6: round-vs-ceil, no legacy budget
+      precedent; S7: the 27/28/29 scope correction, the S6 dependency-table drift,
+      the AI_PROMPTS legacy-emptiness gap, the git2-not-codepack-diff choice)
+- [ ] `docs/decisions/open-questions.md` updated with any new open questions
+      surfaced (e.g. AI_PROMPTS content, REPORT_PLUGINS.json description
+      population, whether to parse Cargo.toml, deferred tiktoken-rs)
+- [ ] Independent review pass (`codepack-quality-reviewer`) before merge
+- [ ] CI green on all three OSes; merge only after explicit owner sign-off
+- [ ] Commits: checklist first, then implementation (logically separated by
+      stage/group where practical), separated from documentation commits
+- [ ] Final report to owner (Russian, per language policy)
 
 ---
 
 ## Next task
 
-Stage **S6 — Байты, токены, бюджет (`codepack-tokens`)** (`ROADMAP.md` §2). Start with
-the orientation ritual from `.ai/project/13-progress-tracking.md`.
+Stage **S8 — Архивация (`codepack-archive`)** (`ROADMAP.md` §2). Start with the
+orientation ritual from `.ai/project/13-progress-tracking.md`.
