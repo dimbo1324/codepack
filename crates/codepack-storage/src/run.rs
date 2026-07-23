@@ -48,11 +48,6 @@ pub fn record_export_run(
     )?;
     let run_id = tx.last_insert_rowid();
 
-    tx.execute(
-        "UPDATE project SET last_export_at = ?1 WHERE id = ?2",
-        params![run.started_at, run.project_id],
-    )?;
-
     {
         let mut stmt = tx.prepare(
             "INSERT INTO run_file (run_id, rel_path, size_bytes, loc, status, group_name)
@@ -133,6 +128,17 @@ pub fn record_export_run(
                 file.mtime_ns,
             ])?;
         }
+
+        // `project.last_export_at` tracks the last *successful* export, matching
+        // BLUEPRINT SS A.9's history model (a cancelled/failed run is recorded in
+        // `export_run` for history purposes but never counts as "the last export" a
+        // user-facing "last exported: <date>" indicator should show) — deliberately
+        // tied to the same `Some(snapshot)` gate that decides whether this run
+        // produced a baseline at all, not to every attempt regardless of outcome.
+        tx.execute(
+            "UPDATE project SET last_export_at = ?1 WHERE id = ?2",
+            params![run.started_at, run.project_id],
+        )?;
     }
 
     tx.commit()?;
@@ -164,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn always_inserts_export_run_and_updates_project_last_export_at() {
+    fn always_inserts_export_run_regardless_of_outcome() {
         let dir = tempfile::tempdir().unwrap();
         let mut conn = open(&dir.path().join("codepack.db")).unwrap();
         let project_id = find_or_create_project(&conn, "/repo", "Repo", None).unwrap();
@@ -180,6 +186,59 @@ mod tests {
         .unwrap();
         assert!(run_id > 0);
 
+        let run_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM export_run", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(run_count, 1);
+    }
+
+    #[test]
+    fn last_export_at_only_advances_on_a_run_that_produced_a_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = open(&dir.path().join("codepack.db")).unwrap();
+        let project_id = find_or_create_project(&conn, "/repo", "Repo", None).unwrap();
+
+        // A run with no snapshot (cancelled/failed) must not advance last_export_at.
+        record_export_run(
+            &mut conn,
+            base_run(project_id, 100, true),
+            &[],
+            &[],
+            &[],
+            None,
+        )
+        .unwrap();
+        let last_export_at: Option<i64> = conn
+            .query_row(
+                "SELECT last_export_at FROM project WHERE id = ?1",
+                params![project_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(last_export_at, None);
+
+        // A run that produces a snapshot (successful) does advance it.
+        let snapshot_files = vec![NewSnapshotFile {
+            rel_path: "a.txt".to_string(),
+            sha256: "aaaa".to_string(),
+            size_bytes: 1,
+            loc: 1,
+            mtime_ns: None,
+        }];
+        let new_snapshot = NewSnapshot {
+            created_at: 200,
+            file_count: 1,
+            bytes_total: 1,
+        };
+        record_export_run(
+            &mut conn,
+            base_run(project_id, 200, false),
+            &[],
+            &[],
+            &[],
+            Some((new_snapshot, &snapshot_files)),
+        )
+        .unwrap();
         let last_export_at: i64 = conn
             .query_row(
                 "SELECT last_export_at FROM project WHERE id = ?1",
@@ -187,7 +246,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(last_export_at, 100);
+        assert_eq!(last_export_at, 200);
     }
 
     #[test]

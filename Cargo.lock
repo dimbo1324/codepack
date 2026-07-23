@@ -129,7 +129,6 @@ dependencies = [
 name = "codepack-storage"
 version = "2.0.0-dev"
 dependencies = [
- "codepack-core",
  "rusqlite",
  "serde",
  "serde_json",

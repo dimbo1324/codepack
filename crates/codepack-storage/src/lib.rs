@@ -3,12 +3,18 @@
 //!
 //! ## Scope boundary (stage S5, `ROADMAP.md`)
 //!
-//! This crate depends only on `codepack-core`. It never depends on
-//! `codepack-scanner`/`codepack-security`/`codepack-diff`: rather than importing their
-//! `Finding`/`Snapshot`/`SnapshotFile` types, it defines its own local `New*` structs
-//! ([`types`]) that a future caller (stage S9's engine) populates by copying fields
-//! out of those crates' real output — never via a `From` impl living here, which
-//! would create a forbidden reverse dependency.
+//! This crate has no dependency on any other `codepack-*` crate. [`open`] takes a
+//! plain `&Path` for the database file — resolving *where* that file lives (e.g. via
+//! `codepack_core::paths::AppPaths::db_file()`/`legacy_history_file()`) is a future
+//! caller's job (stage S9's engine), not this crate's; it stays decoupled the same
+//! way `codepack-diff`'s `snapshot_project` takes a caller-supplied ignored-directory
+//! set instead of reaching for another crate's constants.
+//!
+//! It never depends on `codepack-scanner`/`codepack-security`/`codepack-diff` either:
+//! rather than importing their `Finding`/`Snapshot`/`SnapshotFile` types, it defines
+//! its own local `New*` structs ([`types`]) that a future caller (stage S9's engine)
+//! populates by copying fields out of those crates' real output — never via a `From`
+//! impl living here, which would create a forbidden reverse dependency.
 //!
 //! This crate never computes a snapshot, a finding, or an export plan; it only
 //! persists and retrieves already-computed values. Findings arrive pre-redacted

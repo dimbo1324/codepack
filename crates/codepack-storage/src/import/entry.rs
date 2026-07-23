@@ -231,4 +231,26 @@ mod tests {
         assert_eq!(parse_naive_datetime_to_unix("not-a-date"), None);
         assert_eq!(parse_naive_datetime_to_unix("2024-13-40 99:99:99"), None);
     }
+
+    #[test]
+    fn handles_leap_year_dates_correctly() {
+        // Review finding: days_from_civil is a hand-rolled civil-calendar algorithm
+        // (no chrono dependency) and a subtly wrong one would silently corrupt every
+        // imported timestamp — these known epoch values (independently verifiable)
+        // exercise both a divisible-by-4 leap year and a divisible-by-400 leap year,
+        // plus the day immediately after the leap day to catch an off-by-one on the
+        // month rollover.
+        assert_eq!(
+            parse_naive_datetime_to_unix("2024-02-29 00:00:00"),
+            Some(1_709_164_800)
+        );
+        assert_eq!(
+            parse_naive_datetime_to_unix("2000-02-29 00:00:00"),
+            Some(951_782_400)
+        );
+        assert_eq!(
+            parse_naive_datetime_to_unix("2024-03-01 00:00:00"),
+            Some(1_709_251_200)
+        );
+    }
 }
