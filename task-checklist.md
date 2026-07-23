@@ -82,10 +82,22 @@ filtering (S3) and no diff/incremental filtering (S4).
 ## Completion
 
 - [+] Commits: checklist first, then implementation, separated logically
-- [-] No merge to `main`, no push — stopped after committing on the branch per task
-      instructions
-- [+] Final report to the orchestrating agent (this session has no separate human
-      owner turn; report goes in the final assistant message)
+- [+] Reconciled the implementing subagent's worktree branch onto
+      `feat/s2-scanner-walk-ignore-stack` via cherry-pick (task-checklist.md conflict
+      resolved in favor of the agent's completed version)
+- [+] Caught and fixed a real bug before merge: the implementation commit added
+      `walkdir`/`rayon`/`regex`/`codepack-core` to `Cargo.lock` but never declared them
+      in either `Cargo.toml` — the crate silently failed to build from a clean lockfile.
+      Fixed in a follow-up commit; `cargo xtask gate` is now genuinely green (verified
+      in the main working directory, not just the agent's worktree)
+- [+] Independent review via `codepack-quality-reviewer`: constant sets, 12-stack
+      table, and the always-include-vs-base-ignore precedence all verified correct
+      against the legacy archive. Two findings fixed: removed a dead `ScannerError::Read`
+      variant; recorded the `*.egg-info` glob-matching deviation in
+      `docs/decisions/open-questions.md` (was only in code comments/ROADMAP before)
+- [ ] CI green on all three OSes (confirm after push)
+- [ ] Fast-forward merge into `main` and push (pending explicit owner sign-off)
+- [+] Final report to owner (Russian, per language policy)
 
 ## Deviations recorded honestly
 
