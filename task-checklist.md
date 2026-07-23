@@ -1,123 +1,89 @@
 # Task Checklist
 
-**Task:** Stage **S1 — Domain types and configuration (`codepack-core`)** (`ROADMAP.md` §2).
-**Date:** 2026-07-22
-**Branch:** feat/s1-core-domain-types-config
-
-Note: this checklist is written in English. `.ai/project/10-project-map.md` lists
-`task-checklist.md` as agent-facing infrastructure (English); the S0 checklist was
-written in Russian, which was drift against that same policy line. Correcting it here
-rather than silently rewriting the already-merged S0 one.
+**Task:** Stage **S2 — Scanner: tree walking, ignore rules, stack detection**
+(`codepack-scanner`) (`ROADMAP.md` §2).
+**Date:** 2026-07-23
+**Branch:** feat/s2-scanner-walk-ignore-stack
 
 ## Preparation
 
-- [+] Orientation ritual: git status/log, ROADMAP.md §1 (S1 is the first stage without
+- [+] Orientation ritual: git status/log, ROADMAP.md §1 (S2 is the first stage without
       a `**Status.**` line), docs/architecture/overview.md, task-checklist.md,
-      docs/decisions/open-questions.md — no open items blocking S1
+      docs/decisions/open-questions.md — no open items blocking S2
 - [+] Delegated stage planning to `codepack-stage-planner`: legacy archive extracted to
-      a session-scratchpad temp dir (outside the repo) and read (`config.py`,
-      `constants.py`, `models.py`, config-edge-case and AI-preset tests)
-- [+] Resolved scope ambiguities from the plan:
-      - `BLUEPRINT.md` §A.3's own field table already lists **26** rows (last_root
-        through prompt_goals) — the "25" figure is a miscount that exists only in
-        `ROADMAP.md` (two places), not in BLUEPRINT's table itself. Fixed the
-        `ROADMAP.md` wording as routine doc maintenance; `BLUEPRINT.md` needed no edit.
-      - AI presets (5-entry static table, ROADMAP §6 lists S1+S7): included in S1 as
-        data-only (`AiPreset` type + table), no application/wiring logic — that is S7.
-      - Project-level `.codepack.toml` (BLUEPRINT §B.7, no legacy counterpart): out of
-        S1 scope; recorded as an open question (which stage owns it) rather than built
-        or silently dropped.
-      - `cargo deny` wiring into the gate: `deny.toml` already says "runs once the
-        workspace has real dependencies (stage S1 onward)" — S1 is that stage, so wired
-        it into `cargo xtask gate` and CI now.
+      a session-scratchpad temp dir and read (`constants.py`, `stack_detector.py`,
+      `export_ignore.py`, `export_plan.py`, `path_utils.py`, `text_utils.py`, and the
+      matching legacy test files as behavioral oracles)
+- [+] Resolved scope boundary: `codepack-scanner` depends only on `codepack-core`. No
+      safe-mode filtering (S3, `codepack-security`) or diff/incremental filtering (S4,
+      `codepack-diff`) inside `build_export_plan()`. Golden/oracle tests use the
+      legacy-equivalent baseline (`safe_export_mode=full`, `diff_export_mode=all`,
+      `incremental_export_enabled=false`) where those filters are no-ops.
+- [+] Resolved: no real legacy Python process is run to produce goldens (would need an
+      isolated venv and doesn't fit this session's scope/time). Behavioral oracle is
+      the legacy pytest source itself — test bodies and their literal assertions are
+      ported 1:1 into Rust tests, the same approach S1 used for config-edge-case parity.
+- [+] Resolved pattern-matching dependency spike: hand-roll a `fnmatch.translate`-style
+      port backed by `regex`, not `globset` — avoids unverified semantic assumptions
+      about `globset`'s `literal_separator` handling matching Python's `fnmatch`
+      exactly; `regex` is also an anticipated S3 dependency (BLUEPRINT §C.3).
 
 ## Implementation
 
-- [+] Added `serde`, `serde_json`, `thiserror`, `crossbeam-channel` to
-      `[workspace.dependencies]`; `tempfile` as a dev-dependency; wired into
-      `crates/codepack-core/Cargo.toml` via `dep.workspace = true` (`directories` was
-      planned here too but dropped — see "Mid-implementation deviations" below)
-- [+] `crates/codepack-core/src/error.rs` — `CoreError` (thiserror) + `Result<T>` alias
-- [+] `crates/codepack-core/src/types.rs` — `ExportPaths`, `CopyStats`, `TextDumpStats`,
-      `RiskPreviewItem`, `RiskPreviewReport` (+ `has_warnings`), `ArchiveBuildResult`
-      (+ `primary_result`)
-- [+] `crates/codepack-core/src/cancellation.rs` — `CancellationToken`
-- [+] `crates/codepack-core/src/progress.rs` — `ProgressEvent`/`LogEvent` +
-      crossbeam-channel aliases
-- [+] `crates/codepack-core/src/paths.rs` — `AppPaths` resolved by hand from
-      environment variables (not `directories`, see below), injectable base dir for
-      hermetic tests, legacy settings-file location resolver
-- [+] `crates/codepack-core/src/config/` directory module: `mod.rs` (26-field struct,
-      declaration order matches legacy), `normalize.rs` (methods on `&Config`, handles
-      the `diff_export_mode`/`incremental_export_enabled` coupling), `valid_sets.rs`
-      (export profiles / safe modes / diff modes + legacy aliases), `legacy.rs`
-      (tolerant load + the one real migration rule), `presets.rs` (5 AI presets, data
-      only), `io.rs` (load/save via `paths.rs`)
-- [+] `crates/codepack-core/src/lib.rs` — replaced the placeholder, re-exported the
-      public surface
-- [+] `crates/codepack-core/tests/fixtures/` — 4 legacy-settings fixtures (full,
-      missing-flag, unknown-keys, corrupt) + `legacy_migration.rs` integration test
-- [+] Wired `cargo deny check` into `cargo xtask gate` and `.github/workflows/ci.yml`
+- [ ] `crates/codepack-scanner/Cargo.toml`: add `walkdir`, `rayon`, `regex`,
+      `codepack-core` (path dep) to `[workspace.dependencies]` / this crate
+- [ ] `src/constants.rs` — `IGNORED_DIR_NAMES` (18), `TEXT_EXTENSIONS` (135),
+      `BINARY_EXTENSIONS` (89), `TEXT_FILENAMES_WITHOUT_EXTENSION` (15), ported verbatim
+- [ ] `src/classify.rs` — `should_consider_text_file` + `looks_binary` ports
+- [ ] `src/stack.rs` — 12-stack rule table, `detect_stacks()` (all matches, sorted by
+      marker count), `merged_extra_ignored_dirs()` (union over all matched stacks)
+- [ ] `src/ignore/` — `ExportIgnoreRules`, `ScanOptions` (+ `From<&codepack_core::Config>`
+      adapter), pattern matcher (`fnmatch`-equivalent), `should_skip_dir`/
+      `should_skip_file` with exact legacy precedence (always-include checked before
+      any exclusion; base `IGNORED_DIR_NAMES`/stack dirs are pruned before `.exportignore`
+      is ever consulted, so always-include cannot rescue a base-ignored subtree)
+- [ ] `src/walk.rs` — `walkdir`-based traversal, top-down pruning, never follows
+      symlinks, `CancellationToken` checked inside the loop, `rayon` for the per-file
+      classification pass (not the pruning walk itself)
+- [ ] `src/plan.rs` — `PlannedFile`, `ExportPlan`, `build_export_plan()` (S2-scoped),
+      `write_export_plan_files()` (JSON/MD renderer matching legacy field names/order)
+- [ ] `src/error.rs` — `ScannerError` (thiserror) + `Result` alias
+- [ ] `src/lib.rs` — public re-exports, crate doc noting the S2 scope boundary
+- [ ] Fixtures: one tiny synthetic project per stack (12) + 1 mono-repo (2+ stacks) +
+      1 symlink-escape fixture, under `tests/fixtures/`
 
 ## Verification
 
-- [+] Unit tests for all 26 `Config` fields: valid passthrough + invalid/out-of-range
-      fallback, including the diff-mode/incremental coupling, `ui_zoom` clamp/parse
-      fallback, the two legacy diff-mode aliases
-- [+] Round-trip test (`Config` → JSON → `Config`) + JSON-shape/contract test (26 keys
-      present, `schema_version` field)
-- [+] Legacy-import tests against the 4 checked-in fixtures
-- [+] `cargo xtask gate` green locally: fmt, clippy `-D warnings`, tests, `cargo deny
-      check`, `sync-agents --check`
-- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a proven-invariant
-      comment
-- [+] `docs/architecture/overview.md` updated
-- [+] `ROADMAP.md`: `**Status.**` line under S1 + §1 table status updated; "25 полей"
-      corrected to "26" in both places
+- [ ] Constant-set tests (cardinality + curated member/non-member samples)
+- [ ] Per-stack detection tests (12) + mono-repo union test + primary-stack ordering
+- [ ] `.exportignore` rule tests ported 1:1 from `test_export_ignore*.py`
+- [ ] Property test: always-include beats custom `.exportignore`/config exclusion;
+      separate test proves base `IGNORED_DIR_NAMES`/stack dirs are NOT overridable
+- [ ] Symlinked directory is never descended into
+- [ ] `build_export_plan()` oracle tests ported from `test_export_plan*.py` (S2-scoped
+      baseline settings) — field names/order match the legacy JSON contract
+- [ ] `write_export_plan_files()` Markdown output matches the legacy template structure
+- [ ] Classification unit tests (`should_consider_text_file`, `looks_binary` incl. the
+      30% boundary — confirm `>` not `>=`)
+- [ ] `cargo xtask gate` green locally (fmt, clippy `-D warnings`, tests, `cargo deny
+      check`, `sync-agents --check`)
+- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+      proven-invariant comment
 
 ## Completion
 
-- [+] CI green on all three OSes: run #38
-      (https://github.com/dimbo1324/codepack/actions/runs/29981484227),
-      `gate (ubuntu-latest)` / `gate (macos-latest)` / `gate (windows-latest)` — все
-      `success` на коммите `67f2513`
-- [+] Commits: checklist first, then implementation, separated logically
-- [+] Fast-forward merge into `main` and push to `origin` (explicit owner sign-off)
-- [+] Final report to owner (Russian, per language policy)
-
-## Mid-implementation deviations (recorded honestly)
-
-- `cargo deny check` failed on a real license issue: `directories` (planned for
-  `paths.rs`) pulls in `option-ext` (MPL-2.0, copyleft). Asked the owner rather than
-  silently allow-listing a copyleft license or silently dropping the dependency —
-  owner chose to implement `AppPaths` by hand over environment variables instead.
-  `directories` was never added to the workspace; `docs/decisions/open-questions.md`
-  records the decision.
-- `cargo-deny` is not installed by default on a dev machine (not a `rust-toolchain.toml`
-  component) — installed locally to verify the gate for real (`cargo install
-  cargo-deny --locked`), documented the requirement in
-  `.ai/project/11-commands.md`, and CI installs it via `taiki-e/install-action`.
-- `[licenses.private] ignore = true` added to `deny.toml`: our own workspace crates
-  have no `license` field yet (separate, undecided question) and would otherwise fail
-  the license check as "unlicensed" — this is the correct cargo-deny mechanism for
-  unpublished internal crates, not a loosening of the copyleft policy.
-- `codepack-quality-reviewer` caught a real parity bug before merge: `normalized_ui_zoom`
-  fell back to the default for all non-finite input, but legacy's `min`/`max` against
-  NaN is a comparison quirk that actually clamps NaN/+inf to 1.5 and -inf to 0.7 rather
-  than falling back at all. Decided not to replicate the quirk (it is an accident, not
-  a behavior, and unreachable through JSON since `serde_json` rejects NaN/Infinity
-  tokens) — documented the deviation explicitly in the doc comment instead of silently
-  diverging. Also fixed: an inflated "56 unit + 6 integration" test-count claim (actual
-  is 50 unit + 6 integration = 56 total) in ROADMAP.md/overview.md, a stale
-  `directories`-crate mention left in BLUEPRINT.md §D.4 and Приложение 3 after the
-  mid-task pivot, an `io.rs` doc comment overclaiming legacy parity on partial-failure
-  behavior, and the two stale pre-pivot `directories` references in this file's own
-  Implementation section above.
+- [ ] `docs/architecture/overview.md` updated
+- [ ] `ROADMAP.md`: `**Status.**` line under S2 (Russian) + §1 table status updated,
+      including the honest scoping note (safety/diff filtering deferred to S3/S4/S9)
+- [ ] CI green on all three OSes (confirm after push)
+- [ ] Commits: checklist first, then implementation, separated logically
+- [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
+- [ ] Final report to owner (Russian, per language policy)
 
 ---
 
 ## Next task
 
-Stage **S2 — Scanner: tree walking, ignore rules, stack detection (`codepack-scanner`)**
-(`ROADMAP.md` §2). Start with the orientation ritual from
+Stage **S3 — Безопасность (`codepack-security`)** (`ROADMAP.md` §2) — ⭐ core value
+of the whole project. Start with the orientation ritual from
 `.ai/project/13-progress-tracking.md`.
