@@ -24,6 +24,16 @@ crossbeam-channel = "0.5"
 # S1 (dev-dependency only): hermetic config load/save tests that never touch the
 # developer's real OS config directory.
 tempfile = "3.27"
+# S2 (codepack-scanner): the first internal path dependency between crates/*.
+codepack-core = { path = "crates/codepack-core" }
+# S2: directory traversal with symlink-detection support (invariant I7).
+walkdir = "2.5"
+# S2: parallelizes the per-file classification pass after the walk collects
+# candidates (ROADMAP §2 calls this out explicitly for S2).
+rayon = "1.10"
+# S2: backs a hand-rolled fnmatch.translate-equivalent matcher for .exportignore
+# (ignore/globset rejected — see crates/codepack-scanner/src/ignore/pattern.rs).
+regex = "1.11"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
