@@ -7,8 +7,9 @@
 > новая операционная задача.
 
 **Дата последней ревизии:** 2026-07-23
-**Состояние:** этапы S0, S1 и S2 завершены. `codepack-core` и `codepack-scanner` —
-крейты с реальной доменной логикой; остальные крейты «Ядра» пока плейсхолдеры.
+**Состояние:** этапы S0, S1, S2 и S3 завершены. `codepack-core`, `codepack-scanner` и
+`codepack-security` — крейты с реальной доменной логикой; остальные крейты «Ядра» пока
+плейсхолдеры.
 
 ## Что существует
 
@@ -17,7 +18,8 @@
 | Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
 | `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). 50 юнит- + 6 интеграционных тестов (56 всего) |
 | `codepack-scanner` | **готов (S2, в границах этапа — без safe-mode/diff-фильтрации, см. `ROADMAP.md` §2 Status)**: базовое+стековое игнорирование директорий (`walk.rs`, `IgnoredDirMatcher`, `walkdir` без следования симлинкам), `.exportignore`/кастомные правила (`ignore/`, ручной `fnmatch`-эквивалент на `regex`), детектор 12 стеков (`stack.rs`), классификация текст/бинарь (`classify.rs`), `build_export_plan()`/`write_export_plan_files()` (`plan/`, JSON+Markdown, порядок полей — контракт I5). 85 юнит- + 13 интеграционных тестов |
-| Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-security`, `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
+| `codepack-security` | **готов (S3)**: три safe-режима (`policy/`), редактирование секретов с безбэкреференсным переписыванием legacy-регекса (`redact.rs`), эвристический сканер v3 (`scan/`) — sensitive-файлы, secret-каскад (4 уровня уверенности), 9 risky-code правил, плюс новое из BLUEPRINT §B.1: 10 провайдер-сигнатур, энтропия Шеннона, `aho-corasick`-предфильтр (`patterns/`). Выходы `.txt`/`.json`/SARIF 2.1.0 (`scan/write/`). Корпус-baseline (I9): parity P=1.000/R=0.312/F1=0.476, full P=1.000/R=1.000/F1=1.000. 111 юнит- + 7 интеграционных тестов |
+| Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-diff`, `-storage`, `-tokens`, `-reports`, `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
 | `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `deny`, `sync-agents [--check]`, `doctor` |
 | `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |
 | `deny.toml` | **активен с S1**: advisories/bans/licenses/sources все `ok`; собственные крейты исключены из license-проверки (`[licenses.private] ignore = true`); с S2 добавлен `[bans] allow-wildcard-paths = true` (внутриворкспейсные path-зависимости без semver-диапазона — не supply-chain риск) |
@@ -50,5 +52,5 @@
 
 ## Следующий шаг
 
-Этап **S3 — Безопасность (`codepack-security`)**.
+Этап **S4 — Diff и снапшоты (`codepack-diff`)**.
 См. `ROADMAP.md` §2.
