@@ -1,89 +1,139 @@
 # Task Checklist
 
-**Task:** Stage **S2 — Scanner: tree walking, ignore rules, stack detection**
-(`codepack-scanner`) (`ROADMAP.md` §2).
+**Task:** Stage **S2 — Scanner: tree walking, ignore rules, stack detection
+(`codepack-scanner`)** (`ROADMAP.md` §2).
 **Date:** 2026-07-23
 **Branch:** feat/s2-scanner-walk-ignore-stack
+
+Scope boundary (binding for this task): `build_export_plan()` applies base-ignore +
+stack-ignore + `.exportignore`/custom-rule filtering only. No safe-export-mode
+filtering (S3) and no diff/incremental filtering (S4).
 
 ## Preparation
 
 - [+] Orientation ritual: git status/log, ROADMAP.md §1 (S2 is the first stage without
-      a `**Status.**` line), docs/architecture/overview.md, task-checklist.md,
-      docs/decisions/open-questions.md — no open items blocking S2
-- [+] Delegated stage planning to `codepack-stage-planner`: legacy archive extracted to
-      a session-scratchpad temp dir and read (`constants.py`, `stack_detector.py`,
-      `export_ignore.py`, `export_plan.py`, `path_utils.py`, `text_utils.py`, and the
-      matching legacy test files as behavioral oracles)
-- [+] Resolved scope boundary: `codepack-scanner` depends only on `codepack-core`. No
-      safe-mode filtering (S3, `codepack-security`) or diff/incremental filtering (S4,
-      `codepack-diff`) inside `build_export_plan()`. Golden/oracle tests use the
-      legacy-equivalent baseline (`safe_export_mode=full`, `diff_export_mode=all`,
-      `incremental_export_enabled=false`) where those filters are no-ops.
-- [+] Resolved: no real legacy Python process is run to produce goldens (would need an
-      isolated venv and doesn't fit this session's scope/time). Behavioral oracle is
-      the legacy pytest source itself — test bodies and their literal assertions are
-      ported 1:1 into Rust tests, the same approach S1 used for config-edge-case parity.
-- [+] Resolved pattern-matching dependency spike: hand-roll a `fnmatch.translate`-style
-      port backed by `regex`, not `globset` — avoids unverified semantic assumptions
-      about `globset`'s `literal_separator` handling matching Python's `fnmatch`
-      exactly; `regex` is also an anticipated S3 dependency (BLUEPRINT §C.3).
+      a `**Status.**` line), docs/architecture/overview.md, task-checklist.md (stale
+      S1 content carried onto this branch — recreated here), docs/decisions/open-questions.md
+- [+] Legacy archive extracted to a session-scratchpad temp dir (outside the repo) and
+      read directly: `constants.py`, `utils/text_utils.py`, `utils/path_utils.py`,
+      `services/stack_detector.py`, `services/export_ignore.py`, `services/export_plan.py`,
+      `services/exporter.py` (to see how `build_export_plan`'s `ignored_dirs` argument
+      is actually assembled: `config.effective_ignored_dirs() | merged_extra_ignored_dirs(root)`),
+      `config.py::effective_ignored_dirs`, and the corresponding legacy test files
+      (`test_stack_detector.py`, `test_export_ignore.py`, `test_export_ignore_edge_cases.py`,
+      `test_export_plan.py`, `test_export_plan_edge_cases.py`)
 
 ## Implementation
 
-- [ ] `crates/codepack-scanner/Cargo.toml`: add `walkdir`, `rayon`, `regex`,
-      `codepack-core` (path dep) to `[workspace.dependencies]` / this crate
-- [ ] `src/constants.rs` — `IGNORED_DIR_NAMES` (18), `TEXT_EXTENSIONS` (135),
-      `BINARY_EXTENSIONS` (89), `TEXT_FILENAMES_WITHOUT_EXTENSION` (15), ported verbatim
-- [ ] `src/classify.rs` — `should_consider_text_file` + `looks_binary` ports
-- [ ] `src/stack.rs` — 12-stack rule table, `detect_stacks()` (all matches, sorted by
-      marker count), `merged_extra_ignored_dirs()` (union over all matched stacks)
-- [ ] `src/ignore/` — `ExportIgnoreRules`, `ScanOptions` (+ `From<&codepack_core::Config>`
-      adapter), pattern matcher (`fnmatch`-equivalent), `should_skip_dir`/
-      `should_skip_file` with exact legacy precedence (always-include checked before
-      any exclusion; base `IGNORED_DIR_NAMES`/stack dirs are pruned before `.exportignore`
-      is ever consulted, so always-include cannot rescue a base-ignored subtree)
-- [ ] `src/walk.rs` — `walkdir`-based traversal, top-down pruning, never follows
-      symlinks, `CancellationToken` checked inside the loop, `rayon` for the per-file
-      classification pass (not the pruning walk itself)
-- [ ] `src/plan.rs` — `PlannedFile`, `ExportPlan`, `build_export_plan()` (S2-scoped),
-      `write_export_plan_files()` (JSON/MD renderer matching legacy field names/order)
-- [ ] `src/error.rs` — `ScannerError` (thiserror) + `Result` alias
-- [ ] `src/lib.rs` — public re-exports, crate doc noting the S2 scope boundary
-- [ ] Fixtures: one tiny synthetic project per stack (12) + 1 mono-repo (2+ stacks) +
-      1 symlink-escape fixture, under `tests/fixtures/`
+- [+] `Cargo.toml`: added `walkdir`, `rayon`, `regex` to `[workspace.dependencies]`
+      with justification comments; wired into `crates/codepack-scanner/Cargo.toml`
+      via `dep.workspace = true` (plus already-justified `serde`/`serde_json`/`thiserror`
+      reused from S1, and `tempfile` as a dev-dependency)
+- [+] `error.rs` — `ScannerError` (thiserror) + `Result<T>` alias
+- [+] `constants.rs` — `IGNORED_DIR_NAMES` (18), `TEXT_EXTENSIONS` (133, not the
+      135 the task prompt claimed — recounted from the archive, see deviations),
+      `BINARY_EXTENSIONS` (84, not 89, same correction), `TEXT_FILENAMES_WITHOUT_EXTENSION`
+      (15); all four sets diffed byte-for-byte against the extracted archive
+- [+] `classify.rs` — `should_consider_text_file`, `looks_binary` ports
+- [+] `stack.rs` — `StackInfo`, the 12-stack rule table, `detect_stacks()`,
+      `merged_extra_ignored_dirs()`
+- [+] `ignore/` — `ExportIgnoreRules`, `ScanOptions` (+ `From<&codepack_core::Config>`),
+      `.exportignore` loader (`mod.rs`); hand-rolled `fnmatch.translate`-equivalent
+      matcher backed by `regex` (`pattern.rs`); `should_skip_dir`/`should_skip_file`
+      with exact legacy precedence, including the always-include-vs-base-ignore
+      subtlety (`rules.rs`)
+- [+] `walk.rs` — `IgnoredDirMatcher` (base ∪ stack ∪ config-extra, with the one
+      documented glob exception for `*.egg-info`), `walk_project()`: walkdir-based,
+      `follow_links(false)` + independent `path_is_symlink()` check, prunes top-down,
+      checks `CancellationToken` inside the sequential directory loop; rayon
+      parallelizes the per-file `stat()` pass after candidates are collected
+- [+] `plan/` (split from a single `plan.rs` — see file-size note below) —
+      `PlannedFile`, `ExportPlan`, `PlanSummary`, `build_export_plan()` (S2-scoped
+      only), `write_export_plan_files()` (JSON via serde field order + Markdown
+      renderer)
+- [+] `lib.rs` — crate doc stating the S2 scope boundary explicitly, public
+      re-exports, under 100 lines
 
 ## Verification
 
-- [ ] Constant-set tests (cardinality + curated member/non-member samples)
-- [ ] Per-stack detection tests (12) + mono-repo union test + primary-stack ordering
-- [ ] `.exportignore` rule tests ported 1:1 from `test_export_ignore*.py`
-- [ ] Property test: always-include beats custom `.exportignore`/config exclusion;
-      separate test proves base `IGNORED_DIR_NAMES`/stack dirs are NOT overridable
-- [ ] Symlinked directory is never descended into
-- [ ] `build_export_plan()` oracle tests ported from `test_export_plan*.py` (S2-scoped
-      baseline settings) — field names/order match the legacy JSON contract
-- [ ] `write_export_plan_files()` Markdown output matches the legacy template structure
-- [ ] Classification unit tests (`should_consider_text_file`, `looks_binary` incl. the
-      30% boundary — confirm `>` not `>=`)
-- [ ] `cargo xtask gate` green locally (fmt, clippy `-D warnings`, tests, `cargo deny
-      check`, `sync-agents --check`)
-- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+- [+] Unit tests colocated in each module (constants counts, classify table-driven
+      cases, stack detection per stack + mono-repo, pattern.rs glob-translate edge
+      cases, ignore/rules.rs precedence — including the two explicitly required
+      always-include tests: one proving it overrides `.exportignore`/custom exclusion,
+      a separate one proving it does NOT override base/stack directory pruning)
+- [+] `tests/` integration tests: per-stack fixtures (Node, Python with an ignored
+      dir containing a file, to exercise base-ignore pruning end-to-end), a mono-repo
+      fixture (Node.js + Python, proves the *union* of both stacks' extra ignored
+      dirs is applied, not just the primary one's), a symlink-escape test (I7, created
+      programmatically — see deviations, not a static fixture directory), four
+      `.exportignore` end-to-end tests, four I5 JSON-contract tests asserting the
+      literal serialized key sequence (top-level, `PlannedFile`, `RulesReport`,
+      `PlanSummary`), plus a self-check that the contract test would actually catch
+      a reorder
+- [+] `cargo xtask gate`: fmt, clippy `-D warnings`, tests, `cargo deny check`,
+      `sync-agents --check`
+- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
       proven-invariant comment
+- [+] `docs/architecture/overview.md` updated
+- [+] `ROADMAP.md`: `**Status.**` line under S2 + §1 table status flipped to "сделан",
+      honestly stating the S2 scope boundary and the `walkdir`-not-`ignore`-crate
+      deviation from the S2 "Состав" bullet's own wording
 
 ## Completion
 
-- [ ] `docs/architecture/overview.md` updated
-- [ ] `ROADMAP.md`: `**Status.**` line under S2 (Russian) + §1 table status updated,
-      including the honest scoping note (safety/diff filtering deferred to S3/S4/S9)
-- [ ] CI green on all three OSes (confirm after push)
-- [ ] Commits: checklist first, then implementation, separated logically
-- [ ] Fast-forward merge into `main` (after explicit owner sign-off, per workflow)
-- [ ] Final report to owner (Russian, per language policy)
+- [+] Commits: checklist first, then implementation, separated logically
+- [-] No merge to `main`, no push — stopped after committing on the branch per task
+      instructions
+- [+] Final report to the orchestrating agent (this session has no separate human
+      owner turn; report goes in the final assistant message)
 
----
+## Deviations recorded honestly
 
-## Next task
-
-Stage **S3 — Безопасность (`codepack-security`)** (`ROADMAP.md` §2) — ⭐ core value
-of the whole project. Start with the orientation ritual from
-`.ai/project/13-progress-tracking.md`.
+- `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS` have 133/84 entries in the actual legacy
+  archive, not the 135/89 the task prompt stated — recounted directly from
+  `docs/__arch__/codepack-main.zip` (line-range `sed`/`grep`, then diffed sorted lists
+  byte-for-byte against my Rust arrays; both matched exactly once corrected). All four
+  constant sets (including `IGNORED_DIR_NAMES` and `TEXT_FILENAMES_WITHOUT_EXTENSION`)
+  verified this way, not just eyeballed.
+- `*.egg-info` (Python stack's one glob-shaped extra-ignored-dir entry) is made to
+  actually glob-match in `IgnoredDirMatcher`. Legacy's own `should_ignore_dir` only
+  does exact-string set membership, so that entry never really prunes anything in the
+  original — the task instructions explicitly asked for the *intended* (working)
+  behavior here rather than the literal (inert) legacy behavior; documented inline in
+  `walk.rs` and in the `ROADMAP.md` Status line as a deliberate deviation, not a silent
+  behavior change.
+- No `.exportignore`/`safe_export_mode` semantic changed from legacy — only that one
+  glob-matching fix and the walkdir-vs-`ignore`-crate substitution (both required by
+  the task's own instructions, not opportunistic).
+- Symlink-escape coverage exists as a unit test (`walk.rs`) and an integration test
+  (`tests/symlink_escape.rs`), both creating the symlink *programmatically* inside a
+  `tempfile::tempdir()` rather than as a static fixture under `tests/fixtures/` — a
+  checked-in directory symlink is not reliably portable through a `git` checkout
+  across OSes and `core.symlinks` settings, so it would risk breaking `git clone` on
+  some machines. Both tests gracefully skip (with an `eprintln!`, not a hard failure)
+  if the current environment cannot create a directory symlink (e.g. Windows without
+  Developer Mode/admin) — on this dev machine symlink creation succeeded and both
+  tests actually exercised the assertion, not just the skip path.
+- `cargo-deny` needed `[bans] allow-wildcard-paths = true` added to `deny.toml` — the
+  first internal path dependency between workspace crates (`codepack-scanner ->
+  codepack-core`) tripped the wildcard-version ban. Recorded as a decision in
+  `docs/decisions/open-questions.md` (2026-07-23) since it affects every future
+  in-workspace path dependency (`engine -> domain crates -> core`), not just this one.
+- `generated_at` renders in UTC via a small dependency-free civil-calendar formatter
+  (Howard Hinnant's `civil_from_days` algorithm) instead of legacy's local-time
+  `datetime.now().isoformat(...)` — no timezone-database crate is in this stage's
+  approved dependency list, and this field is cosmetic (nothing parses it back).
+- `PlanSummary` omits legacy's `estimated_included_size` (formatted-bytes string —
+  `codepack-core` has no byte formatter until S6) and `skipped_dirs_count` (redundant
+  with `skipped_dirs.len()`), exactly as the task instructions asked; documented in
+  `plan/mod.rs`'s doc comment.
+- Markdown rendering (`plan/render.rs`) shows raw byte counts (`"1234 bytes"`) instead
+  of legacy's `format_bytes()` (`"1.21 KB"`) for the same reason — no formatter exists
+  yet in `codepack-core`; the task instructions explicitly said not to invent one.
+- Did not implement `format_export_plan_for_user` or `format_stack_label` — legacy
+  helpers that render a plan/stack summary as plain text for a GUI confirmation
+  dialog. Neither was named in the task's file-layout spec (only
+  `write_export_plan_files` and `detect_stacks`/`merged_extra_ignored_dirs` were), and
+  they are UI-facing text, which is out of scope for a UI-agnostic core crate at this
+  stage — `primary_stack` was kept since it is a one-line wrapper already exercised by
+  a legacy test and costs nothing to keep for a later stage's use.

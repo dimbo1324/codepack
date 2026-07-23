@@ -47,7 +47,7 @@
 |---|---|---|---|---|
 | S0 | Фундамент репозитория и гейт качества | Ядро | — | сделан |
 | S1 | Доменные типы и конфигурация (`codepack-core`) | Ядро | S0 | сделан |
-| S2 | Сканер: обход, ignore, детект стека (`codepack-scanner`) | Ядро | S1 | не начат |
+| S2 | Сканер: обход, ignore, детект стека (`codepack-scanner`) | Ядро | S1 | сделан |
 | S3 | **Безопасность** (`codepack-security`) | Ядро | S1 | не начат |
 | S4 | Diff и снапшоты (`codepack-diff`) | Ядро | S1 | не начат |
 | S5 | Хранилище SQLite (`codepack-storage`) | Ядро | S1 | не начат |
@@ -167,6 +167,55 @@ Q6, не входит в S1 (аналога в legacy нет, ROADMAP не на�
 - Golden-тесты: план экспорта совпадает с эталоном старой версии на фикстурах
   (минимум по одному проекту на стек).
 - Property-тесты правил ignore (включение всегда сильнее исключения).
+
+**Status.** `codepack-scanner` реализован **в границах этапа S2**: `build_export_plan()`
+применяет только базовое игнорирование (`IGNORED_DIR_NAMES`), директории от детектора
+стека и правила `.exportignore`/кастомные правила. Он **сознательно не** применяет
+safe-export-mode фильтрацию (это S3, `codepack-security`) и diff/incremental отбор (это
+S4, `codepack-diff`) — в текущем плане экспорта `severity` никогда не бывает
+`"high"`/`"critical"`, эти значения зарезервированы за S3.
+
+Состав: `constants.rs` (4 набора констант, сверены побайтово с архивом legacy —
+см. отклонение по числам ниже), `classify.rs` (`should_consider_text_file`,
+`looks_binary`), `stack.rs` (12 правил стека, `detect_stacks`,
+`merged_extra_ignored_dirs`), `ignore/` (`ExportIgnoreRules`, `ScanOptions` +
+`From<&codepack_core::config::Config>`, ручной `fnmatch.translate`-эквивалент на
+`regex` в `ignore/pattern.rs`, `should_skip_dir`/`should_skip_file` с точным legacy-
+приоритетом в `ignore/rules.rs`), `walk.rs` (`IgnoredDirMatcher`, `walk_project()` —
+`walkdir` без следования симлинкам + независимая проверка `path_is_symlink()`,
+проверка `CancellationToken` внутри цикла обхода, `rayon`-параллелизация постатовки
+файлов-кандидатов), `plan/` (директория-модуль: `build.rs`, `group.rs`, `render.rs`,
+`timestamp.rs` — `ExportPlan`/`PlannedFile` с зафиксированным порядком полей,
+`write_export_plan_files()` в JSON и Markdown). 85 юнит- + 13 интеграционных тестов
+(фикстуры `tests/fixtures/{node,python,monorepo}`, symlink-escape через
+`std::os::{unix,windows}::fs::symlink*` программно, JSON-контракт по инварианту I5).
+
+⚠️ Отклонения от планового описания этой стадии и от буквального legacy-поведения:
+- Обход реализован на `walkdir` (не на крейте `ignore`, вопреки формулировке в
+  «Составе» выше) — семантика `ignore`-краевого gitignore-движка (мульти-файловое
+  обнаружение, `**`, отрицания поверх исключённого предка) материально отличается от
+  legacy-парсера одного файла `.exportignore`; обоснование — в комментарии к
+  зависимости `regex` в корневом `Cargo.toml`.
+- `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS` содержат **133/84** записи, а не заявленные в
+  планировании 135/89 — пересчитано напрямую по архиву
+  (`docs/__arch__/codepack-main.zip`), см. `.ai/project/14-legacy-reference.md`.
+- `*.egg-info` (единственная glob-запись среди директорий Python-стека) реально
+  glob-матчится по basename при обрезке дерева. В самой legacy-версии
+  `should_ignore_dir` делает лишь точное сравнение строк, поэтому эта запись там
+  фактически никогда не срабатывает — воспроизведён предполагаемый смысл, а не
+  буквальный (нерабочий) legacy-код.
+- `generated_at` форматируется в UTC вручную (без внешней библиотеки календаря/зон),
+  а не как локальное время `datetime.now().isoformat(...)` в legacy — поле
+  косметическое, не часть парсируемого контракта.
+- `estimated_included_size` (форматированная байтовая строка) и `skipped_dirs_count`
+  из legacy-словаря `summary` не перенесены: в `codepack-core` пока нет
+  байт-форматтера (появится в S6); `skipped_dirs_count` избыточен (уже есть
+  `skipped_dirs.len()`).
+- `cargo deny`: добавлен `[bans] allow-wildcard-paths = true` в `deny.toml` — первая
+  внутриворкспейсная path-зависимость (`codepack-scanner → codepack-core`) без
+  диапазона semver ранее не встречалась и ошибочно помечалась как «wildcard»; путевые
+  зависимости и так зафиксированы локальным путём, это не ослабление supply-chain
+  политики.
 
 ---
 
