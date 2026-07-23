@@ -390,7 +390,8 @@ codepack-diff` подтверждён: ни одной сетевой завис
 `libssh2-sys`, `curl`, `reqwest`, `hyper` — отсутствуют), исходники крейта
 прогреплены на `Remote`/`fetch`/`push`/`clone`/`Cred` — ноль совпадений.
 `cargo xtask gate` зелёный локально (fmt, clippy `-D warnings`, тесты, `cargo deny
-check`, `sync-agents --check`).
+check`, `sync-agents --check`); прогон в CI подтверждён живьём (run #44, коммит
+`0fcb648`, все три ОС — `success`).
 
 Независимое ревью (`codepack-quality-reviewer`) подтвердило: I1 (нет сети), I2
 (источник неизменен — все git2-вызовы только на чтение), I7 (символические ссылки
