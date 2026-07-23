@@ -7,6 +7,12 @@ yanked = "deny"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Path dependencies between our own workspace crates (e.g. codepack-scanner ->
+# codepack-core, S2 onward) have no semver range by design — they are pinned to the
+# exact local commit already. Without this, cargo-deny flags every in-workspace path
+# dependency as a "wildcard", which is a false positive for internal, unpublished
+# crates, not a real supply-chain risk.
+allow-wildcard-paths = true
 
 [licenses]
 # Permissive licenses only. A copyleft dependency needs an explicit owner decision
