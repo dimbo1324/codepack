@@ -54,6 +54,14 @@ sha2 = "0.10"
 # SQLite via the `cc` crate at build time, mirroring S4's `git2`/`vendored-libgit2`
 # precedent — no system libsqlite3/pkg-config required on any of the three CI OSes.
 rusqlite = { version = "0.32", features = ["bundled"] }
+# S7 (codepack-reports): the report runner consumes S2/S3/S4/S6's already-computed
+# types directly (`ExportPlan`/`PlannedFile`, `ScanResult`, `DiffSelection`,
+# `format_bytes`/token estimates) rather than re-deriving them — registered here
+# following the same one-path-dependency-per-line convention as `codepack-core` above.
+codepack-scanner = { path = "crates/codepack-scanner" }
+codepack-security = { path = "crates/codepack-security" }
+codepack-diff = { path = "crates/codepack-diff" }
+codepack-tokens = { path = "crates/codepack-tokens" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

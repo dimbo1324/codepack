@@ -1,5 +1,46 @@
-//! Insight reports, AI context packs, and the HTML dashboard.
+//! Insight reports, AI context packs, and the HTML dashboard (BLUEPRINT §A.7).
 //!
-//! Implemented in stage S7 — see `ROADMAP.md`. This crate is an intentional
-//! placeholder so the workspace layout, lints, and quality gate exist before the
-//! first line of domain logic is written.
+//! ## Scope boundary (stage S7, `ROADMAP.md`)
+//!
+//! This crate never walks the filesystem itself: it consumes
+//! [`codepack_scanner::ExportPlan`]'s already-planned file list ([`context::Inventory`]
+//! is built from `ExportPlan.included_files`, never a fresh directory walk), and — for
+//! later groups — [`codepack_security::ScanResult`] and [`codepack_diff::DiffSelection`]
+//! as already-computed inputs. It never re-implements S2's ignore rules, S3's secret
+//! detector, S4's diff selection, or S6's byte/token formatting; it calls into them.
+//! A bounded, single-file read (a manifest like `package.json`, or a source file's
+//! content for a heuristic report) is not "walking" and stays in scope, matching the
+//! precedent set by `codepack-security::scan`'s own scope-boundary doc.
+//!
+//! No network access, ever (invariant I1) — nothing in this crate's plugin API may
+//! perform an HTTP call, now or in a later group. Reports read only from the staging
+//! tree (invariant I2): the original source directory is opened only for a handful of
+//! documented, read-only existence/metadata checks (e.g. `.git` presence), never
+//! written to. Every line of report output that quotes raw file content is redacted
+//! via [`context::redact_line`] before being written (invariant I3).
+//!
+//! This pass implements Group G (the shared glue every other group depends on:
+//! [`context`], [`plugin`], [`plugins_json`], [`profile`], [`project_profile`]) and
+//! Group A (the five simplest reports, in [`reports`]). Groups B (security wrapper),
+//! C (`git2` reports), D (manifest parsers), E (heuristic/derived reports), F (the AI
+//! bundle), and the dashboard/`manifest.json`/`INDEX.md`/localization slice of Group G
+//! are later, separate passes — see `task-checklist.md`.
+
+pub mod context;
+mod error;
+mod paths;
+pub mod plugin;
+pub mod plugins_json;
+pub mod profile;
+pub mod project_profile;
+pub mod reports;
+#[cfg(test)]
+mod test_support;
+mod text;
+
+pub use context::ReportContext;
+pub use error::{ReportError, Result};
+pub use plugin::{ReportJob, RunSummary, run_reports};
+pub use plugins_json::write_report_plugins_json;
+pub use project_profile::{ProjectProfile, build_project_profile, write_project_profile_json};
+pub use reports::group_a_jobs;

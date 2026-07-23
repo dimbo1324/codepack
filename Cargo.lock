@@ -96,6 +96,18 @@ version = "2.0.0-dev"
 [[package]]
 name = "codepack-reports"
 version = "2.0.0-dev"
+dependencies = [
+ "codepack-core",
+ "codepack-diff",
+ "codepack-scanner",
+ "codepack-security",
+ "codepack-tokens",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
 
 [[package]]
 name = "codepack-scanner"
