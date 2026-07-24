@@ -16,6 +16,16 @@
 //! never nothing at all. History recording ([`codepack_storage::record_export_run`]) and
 //! staging cleanup follow the same "always run" rule, on every exit path.
 //!
+//! The `cancelled` flag recorded on the history row is the value latched **before**
+//! step 7 begins (legacy `exporter.py` line 264) and is never updated again — a
+//! cancellation arriving only during step 7/8 leaves that recorded field `false`,
+//! matching legacy exactly. The success gate that decides whether a new snapshot
+//! baseline is recorded is a separate, later computation that *does* fresh-recheck the
+//! token (legacy line 313, `not cancelled and not self.cancel_event.is_set()`) — see
+//! this module's own `successful` computation below, restored to match legacy during
+//! this pass's verification work (S9 Verification, `task-checklist.md`) after an
+//! earlier port had dropped the fresh recheck.
+//!
 //! ## `history_snapshot_payload`'s real double-work, reproduced on purpose
 //!
 //! A successful run re-snapshots the **source** tree from scratch via
@@ -64,8 +74,10 @@ pub struct ExportOutcome {
     /// `true` once cancellation was observed at any point during the run — steps 3-6
     /// may have been partially or entirely skipped as a result.
     pub cancelled: bool,
-    /// Legacy's success gate: `!cancelled && copy_stats.errors == 0`. Gates whether a
-    /// new history snapshot baseline was recorded.
+    /// Legacy's success gate: `!cancelled && !cancel.is_cancelled() &&
+    /// copy_stats.errors == 0` (see this module's own doc comment on the
+    /// `successful` computation for why both the latched flag and a fresh recheck are
+    /// required). Gates whether a new history snapshot baseline was recorded.
     pub successful: bool,
     pub copy_stats: CopyStats,
     /// Defaults to [`TextDumpStats::default`] when step 5 never ran.
@@ -196,13 +208,14 @@ pub fn run_export(
     // steps 3 onward. `codepack_scanner::build_export_plan`/`codepack_diff::resolve_diff_selection`
     // (S2/S4, already shipped and reviewed) instead treat an *already*-cancelled token
     // as a hard error, not a cooperative "stop and return what you have so far" signal
-    // — a real, disclosed design mismatch between those crates and this pipeline's own
-    // "steps 7-8 always run" guarantee. This function resolves the one case fully
-    // within its own control: a token already cancelled before step 1 is ever called
-    // skips steps 1-2 outright (see [`cancelled_before_planning_outcome`]) rather than
-    // letting `run_export_plan` hard-fail the whole export. A token that becomes
-    // cancelled *during* step 1's own parallel walk remains a narrower, genuinely
-    // timing-dependent race this pass does not attempt to paper over.
+    // — a real design mismatch between those crates and this pipeline's own "steps 7-8
+    // always run" guarantee. A token already cancelled before step 1 is ever called
+    // skips steps 1-2 outright (see [`cancelled_before_planning_outcome`]). A token
+    // that becomes cancelled *during* step 1's own parallel walk (a narrower,
+    // genuinely timing-dependent race) is now also handled, not just disclosed: see
+    // [`crate::error::is_cancellation_error`] and this function's own match on it at
+    // the step 1 (and step 6) call sites below — found reachable in practice, not
+    // merely hypothetical, during this pass's own cancellation-battery testing.
     let (plan_outcome, copy_stats) = if cancel.is_cancelled() {
         log("export cancelled before step 1 began; steps 1-2 skipped");
         std::fs::create_dir_all(&paths.insights_dir).map_err(|source| {
@@ -217,13 +230,27 @@ pub fn run_export(
         )
     } else {
         send_step_started(progress, "1/8: plan");
-        let plan_outcome = run_export_plan(
+        // A cancellation that arrives in the narrow window between the outer
+        // `cancel.is_cancelled()` check above and `run_export_plan`'s own internal
+        // recheck (inside `codepack_scanner::build_export_plan`/
+        // `codepack_diff::resolve_diff_selection`) surfaces as a hard,
+        // cancellation-shaped `Err` rather than a cooperative partial result — see
+        // `crate::error::is_cancellation_error`'s own doc comment for why this is
+        // handled here instead of propagated.
+        let plan_outcome = match run_export_plan(
             &paths,
             config,
             file_overrides,
             previous_snapshot.as_ref(),
             cancel,
-        )?;
+        ) {
+            Ok(outcome) => outcome,
+            Err(err) if crate::error::is_cancellation_error(&err) => {
+                log("export cancelled during step 1's own planning work; step 1 treated as empty");
+                cancelled_before_planning_outcome(&paths, config)
+            }
+            Err(err) => return Err(err),
+        };
         send_step_finished(progress, "1/8: plan");
 
         send_step_started(progress, "2/8: copy");
@@ -287,13 +314,16 @@ pub fn run_export(
 
     if !cancelled && !cancel.is_cancelled() {
         send_step_started(progress, "6/8: analytics");
-        analytics_outcome = Some(run_analytics(
-            &paths,
-            config,
-            &plan_outcome.diff_selection,
-            cancel,
-            &log,
-        )?);
+        // Same race, same resolution as step 1's own comment above:
+        // `run_analytics`'s internal `build_export_plan`/`scan_project` calls can
+        // hard-error on a cancellation that arrives after this gate already passed.
+        match run_analytics(&paths, config, &plan_outcome.diff_selection, cancel, &log) {
+            Ok(outcome) => analytics_outcome = Some(outcome),
+            Err(err) if crate::error::is_cancellation_error(&err) => {
+                log("export cancelled during step 6's own analytics work; step 6 treated as empty");
+            }
+            Err(err) => return Err(err),
+        }
         send_step_finished(progress, "6/8: analytics");
     }
 
@@ -367,7 +397,17 @@ pub fn run_export(
     refresh_bundle_metadata(&archive_result);
     send_step_finished(progress, "8/8: archive");
 
-    let successful = !cancelled && copy_stats.errors == 0;
+    // Ported from legacy `exporter.py`'s own line 313 (`successful = not cancelled and
+    // not self.cancel_event.is_set() and copy_stats.errors == 0`): legacy re-checks the
+    // token fresh here, *after* steps 7-8 (manifest + archiving) have already run,
+    // deliberately on top of the earlier-latched `cancelled` flag. A cancellation that
+    // arrives only during manifest writing or archiving therefore still blocks the
+    // history snapshot from being recorded as a successful baseline, even though (also
+    // matching legacy) it is too late to flip the separately-recorded `cancelled` field
+    // on the history row itself — that field is intentionally the earlier latch, not
+    // this fresh recheck. This pass found the earlier port missing the fresh recheck
+    // (it read `cancelled` alone) and restored it for parity.
+    let successful = !cancelled && !cancel.is_cancelled() && copy_stats.errors == 0;
 
     let token_count = if paths.text_dump.exists() {
         let bytes = std::fs::metadata(&paths.text_dump)

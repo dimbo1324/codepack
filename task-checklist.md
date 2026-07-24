@@ -265,23 +265,96 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
 
 ## Verification — S9
 
-- [ ] Golden/shape-parity tests: one fixture per stack (node/python/monorepo/+1) —
-      every expected artifact present (28/29 plan+diff, structure/git/text-dump,
-      ~26 reports + profile/plugins/AI bundle/dashboard, manifest/INDEX,
-      27/archive output), shape not byte-identity (host/time-dependent content)
-- [ ] 8-scenario cancellation suite (one per pipeline step): prompt stop, no
-      `snapshot` row written, pre-seeded baseline provably unchanged (row-for-row,
-      reusing S5's own assertion pattern), staging still cleaned up per policy,
-      `export_run.cancelled = true`
-- [ ] ≥50k-file synthetic-fixture performance test, `#[ignore]`-gated / separate
-      slow-path invocation (not part of the default fast test run)
-- [ ] `last_export` mode round-trip: export once, edit a file, export again,
-      confirm only the edited file is selected
-- [ ] `cargo tree -p codepack-engine`: no network-capable crate
-- [ ] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `cargo deny check`,
-      `sync-agents --check`)
-- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
-      proven-invariant comment
+- [+] Shape-parity test (`tests/shape_parity.rs`): one fixture combining a `.py` file,
+      a `.md` file, a `.env` file, and a small one-commit git repo, run through the
+      full pipeline once — every expected top-level artifact asserted present (28/29
+      plan+diff, structure/git/text-dump, all ~28 numbered reports + `PROJECT_PROFILE
+      .json`/`REPORT_PLUGINS.json`/`AI_CONTEXT/`/`AI_PROMPTS/`/`REPORT_DASHBOARD.html`,
+      manifest/INDEX, 27/archive plan + the final ZIP with `manifest.json`/`INDEX.md`
+      inside and no leaked `.env`), shape not byte-identity, per this criterion's own
+      wording. **Narrowed from the original "one fixture per stack" framing** to the
+      single multi-file-type fixture this pass's own instructions specified instead —
+      an explicit, requested scope change, not a shortfall.
+- [+] Cancellation battery (`tests/cancellation.rs`, plus `tests/pipeline.rs`'s
+      pre-existing "cancelled before step 1" test): **8 scenarios total, not a single
+      file of 8** — boundary 0 (before step 1, already covered by `pipeline.rs`) plus
+      7 new tests, one per boundary after steps 1 through 7. Each drives a real
+      `codepack_core::CancellationToken`/progress-channel pair, cancelling
+      deterministically on a real `ProgressEvent` (never a sleep). Every scenario
+      asserts: no `snapshot` row advance (a pre-seeded baseline is proven row-for-row
+      unchanged via `latest_snapshot`, reusing `codepack-storage`'s own
+      `run.rs` assertion pattern), `run.successful = false`, staging cleanup per policy
+      (both `keep_staging_folder` values exercised), and manifest/archive still exist.
+      **Boundary 6 uses `StepStarted` instead of `StepFinished`** (documented in
+      `tests/support/mod.rs`) to avoid a genuine last-line race at the final
+      pre-step-7 `cancelled` latch. **Boundary 7 asserts a documented asymmetry**
+      confirmed against legacy `exporter.py` (lines 264 vs 313): `export_run.cancelled`
+      stays `false` (the field is latched before step 7 and never re-touched, matching
+      legacy exactly) while the baseline is still never advanced (the `successful` gate
+      freshly re-checks the token after archiving, also matching legacy). **Two real
+      bugs found and fixed during this work, not merely disclosed** — see Completion
+      notes below for both.
+- [+] ≥50k-file synthetic-fixture performance test (`tests/perf_smoke.rs`,
+      `#[ignore]`-gated, nested nowhere-near-one-flat-directory layout). Run explicitly
+      in `--release` (confirmed passing twice): **50,000 files exported in ~155-157s
+      wall-clock** on this pass's own sandbox (a virtualized, possibly
+      antivirus-throttled Windows environment — `.ai/project/11-commands.md`'s own
+      documented platform caveat). The budget was widened from an initial,
+      too-optimistic 120s to 300s after measuring both a 5,000-file run (~12.9s) and
+      the full 50,000-file run: a ~12x wall-clock increase for a 10x file-count
+      increase is consistent with linear scaling plus a modest constant per-run
+      overhead, not a quadratic blowup — this measurement is documented directly in
+      the test's own module doc comment, not just here. No panic, no error, a real
+      archive produced.
+- [+] `last_export` mode round-trip (`tests/last_export_mode.rs`): export once (no
+      prior baseline → behaves like `"all"` mode with `codepack_diff`'s own documented
+      warning), edit one of three files, export again against the same `conn` — the
+      second run's copied project directory contains only the edited file, and
+      `29_export_comparison_report.md` names exactly that one file under "Изменённые".
+      Asserted indirectly via on-disk artifacts, per this pass's own preference, rather
+      than widening `ExportOutcome`'s public shape.
+- [+] `cargo tree -p codepack-engine`: confirmed clean — `git2` uses
+      `default-features = false` + `vendored-libgit2` (no ssh/https transport
+      features); no `openssl-sys`/`libssh2-sys`/`curl`/`reqwest`/`hyper` or any other
+      network-capable crate anywhere in the tree.
+- [+/-] `cargo xtask gate`: `fmt`, `clippy -D warnings`, `cargo test --workspace`, and
+      `sync-agents --check` all green. `cargo deny check` fails with `error: no such
+      command: 'deny'` — the `cargo-deny` binary is confirmed unavailable in this
+      sandbox, the same pre-existing environment gap every prior S8/S9 pass already
+      hit and documented; not fixed here, per instruction.
+- [+] No `unsafe` anywhere in `codepack-engine` (grepped). No bare `unwrap()`/`expect()`
+      outside `#[cfg(test)]` modules (grepped file-by-file up to each file's own test
+      module boundary) — confirmed clean, no remediation needed.
+
+### Two real bugs found and fixed during this verification pass
+
+1. **`successful` never re-checked the cancellation token after archiving.**
+   `orchestrator.rs` computed `let successful = !cancelled && copy_stats.errors == 0;`
+   — `cancelled` alone, the value latched *before* step 7. Legacy `exporter.py` line
+   313 computes `successful = not cancelled and not self.cancel_event.is_set() and
+   copy_stats.errors == 0`, deliberately re-checking the token fresh *after* steps 7-8
+   complete. Without the fresh recheck, a cancellation arriving only during manifest
+   writing or archiving would have been recorded as a full success and would have
+   advanced the history snapshot baseline despite the user having cancelled — a real
+   parity gap with data-integrity consequences (invariant I6 adjacent). Fixed to
+   `!cancelled && !cancel.is_cancelled() && copy_stats.errors == 0`, restoring legacy
+   parity exactly; `boundary_7_...` in `tests/cancellation.rs` exercises the fix
+   directly.
+2. **A cancellation race could hard-crash the whole export instead of degrading
+   gracefully.** `codepack_scanner::build_export_plan`/`codepack_diff::
+   resolve_diff_selection`/`codepack_security::scan_project` (S2/S3/S4, already
+   shipped) hard-error on an already-cancelled token rather than cooperating. The
+   orchestrator's own outer gates (`if !cancel.is_cancelled() { ... }`) only checked
+   the token *before* calling into step 1's and step 6's own internal work — a
+   cancellation landing in that narrow window surfaced as a hard `Err` from
+   `run_export`, skipping steps 7-8 (manifest + archiving) entirely and breaking this
+   pipeline's core "steps 7-8 always run" guarantee. This was previously disclosed as
+   an accepted, narrow, step-1-only edge case; this pass's own cancellation battery
+   hit it twice on an ordinary (non-crafted) run, proving it reachable in practice at
+   step 6 too, not merely a theoretical corner. Fixed by adding
+   `crate::error::is_cancellation_error` and matching on it at both call sites
+   (`orchestrator.rs`, steps 1 and 6), falling back to an honestly-empty step result
+   instead of propagating.
 
 ## Completion — S9
 

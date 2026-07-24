@@ -31,3 +31,26 @@ pub enum EngineError {
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
+
+/// `true` when `err` is one of the lower-layer crates' own "the token was already
+/// cancelled when I was called" hard error (`ScannerError::Cancelled`/
+/// `DiffError::Cancelled`/`SecurityError::Cancelled` — S2/S4/S3, already shipped and
+/// reviewed with a fail-fast, not cooperative-partial, cancellation contract).
+///
+/// [`crate::orchestrator::run_export`] calls into these crates from inside its own
+/// steps 1 and 6; a cancellation that arrives in the narrow window between an outer
+/// `cancel.is_cancelled()` gate check and one of these calls' own internal recheck
+/// would otherwise surface as a hard `Err`, breaking this pipeline's own "steps 7-8
+/// (and history recording) always run" guarantee. `run_export` matches on this
+/// predicate at both call sites to fall back to an honestly-empty step result instead
+/// — found and fixed during this pass's own cancellation-battery testing (a real,
+/// reachable race, not a purely theoretical one: it failed two of that suite's own
+/// scenarios on an ordinary run before this fix).
+pub(crate) fn is_cancellation_error(err: &EngineError) -> bool {
+    matches!(
+        err,
+        EngineError::Scanner(codepack_scanner::ScannerError::Cancelled)
+            | EngineError::Diff(codepack_diff::DiffError::Cancelled)
+            | EngineError::Security(codepack_security::SecurityError::Cancelled)
+    )
+}
