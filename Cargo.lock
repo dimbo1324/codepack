@@ -102,6 +102,7 @@ dependencies = [
  "codepack-scanner",
  "codepack-security",
  "codepack-tokens",
+ "git2",
  "regex",
  "serde",
  "serde_json",

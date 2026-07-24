@@ -19,18 +19,27 @@
 //! written to. Every line of report output that quotes raw file content is redacted
 //! via [`context::redact_line`] before being written (invariant I3).
 //!
-//! An earlier pass implemented Group G (the shared glue every other group depends on:
-//! [`context`], [`plugin`], [`plugins_json`], [`profile`], [`project_profile`]) and
-//! Group A (the five simplest reports, in [`reports`]). This pass adds Group B (the
-//! `06_security_scan.{txt,json,sarif}` adapter over `codepack-security`'s own writers)
-//! and Group D (the manifest-parser reports: `03_dependencies.txt`, `04_scripts.txt`,
-//! `09_config.txt`, `10_docker.txt`, `26_dependency_intelligence.md`). Group C (`git2`
-//! reports), E (heuristic/derived reports), F (the AI bundle), and the
+//! Earlier passes implemented Group G (the shared glue every other group depends on:
+//! [`context`], [`plugin`], [`plugins_json`], [`profile`], [`project_profile`]), Group A
+//! (the five simplest reports), Group B (the `06_security_scan.{txt,json,sarif}` adapter
+//! over `codepack-security`'s own writers), and Group D (the manifest-parser reports:
+//! `03_dependencies.txt`, `04_scripts.txt`, `09_config.txt`, `10_docker.txt`,
+//! `26_dependency_intelligence.md`). This pass adds Group C (`git2`-based, read-only
+//! reports: `05_git_deep.txt`, `21_git_timeline_report.md` — see [`git_support`], not
+//! public, and each report's own module doc) and Group E (heuristic/derived reports
+//! that synthesize Inventory/manifest data: the shared import-graph primitive in
+//! [`graph`], plus `11_routes_and_pages.txt`, `14_dependency_graph.{md,mmd}`,
+//! `15_architecture_report.md`, `16_key_files_report.md`, `17_code_quality_report.md`,
+//! `18_api_surface_report.md`, `19_frontend_report.md`, `20_backend_report.md`,
+//! `22_project_health_report.md`, `23_refactoring_opportunities.md`,
+//! `24_architecture_map.md`). Group F (the AI bundle) and the
 //! dashboard/`manifest.json`/`INDEX.md`/localization slice of Group G are later,
 //! separate passes — see `task-checklist.md`.
 
 pub mod context;
 mod error;
+mod git_support;
+pub mod graph;
 mod paths;
 pub mod plugin;
 pub mod plugins_json;
@@ -46,4 +55,4 @@ pub use error::{ReportError, Result};
 pub use plugin::{ReportJob, RunSummary, run_reports};
 pub use plugins_json::write_report_plugins_json;
 pub use project_profile::{ProjectProfile, build_project_profile, write_project_profile_json};
-pub use reports::{group_a_jobs, group_b_jobs, group_d_jobs};
+pub use reports::{group_a_jobs, group_b_jobs, group_c_jobs, group_d_jobs, group_e_jobs};

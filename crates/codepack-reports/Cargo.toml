@@ -13,6 +13,7 @@ codepack-scanner.workspace = true
 codepack-security.workspace = true
 codepack-diff.workspace = true
 codepack-tokens.workspace = true
+git2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
