@@ -101,12 +101,16 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
 
 ## Completion — S8
 
-- [ ] `docs/architecture/overview.md` updated (`codepack-archive` moves from
-      placeholder) — deferred to the final combined completion pass (with S9)
-- [ ] `ROADMAP.md` — S8 `**Status.**` line + §1 table — deferred to the final
-      combined completion pass
-- [ ] `docs/decisions/open-questions.md` updated if the restore-script substitution
-      or First-Fit-Decreasing deferral needs a recorded open question — deferred
+- [+] `docs/architecture/overview.md` updated (`codepack-archive` moves from
+      placeholder) — done in the final combined completion pass (with S9)
+- [+] `ROADMAP.md` — S8 `**Status.**` line + §1 table — done in the final combined
+      completion pass
+- [+] `docs/decisions/open-questions.md` — reviewed: neither the restore-script
+      substitution nor the First-Fit-Decreasing deferral needed a new open-question
+      row (both are precedented, already-settled design calls with their reasoning
+      captured directly in `ROADMAP.md`'s S8 `**Status.**` block, not owner-facing
+      open decisions) — no new row added, judgment call recorded here rather than
+      silently skipped
 - [+] Independent review pass (`codepack-quality-reviewer`) — found and fixed: (1)
       the commit message overclaimed that `ZipFile::enclosed_name()` alone is
       insufficient against path traversal — reviewer's own falsifiability test
@@ -358,23 +362,49 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
 
 ## Completion — S9
 
-- [ ] `docs/architecture/overview.md` updated (`codepack-engine` moves from
+- [+] `docs/architecture/overview.md` updated (`codepack-engine` moves from
       placeholder; first real producer/consumer of the progress/log channel)
-- [ ] `ROADMAP.md` — S9 `**Status.**` line + §1 table
-- [ ] `docs/decisions/open-questions.md` — Q7/Q8/Q9/Q10/Q11/Q13 resolved here or
-      explicitly re-deferred with a named, honest reason (not silently dropped)
-- [ ] Independent review pass (`codepack-quality-reviewer`)
+- [+] `ROADMAP.md` — S9 `**Status.**` line + §1 table
+- [+] `docs/decisions/open-questions.md` — Q7/Q8/Q9/Q10/Q11 explicitly re-deferred
+      (each re-checked against the real S9 implementation and confirmed still open,
+      not silently dropped); Q13 explicitly narrowed (not fully closed) — S9's own
+      pipeline now checks cancellation inside every step's loop, closing the
+      practical risk, but `codepack-reports::run_reports` itself is unchanged and
+      still only checks between whole reports
+- [+] Independent review pass (`codepack-quality-reviewer`) — found and fixed one
+      real defect: staging cleanup only ran at `run_export`'s function tail, so any
+      of its many earlier `?` error returns (copy/structure/git/text-dump/manifest/
+      archive/storage failures) skipped cleanup and leaked the staging directory.
+      Fixed with an RAII `StagingCleanupGuard` whose `Drop` fires on every exit path
+      (success, early `?` return, or unwinding panic); three new unit tests added.
+      Everything else the review checked (successful-gate fresh recheck, I6
+      structural guarantee in `codepack-storage` wiring, architecture boundaries,
+      secret redaction at all three write sites, cancellation-battery and
+      shape-parity test honesty) was independently re-derived from the code and
+      confirmed correct on the first pass.
 
 ---
 
 ## Completion (both stages, final)
 
-- [ ] `docs/architecture/overview.md` and `ROADMAP.md` updated for BOTH S8 and S9
+- [+] `docs/architecture/overview.md` and `ROADMAP.md` updated for BOTH S8 and S9
       together (S8's own completion items above were deferred to this pass)
-- [ ] CI green on all three OSes; merge only after explicit owner sign-off
-- [ ] Commits: checklist first, then S8, then S9 (sequenced by group), then any
-      review-driven fix commits, separated logically
-- [ ] Final report to owner (Russian, per language policy)
+- [+/-] Local quality gate green: `cargo fmt --all --check`, `cargo clippy
+      --workspace --all-targets -- -D warnings`, `cargo test --workspace` (all
+      pass; `codepack-engine`'s own non-`#[ignore]` test count is 79 including the
+      3 new `StagingCleanupGuard` tests added by the review fix), `cargo xtask
+      sync-agents --check` all green. `cargo deny check` unavailable in this
+      sandbox (pre-existing, documented gap — same as every prior S8/S9 pass). CI
+      on the three GitHub Actions OSes confirmed live for this pass — see this
+      pass's own final report for the run link/result.
+- [ ] Merge into `main` — **not performed**, per `.ai/universal/01-workflow.md`
+      ("merge into `main` only fast-forward and only after the project's full
+      quality gate is green" + explicit owner sign-off). Left for the owner to
+      request explicitly.
+- [+] Commits: checklist first, then S8, then S9 (sequenced by group), then the
+      review-driven staging-cleanup fix, then this completion-documentation pass —
+      separated logically, matches the plan
+- [+] Final report to owner (Russian, per language policy)
 
 ---
 
