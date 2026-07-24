@@ -36,96 +36,193 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
 
 ## Implementation — S8 (`codepack-archive`)
 
-- [ ] `error.rs` — `ArchiveError` (thiserror), `Result` alias
-- [ ] `options.rs` — `ArchiveOptions` + `From<&codepack_core::config::Config>`
+- [+] `error.rs` — `ArchiveError` (thiserror), `Result` alias
+- [+] `options.rs` — `ArchiveOptions` + `From<&codepack_core::config::Config>`
       (`include_project_in_zip`, `effective_zip_part_bytes()`)
-- [ ] `entry.rs` — `ArchiveEntry`, `classify_archive_group` (exact 14-group port,
+- [+] `entry.rs` — `ArchiveEntry`, `classify_archive_group` (exact 14-group port,
       exact first-match-wins priority order — `reports/`-prefix and
       test-component checks run *before* extension-based checks), `collect_entries`
       (cancellation checked per file inside the walk loop)
-- [ ] `plan.rs` — `ArchivePartPlan`/`ArchivePlan`, `plan_archive` (First-Fit-by-group
+- [+] `plan.rs` — `ArchivePartPlan`/`ArchivePlan`, `plan_archive` (First-Fit-by-group
       at target 500MB/hard limit 512MB/8MB reserve, large-file-gets-own-part,
       deterministic `(group, arcname.casefold())` sort), `predicted_result_for_plan`
-- [ ] `report.rs` — `write_archive_plan_report` (`27_archive_plan.md`/`.json`,
+- [+] `report.rs` — `write_archive_plan_report` (`27_archive_plan.md`/`.json`,
       self-contained, no `codepack-reports` dependency)
-- [ ] `build.rs` — `build_final_archives`: 3-pass re-plan + `on_plan_ready` hook at
+- [+] `build.rs` — `build_final_archives`: 3-pass re-plan + `on_plan_ready` hook at
       the two exact legacy call sites (before real write; on the
-      exceeded-after-write retry), single-ZIP write at `ZIP_DEFLATED` level 6,
-      post-write hard-limit check + delete-and-rebuild-as-split fallback,
+      exceeded-after-write retry, **re-walking after both hook calls**, fixed
+      during review — see Completion notes), single-ZIP write at `ZIP_DEFLATED`
+      level 6, post-write hard-limit check + delete-and-rebuild-as-split fallback,
       split-part write loop with per-entry cancellation, `oversized_files`
       reporting (no recursive re-split, matches legacy)
-- [ ] `restore.rs` — `safe_member_target` (lexical component-based path validation —
+- [+] `restore.rs` — `safe_member_target` (lexical component-based path validation —
       no `canonicalize()`, which requires the path to already exist),
-      `extract_zip_safely` (primary defense via `ZipFile::enclosed_name()` +
+      `extract_zip_safely` (dual check via `ZipFile::enclosed_name()` +
       the lexical check, fail-closed on the first bad entry, matching legacy's
       abort-not-skip behavior), `restore_archive_set`,
       `ARCHIVE_SET_MANIFEST.json`/`RESTORE_INSTRUCTIONS.md` writers — a Rust
       library function replaces legacy's bundled `restore_archives.py` script
-- [ ] `lib.rs` — crate-scope doc stating the S8 scope boundary, mirrors
+- [+] `lib.rs` — crate-scope doc stating the S8 scope boundary, mirrors
       `codepack-diff`'s style, under 100 lines
 
 ## Verification — S8
 
-- [ ] `classify_archive_group` unit tests: all 14 groups + priority-order edge cases
+- [+] `classify_archive_group` unit tests: all 14 groups + priority-order edge cases
       (reports/-prefix beats extension, singular/plural "test" at any depth,
       dockerfile-prefix match, `00_metadata` casefold matching)
-- [ ] `plan_archive` unit tests: same-group bundling, group-switch flush, large-file
+- [+] `plan_archive` unit tests: same-group bundling, group-switch flush, large-file
       isolation, deterministic part indices
-- [ ] Single-ZIP round-trip integration test (byte-for-byte, level-6 deflate
+- [+] Single-ZIP round-trip integration test (byte-for-byte, level-6 deflate
       verified via the `zip` crate's own read-back metadata)
-- [ ] Split-set integration test (tiny `part_limit_bytes`, multiple parts, manifest/
+- [+] Split-set integration test (tiny `part_limit_bytes`, multiple parts, manifest/
       restore-instructions written and parse correctly)
-- [ ] Restore round-trip integration test (split set → fresh directory → contents
+- [+] Restore round-trip integration test (split set → fresh directory → contents
       match exactly)
-- [ ] Single-exceeded-after-write retry test (near-zero-byte file + tiny limit,
-      deterministic recipe — the ZIP container overhead alone exceeds the limit)
-- [ ] Security test: malicious entry paths (`../../x`, absolute, embedded-`..`)
+- [+] Single-exceeded-after-write retry test (near-zero-byte file + tiny limit,
+      deterministic recipe — the ZIP container overhead alone exceeds the limit;
+      genuinely exercises the retry, confirmed by review via `hook_calls == 2`)
+- [+] Security test: malicious entry paths (`../../x`, absolute, embedded-`..`)
       rejected before any write outside the destination directory; a legitimate
       entry before the malicious one in the same archive is still safely written
       (honest partial-safe-prefix behavior, ported not silently changed)
-- [ ] Cancellation test: pre-cancelled token yields a partial, honestly-incomplete
-      result (I6-adjacent — never a false "complete" result)
-- [ ] `cargo tree -p codepack-archive`: only `codepack-core` + `zip` (+ its own
-      transitive deps) — no network-capable crate, no new `deny.toml` exception
-- [ ] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `cargo deny check`,
+- [+] Cancellation test: pre-cancelled token yields a partial, honestly-incomplete
+      result (I6-adjacent — never a false "complete" result). Mid-loop
+      (post-start) cancellation is checked inside `collect_entries`/`write_zip`'s
+      loops (confirmed by code reading) but not exercised by a dedicated
+      timing-based test — judged not worth the flakiness risk of a thread-timed
+      test for an already-code-confirmed property; disclosed, not silently skipped.
+- [+] `cargo tree -p codepack-archive`: only `codepack-core` + `zip` (+ its own
+      transitive deps, narrowed to `deflate-flate2-zlib-rs` — no unused `zopfli`
+      backend) — no network-capable crate, no new `deny.toml` exception
+- [+] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `cargo deny check`,
       `sync-agents --check`)
-- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
       proven-invariant comment
 
 ## Completion — S8
 
 - [ ] `docs/architecture/overview.md` updated (`codepack-archive` moves from
-      placeholder)
-- [ ] `ROADMAP.md` — S8 `**Status.**` line + §1 table
+      placeholder) — deferred to the final combined completion pass (with S9)
+- [ ] `ROADMAP.md` — S8 `**Status.**` line + §1 table — deferred to the final
+      combined completion pass
 - [ ] `docs/decisions/open-questions.md` updated if the restore-script substitution
-      or First-Fit-Decreasing deferral needs a recorded open question
-- [ ] Independent review pass (`codepack-quality-reviewer`)
+      or First-Fit-Decreasing deferral needs a recorded open question — deferred
+- [+] Independent review pass (`codepack-quality-reviewer`) — found and fixed: (1)
+      the commit message overclaimed that `ZipFile::enclosed_name()` alone is
+      insufficient against path traversal — reviewer's own falsifiability test
+      (removing `safe_member_target`) showed the opposite for the three tested
+      payloads; both checks are legitimate defense-in-depth, kept, but the
+      overclaiming language corrected; (2) a real parity gap — the single→split
+      retry path reused stale pre-hook entries instead of re-walking after the
+      second `on_plan_ready` call, silently dropping content that call itself
+      wrote — fixed, now re-walks after both hook calls, matching legacy; (3) the
+      `zip` feature selection pulled in an unused `zopfli` backend — narrowed;
+      (4) a misattributed Q7 citation in a doc comment — corrected.
 
 ---
 
-## S9 (`codepack-engine`) — planned once S8 is real code
+## Preparation — S9
 
-This section is a placeholder until S8 lands; S9's own planning pass will replace it
-with the full Preparation/Implementation/Verification/Completion breakdown, mirroring
-how S7's planning happened only after S6 existed as real code (though S6/S7 were
-independent — S9 has a genuine hard dependency on S8's actual public API, so this
-sequencing is load-bearing here, not just tidiness).
+- [+] Orientation ritual re-confirmed at planning start (git status/log, ROADMAP,
+      overview.md, task-checklist.md, open-questions.md) — S8 real code (incl.
+      review fixes), S9 next
+- [+] **Major scope finding**: no existing crate implements pipeline steps 2 (copy),
+      3 (structure report), 4 (Git report), or 5 (text dump), or an `ExportPaths`
+      constructor — confirmed via grep across every crate and via explicit
+      "arrives with S9"/"S9's job to combine" doc comments already left in S1-S3.
+      S9 is roughly half new pipeline-step logic, half orchestration — not a thin
+      glue layer, comparable in size to S7. Recorded honestly rather than
+      discovered mid-implementation.
+- [+] Design decision: copy step (2) derives its file list from
+      `ExportPlan.included_files` (already symlink-safe, already ignore-rule
+      filtered by S2) + safety/diff filtering — not a second independent tree walk
+      re-implementing ignore-directory logic a third time
+- [+] Design decision: step 6's `Inventory`/`ReportContext` is built from a second,
+      cheap `build_export_plan` pass over the copy (`project_dir`) — avoids adding
+      new API surface to the already-shipped, reviewed `codepack-reports` crate
+- [+] Design decision: `build_export_paths` takes an explicit `output_root: &Path`
+      parameter rather than hardcoding legacy's Windows-Desktop assumption —
+      default-root resolution deferred to S10/S11
+- [+] Design decision: `import_legacy_history` triggering is explicitly OUT of S9's
+      scope — a first-run CLI/UI concern (S10/S11), not a per-export-run one
+- [+] `encoding_rs` dependency justified (6-encoding text-dump fallback chain:
+      utf-8/utf-8-sig/cp1251/cp866/utf-16/latin-1) — MIT/Apache-2.0, no copyleft
+      concern
+- [+] Q13 (report-loop cancellation gap, from S7) — decision: address for the
+      heaviest report loops if time allows during S9's own cancellation-suite
+      work; otherwise re-record honestly rather than silently claim closed
+- [+] Success/failure gate confirmed from legacy: `!cancelled && copy_stats.errors
+      == 0` — feeds `codepack_storage::record_export_run`'s `Option<Snapshot>`
+      gate (I6) and a future S10 CLI exit code
+- [+] `on_plan_ready` closure design confirmed: constructed in S9, calls
+      `codepack_reports::metadata::write_manifest`/dashboard refresh, safe to be
+      invoked 1-2 times by `build_final_archives` itself plus one more direct call
+      by S9 after archiving returns (matches legacy's final
+      `refresh_bundle_metadata` call)
+- [+] Token estimate for history: `estimate_tokens_fallback` (legacy's flat-ratio
+      formula), never `estimate_tokens_refined` — silently swapping would be an
+      undisclosed behavior change, not an improvement (I4)
 
-- [ ] Plan S9 (`codepack-stage-planner`), referencing S8's actual shipped API
-      (`build_final_archives`, `ArchiveOptions`, `ArchivePlan`)
-- [ ] Implement the 8-step pipeline (BLUEPRINT §A.2), sequenced with gate checkpoints
-      matching S7's group-by-group precedent given the integration complexity
-- [ ] Verify: golden export vs. legacy fixture, cancellation at each of the 8 steps,
-      performance budget on a heavy fixture (≥50k files)
-- [ ] Completion: `ROADMAP.md` S9 `**Status.**` line, `docs/architecture/overview.md`,
-      independent review, merge (both S8 and S9 together)
+## Implementation — S9 (`codepack-engine`), sequenced by group
+
+- [ ] Group P (paths + plan): `build_export_paths`, `StoredSnapshot →
+      codepack_diff::Snapshot` converter, step 1 wiring (`build_export_plan`,
+      `resolve_diff_selection`, `combined_selected_paths`,
+      `28_export_plan`/`29_export_comparison_report` writers)
+- [ ] Group C (copy): copy module, `CopyStats`, safety/diff/override filtering off
+      `ExportPlan.included_files`, cross-platform backslash-path reconstruction
+      (never `Path::new(rel_str)` directly on a backslash-joined string)
+- [ ] Group R (structure + Git + text dump): PowerShell-style structure report;
+      read-only `git2` Git report (status/branch/log/show, redacted); text dump
+      (6-encoding fallback chain, redaction, developer-context header insertion)
+- [ ] Group A (analytics + manifest): re-plan-on-copy, `scan_project`,
+      `ReportContext` assembly, `run_reports`, `write_project_profile_json`/
+      `write_report_plugins_json`/`write_custom_prompt`, first
+      `write_manifest`/`write_index_md` (`archive_result: None`)
+- [ ] Group Z (archive + storage close-out): `build_final_archives` +
+      `on_plan_ready`/dashboard-refresh closure + final post-archive refresh,
+      success/failure gate, `record_export_run` wiring, staging cleanup
+      (unconditional unless `keep_staging_folder`, on every code path including
+      cancelled/failed), progress/log channel wiring threaded through every group
+
+## Verification — S9
+
+- [ ] Golden/shape-parity tests: one fixture per stack (node/python/monorepo/+1) —
+      every expected artifact present (28/29 plan+diff, structure/git/text-dump,
+      ~26 reports + profile/plugins/AI bundle/dashboard, manifest/INDEX,
+      27/archive output), shape not byte-identity (host/time-dependent content)
+- [ ] 8-scenario cancellation suite (one per pipeline step): prompt stop, no
+      `snapshot` row written, pre-seeded baseline provably unchanged (row-for-row,
+      reusing S5's own assertion pattern), staging still cleaned up per policy,
+      `export_run.cancelled = true`
+- [ ] ≥50k-file synthetic-fixture performance test, `#[ignore]`-gated / separate
+      slow-path invocation (not part of the default fast test run)
+- [ ] `last_export` mode round-trip: export once, edit a file, export again,
+      confirm only the edited file is selected
+- [ ] `cargo tree -p codepack-engine`: no network-capable crate
+- [ ] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `cargo deny check`,
+      `sync-agents --check`)
+- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+      proven-invariant comment
+
+## Completion — S9
+
+- [ ] `docs/architecture/overview.md` updated (`codepack-engine` moves from
+      placeholder; first real producer/consumer of the progress/log channel)
+- [ ] `ROADMAP.md` — S9 `**Status.**` line + §1 table
+- [ ] `docs/decisions/open-questions.md` — Q7/Q8/Q9/Q10/Q11/Q13 resolved here or
+      explicitly re-deferred with a named, honest reason (not silently dropped)
+- [ ] Independent review pass (`codepack-quality-reviewer`)
 
 ---
 
 ## Completion (both stages, final)
 
+- [ ] `docs/architecture/overview.md` and `ROADMAP.md` updated for BOTH S8 and S9
+      together (S8's own completion items above were deferred to this pass)
 - [ ] CI green on all three OSes; merge only after explicit owner sign-off
-- [ ] Commits: checklist first, then S8, then S9, separated logically by stage
+- [ ] Commits: checklist first, then S8, then S9 (sequenced by group), then any
+      review-driven fix commits, separated logically
 - [ ] Final report to owner (Russian, per language policy)
 
 ---
