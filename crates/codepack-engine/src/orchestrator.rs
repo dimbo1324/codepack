@@ -50,8 +50,8 @@ use codepack_core::{
 use codepack_reports::context::ReportContext;
 use codepack_security::FindingKind;
 use codepack_storage::{
-    Connection, NewArchivePart, NewExportRun, NewFinding, NewRunFile, find_or_create_project,
-    latest_snapshot, record_export_run,
+    Connection, NewArchivePart, NewExportRun, NewFinding, NewRunFile, cleanup_old_runs,
+    find_or_create_project, latest_snapshot, record_export_run,
 };
 
 use crate::analytics::{AnalyticsOutcome, run_analytics};
@@ -181,6 +181,7 @@ fn cancelled_before_planning_outcome(paths: &ExportPaths, config: &Config) -> Pl
         diff_selection,
         ignored_dir_names,
         include_relative_paths: None,
+        dropped_by_budget: 0,
     }
 }
 
@@ -286,6 +287,12 @@ pub fn run_export(
             }
             Err(err) => return Err(err),
         };
+        if plan_outcome.dropped_by_budget > 0 {
+            log(&format!(
+                "token budget of {} dropped {} file(s) from the export",
+                config.token_budget, plan_outcome.dropped_by_budget
+            ));
+        }
         send_step_finished(progress, "1/8: plan");
 
         send_step_started(progress, "2/8: copy");
@@ -572,6 +579,19 @@ pub fn run_export(
         &archive_parts,
         snapshot_arg,
     )?;
+
+    // Retention shipped in S5 but had no caller until now, so history grew without
+    // bound (decision Q10, 2026-07-25). Pruning runs after the row for *this* run is
+    // committed, so `keep_last_n` counts this export among the kept ones. A pruning
+    // failure must not fail an otherwise finished export -- the bundle on disk is
+    // already complete -- so it is logged, not propagated.
+    if config.history_keep_last_n > 0 {
+        match cleanup_old_runs(conn, project_id, config.history_keep_last_n as usize) {
+            Ok(0) => {}
+            Ok(removed) => log(&format!("history retention removed {removed} old run(s)")),
+            Err(err) => log(&format!("history retention failed: {err}")),
+        }
+    }
 
     Ok(ExportOutcome {
         paths,

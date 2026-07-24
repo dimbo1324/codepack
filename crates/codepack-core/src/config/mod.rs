@@ -62,6 +62,14 @@ pub struct Config {
     pub ui_zoom: f64,
     pub language: String,
     pub prompt_goals: Vec<String>,
+    /// How many export runs to keep per project (`codepack-storage`'s retention).
+    /// Legacy's own `MAX_HISTORY_ITEMS = 50` was a global, non-configurable cap; this
+    /// keeps the number but makes it per-project and configurable (decision Q10,
+    /// 2026-07-25). `0` disables pruning entirely.
+    pub history_keep_last_n: u32,
+    /// Token budget for BLUEPRINT §B.3 "fit to budget". `0` means no budget, which is
+    /// the default and the only behavior legacy ever had.
+    pub token_budget: u64,
 }
 
 impl Default for Config {
@@ -94,6 +102,8 @@ impl Default for Config {
             ui_zoom: DEFAULT_UI_ZOOM,
             language: DEFAULT_LANGUAGE.to_string(),
             prompt_goals: default_prompt_goals(),
+            history_keep_last_n: 50,
+            token_budget: 0,
         }
     }
 }

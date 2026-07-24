@@ -162,6 +162,29 @@ fn score_file(
     (score, reasons)
 }
 
+/// The same importance ranking `16_key_files_report` publishes, exposed for callers
+/// that need to prioritize files rather than render a report — specifically the
+/// "fit to budget" selection (BLUEPRINT §B.3), which is required to prioritize "by the
+/// ranking that already exists" rather than invent a second, divergent one.
+///
+/// Returns every file with a positive score, keyed by relative path. Files scoring zero
+/// are absent: they carry no positive signal, and the caller decides what to do with
+/// the ones the ranking has no opinion about.
+pub fn importance_ranking(ctx: &ReportContext<'_>) -> std::collections::BTreeMap<String, i64> {
+    let graph = collect(ctx);
+    let imported_by = graph.in_degree();
+    let max_bytes = ctx.config.effective_max_text_file_bytes();
+
+    ctx.inventory
+        .files
+        .iter()
+        .filter_map(|file| {
+            let (score, _reasons) = score_file(file, &imported_by, max_bytes, &ctx.staging_root);
+            (score > 0).then_some((file.relative_path.clone(), score))
+        })
+        .collect()
+}
+
 fn write_key_files_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
     let graph = collect(ctx);
     let imported_by = graph.in_degree();

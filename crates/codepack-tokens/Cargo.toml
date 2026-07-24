@@ -9,9 +9,13 @@ publish.workspace = true
 
 [dependencies]
 serde.workspace = true
+# Runtime, not dev-only: `ModelContextLimits::load_or_default` reads a user-supplied
+# override file so model limits can be refreshed without a rebuild (BLUEPRINT §B.2).
+serde_json.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

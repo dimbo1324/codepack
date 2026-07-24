@@ -55,7 +55,6 @@ fn full_job_catalog() -> Vec<ReportJob> {
     // reference it.
     std::iter::once(codepack_reports::project_profile::JOB)
         .chain(codepack_reports::group_a_jobs())
-        .into_iter()
         .chain(codepack_reports::group_b_jobs())
         .chain(codepack_reports::group_c_jobs())
         .chain(codepack_reports::group_d_jobs())

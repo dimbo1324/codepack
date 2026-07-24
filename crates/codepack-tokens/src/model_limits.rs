@@ -13,14 +13,48 @@ use serde::{Deserialize, Serialize};
 /// serialized output deterministic across runs, which matters for stable JSON
 /// snapshots and diffs.
 ///
-/// Loading an override file (or resolving a config path) to extend or replace this
-/// table with fresher model limits is a documented future extension point — no such
-/// file-loading, override, or path-resolution logic is implemented in this crate.
+/// [`ModelContextLimits::load_or_default`] reads an override file so limits can be
+/// refreshed without rebuilding the application (BLUEPRINT §B.2). Resolving *where*
+/// that file lives is the caller's business — this crate takes a path and stays free
+/// of any dependency on `codepack-core`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ModelContextLimits(BTreeMap<String, u64>);
 
 impl ModelContextLimits {
+    /// Merges an override file over the built-in table, so a user can add or refresh a
+    /// model without rebuilding (BLUEPRINT §B.2). A missing file yields the built-in
+    /// table unchanged — that is the normal case, not an error.
+    ///
+    /// The file is merged, never substituted wholesale: an override listing one model
+    /// should add that model, not silently delete the other three. Entries in the file
+    /// win over built-ins with the same name.
+    ///
+    /// A file that exists but is unreadable or malformed returns an error rather than
+    /// being quietly ignored: a user who wrote an override meant it to take effect, and
+    /// silently falling back to stale limits is exactly the failure they would not
+    /// notice.
+    pub fn load_or_default(path: &std::path::Path) -> Result<Self, LoadError> {
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let text = std::fs::read_to_string(path).map_err(|source| LoadError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let overrides: BTreeMap<String, u64> =
+            serde_json::from_str(&text).map_err(|source| LoadError::Parse {
+                path: path.to_path_buf(),
+                source,
+            })?;
+
+        let mut merged = Self::default();
+        for (name, limit) in overrides {
+            merged.0.insert(name, limit);
+        }
+        Ok(merged)
+    }
+
     /// The token limit registered for `model_name`, if any.
     pub fn get(&self, model_name: &str) -> Option<u64> {
         self.0.get(model_name).copied()
@@ -84,5 +118,73 @@ mod tests {
         let json = serde_json::to_string(&limits).expect("in-memory serialization cannot fail");
         assert!(json.starts_with('{'));
         assert!(json.contains("\"Claude (200K)\":200000"));
+    }
+}
+
+/// Why an override file could not be applied. Distinct from "no override file", which
+/// is not an error at all.
+#[derive(Debug, thiserror::Error)]
+pub enum LoadError {
+    #[error("could not read model-limits override at {path}")]
+    Read {
+        path: std::path::PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("model-limits override at {path} is not a JSON object of name -> token count")]
+    Parse {
+        path: std::path::PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+}
+
+#[cfg(test)]
+mod override_tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_file_yields_the_builtin_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let limits = ModelContextLimits::load_or_default(&dir.path().join("absent.json")).unwrap();
+        assert_eq!(limits, ModelContextLimits::default());
+    }
+
+    #[test]
+    fn an_override_merges_over_the_builtin_table_without_dropping_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("model_limits.json");
+        std::fs::write(&file, r#"{"Brand New 5": 2000000}"#).unwrap();
+
+        let limits = ModelContextLimits::load_or_default(&file).unwrap();
+        assert_eq!(limits.get("Brand New 5"), Some(2_000_000));
+        assert_eq!(
+            limits.len(),
+            ModelContextLimits::default().len() + 1,
+            "an override adds to the built-ins, it does not replace them"
+        );
+    }
+
+    #[test]
+    fn an_override_wins_for_a_name_that_already_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("model_limits.json");
+        let existing = ModelContextLimits::default()
+            .iter()
+            .next()
+            .map(|(name, _)| name.to_string())
+            .unwrap();
+        std::fs::write(&file, format!(r#"{{"{existing}": 42}}"#)).unwrap();
+
+        let limits = ModelContextLimits::load_or_default(&file).unwrap();
+        assert_eq!(limits.get(&existing), Some(42));
+    }
+
+    #[test]
+    fn a_malformed_override_is_an_error_not_a_silent_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("model_limits.json");
+        std::fs::write(&file, "not json at all").unwrap();
+        assert!(ModelContextLimits::load_or_default(&file).is_err());
     }
 }
