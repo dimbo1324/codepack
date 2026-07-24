@@ -1,0 +1,68 @@
+{
+  "diff_export_mode": "all",
+  "excluded_files": [],
+  "included_files": [
+    {
+      "group": "other",
+      "reason": "",
+      "relative_path": ".gitignore",
+      "severity": "info",
+      "size": 20,
+      "status": "included"
+    },
+    {
+      "group": "docs",
+      "reason": "",
+      "relative_path": "README.md",
+      "severity": "info",
+      "size": 98,
+      "status": "included"
+    },
+    {
+      "group": "docs",
+      "reason": "",
+      "relative_path": "requirements.txt",
+      "severity": "info",
+      "size": 44,
+      "status": "included"
+    },
+    {
+      "group": "python_source",
+      "reason": "",
+      "relative_path": "app\\main.py",
+      "severity": "info",
+      "size": 345,
+      "status": "included"
+    },
+    {
+      "group": "python_source",
+      "reason": "",
+      "relative_path": "app\\__init__.py",
+      "severity": "info",
+      "size": 47,
+      "status": "included"
+    }
+  ],
+  "incremental_enabled": false,
+  "profile": "full",
+  "project_name": "python_app",
+  "rules": {
+    "always_include_dirs": [],
+    "always_include_files": [],
+    "excluded_dirs": [],
+    "excluded_extensions": [],
+    "excluded_files": [],
+    "loaded_rules": [],
+    "source_file": null
+  },
+  "safe_export_mode": "safe",
+  "skipped_dirs": [],
+  "summary": {
+    "estimated_included_bytes": 554,
+    "estimated_included_size": "554 B",
+    "excluded_count": 0,
+    "included_count": 5,
+    "skipped_dirs_count": 0
+  },
+  "warnings": []
+}

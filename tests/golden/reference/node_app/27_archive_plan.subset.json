@@ -1,0 +1,5 @@
+{
+  "limit_bytes": 536870912,
+  "split_planned": false,
+  "target_bytes": 524288000
+}

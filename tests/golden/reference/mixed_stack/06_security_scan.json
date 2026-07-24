@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "confidence": "medium",
+      "file": ".\\docker-compose.yml",
+      "line": 10,
+      "message": "- JWT_SECRET=<REDACTED>",
+      "rule": "secret_like_line",
+      "severity": "medium",
+      "type": "potential_secret"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "potential_secrets": 1,
+    "risky_code": 0,
+    "sensitive_files": 0,
+    "total_findings": 1
+  }
+}

@@ -18,6 +18,11 @@ dist/
 .env.*
 !.env.example
 
+# Golden fixtures deliberately ship a fake `.env`: safe-export mode is supposed to
+# exclude it, and the parity test is meaningless without it present. The value inside
+# is a placeholder, never a real credential.
+!tests/golden/fixtures/**/.env
+
 # --- Assistant local overrides (personal, not shared) ---
 .claude/settings.local.json
 .codex/config.local.toml

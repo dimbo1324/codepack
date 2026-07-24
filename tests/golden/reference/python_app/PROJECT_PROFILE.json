@@ -1,0 +1,58 @@
+{
+  "capabilities": {
+    "has_ci": false,
+    "has_docker": false,
+    "has_env_files": false,
+    "has_git": false,
+    "has_license": false,
+    "has_readme": true,
+    "has_tests": false
+  },
+  "commands": {
+    "install": [
+      "python -m venv .venv",
+      ".venv\\Scripts\\python -m pip install -r requirements.txt"
+    ]
+  },
+  "counts": {
+    "files": 5,
+    "folders": 1,
+    "total_size_bytes": 554
+  },
+  "detected_stack": [
+    "pip/requirements.txt",
+    "Python"
+  ],
+  "docker_compose_files": [],
+  "entrypoints": [],
+  "important_config_files": [
+    ".\\.gitignore",
+    ".\\README.md",
+    ".\\requirements.txt"
+  ],
+  "npm_scripts": {},
+  "package_managers": [
+    "pip/requirements.txt"
+  ],
+  "project_name": "python_app",
+  "project_type": "backend_or_cli",
+  "risk_level": "medium",
+  "risk_reasons": [
+    "no obvious test files detected",
+    "no GitHub Actions workflow detected"
+  ],
+  "schema_version": 1,
+  "stack_by_group": {
+    "backend": [
+      "Python"
+    ],
+    "frontend": [],
+    "infrastructure": [],
+    "package_managers": [
+      "pip/requirements.txt"
+    ],
+    "styling": [],
+    "testing": [],
+    "tools": []
+  }
+}

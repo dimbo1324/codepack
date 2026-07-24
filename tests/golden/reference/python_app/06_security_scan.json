@@ -1,0 +1,38 @@
+{
+  "findings": [
+    {
+      "confidence": "low",
+      "file": ".\\app\\main.py",
+      "line": 5,
+      "message": "SECRET_TOKEN=<REDACTED>",
+      "rule": "secret_like_line",
+      "severity": "low",
+      "type": "potential_secret"
+    },
+    {
+      "confidence": "medium",
+      "file": ".\\app\\main.py",
+      "line": 18,
+      "message": "Python eval() can execute arbitrary code.",
+      "rule": "python-eval",
+      "severity": "critical",
+      "type": "risky_code"
+    },
+    {
+      "confidence": "medium",
+      "file": ".\\app\\main.py",
+      "line": 18,
+      "message": "JavaScript eval() can execute arbitrary code.",
+      "rule": "js-eval",
+      "severity": "high",
+      "type": "risky_code"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "potential_secrets": 1,
+    "risky_code": 2,
+    "sensitive_files": 0,
+    "total_findings": 3
+  }
+}
