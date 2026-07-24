@@ -39,7 +39,7 @@
 //! "reproduce the wasteful legacy behavior rather than silently optimize it" posture).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use codepack_archive::{ArchiveOptions, ArchivePlan, build_final_archives};
 use codepack_core::config::Config;
@@ -66,6 +66,33 @@ use crate::storage::{diff_snapshot_to_new_snapshot, stored_snapshot_to_diff_snap
 use crate::structure::write_structure_report;
 use crate::text_dump::write_text_dump;
 use crate::timestamp::{human_now_utc, unix_timestamp_now};
+
+/// RAII guard: removes the staging directory on every exit path from `run_export`
+/// (success, an early `?` error return, or an unwinding panic) unless `keep` is set --
+/// never only on the happy path. A plain function-tail `remove_dir_all` call would be
+/// skipped by any of this function's many `?` early returns, silently leaking the
+/// staging directory on genuine I/O/storage failures (a real gap this pass's own review
+/// found: the task-checklist's claim of "unconditional... on every code path" was true
+/// for cancellation but not for hard errors).
+struct StagingCleanupGuard<'a> {
+    staging_dir: PathBuf,
+    keep: bool,
+    progress: &'a ProgressSender,
+}
+
+impl Drop for StagingCleanupGuard<'_> {
+    fn drop(&mut self) {
+        if self.keep || !self.staging_dir.exists() {
+            return;
+        }
+        if let Err(err) = std::fs::remove_dir_all(&self.staging_dir) {
+            let _ = self.progress.send(ProgressEvent::Log(LogEvent {
+                level: LogLevel::Info,
+                message: format!("failed to remove staging directory: {err}"),
+            }));
+        }
+    }
+}
 
 /// Everything a caller (a future CLI/UI) needs after one full export run.
 pub struct ExportOutcome {
@@ -191,6 +218,12 @@ pub fn run_export(
     };
 
     let paths = build_export_paths(source_root, output_root);
+
+    let _staging_cleanup = StagingCleanupGuard {
+        staging_dir: paths.staging_dir.clone(),
+        keep: config.keep_staging_folder,
+        progress,
+    };
 
     let primary_stack = codepack_scanner::primary_stack(&paths.source_root).map(|stack| stack.name);
     let project_id = find_or_create_project(
@@ -538,12 +571,6 @@ pub fn run_export(
         snapshot_arg,
     )?;
 
-    if !config.keep_staging_folder
-        && let Err(err) = std::fs::remove_dir_all(&paths.staging_dir)
-    {
-        log(&format!("failed to remove staging directory: {err}"));
-    }
-
     Ok(ExportOutcome {
         paths,
         cancelled,
@@ -555,4 +582,82 @@ pub fn run_export(
         run_id,
         analytics: analytics_outcome,
     })
+}
+
+#[cfg(test)]
+mod staging_cleanup_guard_tests {
+    use super::StagingCleanupGuard;
+
+    #[test]
+    fn removes_the_staging_directory_when_dropped_and_not_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let staging_dir = dir.path().join("staging");
+        std::fs::create_dir_all(&staging_dir).unwrap();
+        assert!(staging_dir.exists());
+
+        let (progress, _rx) = codepack_core::progress_channel();
+        {
+            let _guard = StagingCleanupGuard {
+                staging_dir: staging_dir.clone(),
+                keep: false,
+                progress: &progress,
+            };
+        }
+
+        assert!(
+            !staging_dir.exists(),
+            "the guard must remove the staging directory on drop"
+        );
+    }
+
+    #[test]
+    fn leaves_the_staging_directory_in_place_when_keep_is_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let staging_dir = dir.path().join("staging");
+        std::fs::create_dir_all(&staging_dir).unwrap();
+
+        let (progress, _rx) = codepack_core::progress_channel();
+        {
+            let _guard = StagingCleanupGuard {
+                staging_dir: staging_dir.clone(),
+                keep: true,
+                progress: &progress,
+            };
+        }
+
+        assert!(
+            staging_dir.exists(),
+            "keep_staging_folder must be honored by the guard, not just the happy path"
+        );
+    }
+
+    #[test]
+    fn runs_on_an_early_return_via_the_question_mark_operator_not_only_on_success() {
+        fn fails_after_constructing_the_guard(
+            staging_dir: &std::path::Path,
+            progress: &codepack_core::ProgressSender,
+        ) -> Result<(), std::io::Error> {
+            let _guard = StagingCleanupGuard {
+                staging_dir: staging_dir.to_path_buf(),
+                keep: false,
+                progress,
+            };
+            Err(std::io::Error::other("a genuine mid-pipeline failure"))?;
+            Ok(())
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let staging_dir = dir.path().join("staging");
+        std::fs::create_dir_all(&staging_dir).unwrap();
+
+        let (progress, _rx) = codepack_core::progress_channel();
+        let result = fails_after_constructing_the_guard(&staging_dir, &progress);
+
+        assert!(result.is_err());
+        assert!(
+            !staging_dir.exists(),
+            "an early `?` error return must still trigger staging cleanup, matching the \
+             task-checklist's own 'unconditional on every code path' claim"
+        );
+    }
 }
