@@ -7,9 +7,10 @@
 > новая операционная задача.
 
 **Дата последней ревизии:** 2026-07-23
-**Состояние:** этапы S0, S1, S2, S3, S4 и S5 завершены. `codepack-core`,
-`codepack-scanner`, `codepack-security`, `codepack-diff` и `codepack-storage` —
-крейты с реальной доменной логикой; остальные крейты «Ядра» пока плейсхолдеры.
+**Состояние:** этапы S0–S7 завершены (S6 и S7 выполнены в одной ветке/задаче по
+явному указанию владельца). `codepack-core`, `codepack-scanner`, `codepack-security`,
+`codepack-diff`, `codepack-storage`, `codepack-tokens` и `codepack-reports` — крейты
+с реальной доменной логикой; остальные крейты «Ядра» пока плейсхолдеры.
 
 ## Что существует
 
@@ -21,7 +22,9 @@
 | `codepack-security` | **готов (S3)**: три safe-режима (`policy/`), редактирование секретов с безбэкреференсным переписыванием legacy-регекса (`redact.rs`), эвристический сканер v3 (`scan/`) — sensitive-файлы, secret-каскад (4 уровня уверенности), 9 risky-code правил, плюс новое из BLUEPRINT §B.1: 10 провайдер-сигнатур, энтропия Шеннона, `aho-corasick`-предфильтр (`patterns/`). Выходы `.txt`/`.json`/SARIF 2.1.0 (`scan/write/`). Корпус-baseline (I9): parity P=1.000/R=0.312/F1=0.476, full P=1.000/R=1.000/F1=1.000. 111 юнит- + 7 интеграционных тестов |
 | `codepack-diff` | **готов (S4)**: 4 режима diff (`all`/`last_export`/`git_ref`/`uncommitted`) через `git2` (только чтение, никогда сеть), снапшот проекта с потоковым SHA-256 (`snapshot/`), `last_export` берёт предыдущий снапшот аргументом (без хранилища — это S5), отчёт `29_export_comparison_report.md`. Первая C-зависимость воркспейса (`libgit2-sys`, vendored, без `https`/`ssh`/`cred`-фич). 40 тестов |
 | `codepack-storage` | **готов (S5)**: SQLite-схема из 7 таблиц + `schema_version` (BLUEPRINT §D.2/§D.3), `rusqlite` (bundled, вторая C-зависимость воркспейса после `git2`), встроенные пронумерованные миграции, `record_export_run()` — единственная точка записи (снапшот только вставляется, никогда не обновляется — структурная гарантия инварианта I6), `import_legacy_history()` (явный opt-in, воспроизводит найденный legacy-баг с «отравленным» пустым снапшотом как есть), per-project ретеншн (`cleanup_old_runs`, `ON DELETE CASCADE`). Крейт не имеет ни одной рантайм-зависимости от `codepack-core` — принимает путь к БД параметром. 22 теста (включая WAL/конкурентный доступ на реальных файлах) |
-| Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-tokens`, `-reports`, `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
+| `codepack-tokens` | **готов (S6)**: `format_bytes` (порт 1:1, инвариант I4), `estimate_tokens_fallback` (`max(1, round(B/3.5))` — легаси использует `round`, не `ceil`, как упрощает BLUEPRINT §E.1) и калиброванный `estimate_tokens_refined` (ASCII/кириллица-UTF8), обе публичны и не подменяют друг друга. `ModelContextLimits` (4 записи legacy, без загрузки файла-переопределения — Q11). `fit_to_budget` — детерминированный жадный отбор по плотности ценности, `importance` — параметр вызывающей стороны. Чистый крейт без зависимости от `codepack-core` или любого другого `codepack-*`. 18 тестов |
+| `codepack-reports` | **готов (S7)**: ~26 пронумерованных отчётов + `PROJECT_PROFILE.json`/`REPORT_PLUGINS.json`/`AI_CONTEXT/`/`AI_PROMPTS/`/`REPORT_DASHBOARD.html`/writer-функции `manifest.json`/`INDEX.md`. Плагинный раннер с гейтингом по 5 профилям, `catch_unwind`+`Result`-отказоустойчивостью, `ERROR_<имя>.txt`. `06_security_scan.*` — тонкая обёртка над `codepack-security`; `05_git_deep`/`21_git_timeline_report` — только `git2`, без подпроцессов; RU/EN-локализация — пилот на одном отчёте (Q12); известный, раскрытый пробел — проверка отмены только между отчётами, не внутри их циклов (Q13). 139 тестов |
+| Остальные крейты Rust (`crates/`) | **плейсхолдеры**: `-archive`, `-engine` (`lib.rs`), `codepack-cli` (`main.rs`, заглушка стадии S10) |
 | `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `deny`, `sync-agents [--check]`, `doctor` |
 | `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |
 | `deny.toml` | **активен с S1**: advisories/bans/licenses/sources все `ok`; собственные крейты исключены из license-проверки (`[licenses.private] ignore = true`); с S2 добавлен `[bans] allow-wildcard-paths = true` (внутриворкспейсные path-зависимости без semver-диапазона — не supply-chain риск) |
@@ -54,5 +57,5 @@
 
 ## Следующий шаг
 
-Этап **S6 — Байты, токены, бюджет (`codepack-tokens`)**.
+Этап **S8 — Архивация (`codepack-archive`)**.
 См. `ROADMAP.md` §2.
