@@ -25,9 +25,22 @@ Volatile keys, dropped anywhere they appear in a JSON tree:
 
 Per-artifact rules:
 
-* `28_export_plan.json`, `06_security_scan.json`, `PROJECT_PROFILE.json`,
-  `REPORT_PLUGINS.json` -- compared in full after dropping volatile keys. Every field
-  in these describes the *source project*, so any difference is a real difference.
+* `28_export_plan.json`, `06_security_scan.json`, `PROJECT_PROFILE.json` -- compared in
+  full after dropping volatile keys. Every field in these describes the *source
+  project*, so any difference is a real difference.
+* `REPORT_PLUGINS.json` -- compared as a **superset with identical gating**: every
+  entry legacy lists must be present with exactly the same `profiles` set, in legacy's
+  own filename order. Two differences are intended and therefore not compared:
+    - `description`: legacy declares the field but leaves it empty for every entry.
+      Ours fills it. BLUEPRINT calls this catalog the seed of a public report-plugin
+      API (§A/§B.10), and an empty description field serves nobody; filling a field
+      that already exists breaks no consumer.
+    - extra entries (`AI_CONTEXT`, `AI_PROMPTS`, `REPORT_DASHBOARD.html`): legacy
+      produces these artifacts but builds them outside its `report_jobs` list, so its
+      catalog silently omits them. Ours models them as real jobs, so omitting them from
+      the catalog would make the catalog lie about our own pipeline.
+  A *missing* legacy entry, or a changed `profiles` set, still fails -- that is where
+  gating regressions actually hide.
 * `manifest.json` -- only the source-describing subtrees are compared: `project_name`,
   `cancelled`, `settings`, `diff_selection`, `ignored_dirs`. Deliberately excluded and
   why:

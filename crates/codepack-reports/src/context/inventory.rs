@@ -208,6 +208,7 @@ mod tests {
             dir,
             &ScanOptions::default(),
             &ExportIgnoreRules::default(),
+            &codepack_scanner::no_safety_classification,
             &CancellationToken::new(),
         )
         .unwrap()

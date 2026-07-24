@@ -163,6 +163,8 @@ fn cancelled_before_planning_outcome(paths: &ExportPaths, config: &Config) -> Pl
             included_count: 0,
             excluded_count: 0,
             estimated_included_bytes: 0,
+            estimated_included_size: codepack_tokens::format_bytes(0),
+            skipped_dirs_count: 0,
         },
     };
 

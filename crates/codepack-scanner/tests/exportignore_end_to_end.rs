@@ -5,7 +5,9 @@
 use std::fs;
 
 use codepack_core::CancellationToken;
-use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
+use codepack_scanner::{
+    ExportIgnoreRules, ScanOptions, build_export_plan, no_safety_classification,
+};
 
 fn included_paths(plan: &codepack_scanner::ExportPlan) -> Vec<String> {
     plan.included_files
@@ -24,7 +26,14 @@ fn exportignore_glob_rule_excludes_matching_files_end_to_end() {
 
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let included = included_paths(&plan);
     assert!(included.contains(&"main.py".to_string()));
@@ -44,7 +53,14 @@ fn exportignore_directory_rule_prunes_the_whole_subtree() {
 
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let included = included_paths(&plan);
     assert!(included.contains(&"public.py".to_string()));
@@ -71,7 +87,14 @@ fn negation_rescues_a_file_from_a_glob_rule_end_to_end() {
 
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let included = included_paths(&plan);
     assert!(included.contains(&"shared.secret".to_string()));
@@ -89,7 +112,14 @@ fn custom_excluded_extension_from_config_applies_end_to_end() {
         ..ScanOptions::default()
     };
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let included = included_paths(&plan);
     assert!(included.contains(&"module.py".to_string()));

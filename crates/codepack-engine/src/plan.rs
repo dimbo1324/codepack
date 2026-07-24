@@ -14,6 +14,7 @@
 //! selector (`diff_selection.paths`), never an intersection of several.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use codepack_core::config::Config;
 use codepack_core::{CancellationToken, ExportPaths};
@@ -24,6 +25,8 @@ use codepack_scanner::{
     ExportIgnoreRules, ExportPlan, ScanOptions, build_export_plan, should_consider_text_file,
     write_export_plan_files,
 };
+
+use codepack_security::should_skip_file_for_safety;
 
 use crate::error::Result;
 use crate::ignored_dirs::ignored_dir_names_for;
@@ -68,7 +71,25 @@ pub fn run_export_plan(
         }
     }
 
-    let export_plan = build_export_plan(&paths.source_root, &scan_options, &export_rules, cancel)?;
+    // Safe-export-mode classification is the engine's to supply: `codepack-scanner`
+    // deliberately keeps no dependency on `codepack-security` (see
+    // `codepack_scanner::SafetyClassifier`). Without this the plan reported `.env` as
+    // included/info while the copy step correctly excluded it — a report that
+    // contradicted the bundle it described.
+    let safe_mode = config.normalized_safe_export_mode().to_string();
+    let safety = move |relative_path: &Path| {
+        let decision = should_skip_file_for_safety(relative_path, &safe_mode);
+        decision
+            .skip
+            .then_some((decision.reason, decision.severity))
+    };
+    let export_plan = build_export_plan(
+        &paths.source_root,
+        &scan_options,
+        &export_rules,
+        &safety,
+        cancel,
+    )?;
     write_export_plan_files(
         &export_plan,
         &paths.insights_dir.join("28_export_plan.json"),

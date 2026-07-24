@@ -1,10 +1,21 @@
-//! `build_export_plan()`, ported from legacy `services/export_plan.py`. **S2-scoped
-//! only**: no safe-export-mode filtering (S3) and no diff/incremental selection (S4) —
-//! within this stage's scope those are documented no-ops (`safe_export_mode`
-//! normalizes to `"full"`, `diff_export_mode` to `"all"`,
-//! `incremental_export_enabled=false"` in the baseline used by this stage's tests),
-//! so every candidate file is decided purely by base/stack pruning plus
-//! `.exportignore`/custom-rule matching.
+//! `build_export_plan()`, ported from legacy `services/export_plan.py`.
+//!
+//! Safe-export-mode classification is applied through a **caller-supplied predicate**
+//! ([`SafetyClassifier`]), following the precedent `codepack-diff` (S4) already set for
+//! its own ignored-directory set and text-file predicate: this crate keeps no
+//! dependency on `codepack-security`, but the plan it produces is still the complete,
+//! legacy-equivalent artifact.
+//!
+//! This was originally deferred with "safe-export-mode filtering is S3's job", which
+//! left `28_export_plan.json` reporting `.env` as `included`/`info` where legacy
+//! reports it `excluded`/`critical`. The copy step filtered the file correctly either
+//! way, so nothing leaked — but the *plan* misinformed the user, and
+//! [`ExportPlan::sensitive_warnings`] (which selects `critical`/`high` entries, and is
+//! what a preview UI would warn from) found nothing to warn about. Caught by the
+//! golden suite on 2026-07-25.
+//!
+//! Diff/incremental selection remains the caller's business (`codepack-engine` applies
+//! it around this function), matching how legacy threaded `diff_selection` in.
 
 use std::path::Path;
 
@@ -21,10 +32,23 @@ use super::group::classify_group;
 use super::timestamp::current_timestamp_utc;
 use super::{ExportPlan, PlanSummary, PlannedFile};
 
+/// Decides whether a file must be excluded for export-safety reasons, returning
+/// `Some((reason, severity))` when it must. `codepack-engine` supplies
+/// `codepack_security::should_skip_file_for_safety` bound to the configured mode;
+/// tests that do not care about safety pass [`no_safety_classification`].
+pub type SafetyClassifier<'a> = &'a (dyn Fn(&Path) -> Option<(String, String)> + Sync);
+
+/// A [`SafetyClassifier`] that never excludes anything — the exact behavior of legacy's
+/// `"full"` safe-export mode.
+pub fn no_safety_classification(_relative_path: &Path) -> Option<(String, String)> {
+    None
+}
+
 pub fn build_export_plan(
     source_root: &Path,
     options: &ScanOptions,
     export_rules: &ExportIgnoreRules,
+    safety: SafetyClassifier<'_>,
     cancel: &CancellationToken,
 ) -> Result<ExportPlan> {
     let stacks = stack::detect_stacks(source_root);
@@ -43,7 +67,7 @@ pub fn build_export_plan(
     let classified: Vec<PlannedFile> = outcome
         .files
         .par_iter()
-        .map(|file| classify_file(file, export_rules, &cancel_flag))
+        .map(|file| classify_file(file, export_rules, safety, &cancel_flag))
         .collect();
     if cancel.is_cancelled() {
         return Err(crate::error::ScannerError::Cancelled);
@@ -73,6 +97,8 @@ pub fn build_export_plan(
         included_count: included_files.len(),
         excluded_count: excluded_files.len(),
         estimated_included_bytes,
+        estimated_included_size: codepack_tokens::format_bytes(estimated_included_bytes),
+        skipped_dirs_count: skipped_dirs.len(),
     };
 
     let project_name = source_root
@@ -100,6 +126,7 @@ pub fn build_export_plan(
 fn classify_file(
     file: &walk::WalkedFile,
     export_rules: &ExportIgnoreRules,
+    safety: SafetyClassifier<'_>,
     cancel: &CancellationToken,
 ) -> PlannedFile {
     let display_path = display_backslash(&file.relative_path);
@@ -116,25 +143,39 @@ fn classify_file(
         };
     }
 
+    // Legacy's own order in `export_plan.py`: rule-based exclusion is decided before
+    // safety, so a file excluded by an `.exportignore` rule keeps that rule's reason
+    // and `"medium"` severity rather than being reported as a credential risk.
     let (skip, reason) = export_rules.should_skip_file(&file.relative_path);
     if skip {
-        PlannedFile {
+        return PlannedFile {
             relative_path: display_path,
             size: file.size,
             status: "excluded".to_string(),
             reason,
             severity: "medium".to_string(),
             group,
-        }
-    } else {
-        PlannedFile {
+        };
+    }
+
+    if let Some((reason, severity)) = safety(&file.relative_path) {
+        return PlannedFile {
             relative_path: display_path,
             size: file.size,
-            status: "included".to_string(),
-            reason: String::new(),
-            severity: "info".to_string(),
+            status: "excluded".to_string(),
+            reason,
+            severity,
             group,
-        }
+        };
+    }
+
+    PlannedFile {
+        relative_path: display_path,
+        size: file.size,
+        status: "included".to_string(),
+        reason: String::new(),
+        severity: "info".to_string(),
+        group,
     }
 }
 
@@ -169,7 +210,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(plan.summary.included_count, 0);
         assert_eq!(plan.summary.excluded_count, 0);
     }
@@ -180,7 +228,14 @@ mod tests {
         fs::write(dir.path().join("main.py"), "print(1)").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(plan.included_files.len(), 1);
         assert_eq!(plan.included_files[0].relative_path, "main.py");
         assert_eq!(plan.included_files[0].group, "python_source");
@@ -195,7 +250,14 @@ mod tests {
         fs::write(dir.path().join("README.md"), "x").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(plan.included_files.len(), 3);
     }
 
@@ -207,7 +269,14 @@ mod tests {
         fs::write(dir.path().join(".exportignore"), "*.log\n").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         let included: Vec<&str> = plan
             .included_files
             .iter()
@@ -230,7 +299,14 @@ mod tests {
             ..ScanOptions::default()
         };
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(plan.included_files.len(), 1);
         assert!(
             plan.skipped_dirs.iter().any(|d| d == ".\\vendor_lib"),
@@ -250,7 +326,14 @@ mod tests {
             ..ScanOptions::default()
         };
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         let included: Vec<&str> = plan
             .included_files
             .iter()
@@ -265,7 +348,14 @@ mod tests {
         fs::write(dir.path().join("file.py"), "x".repeat(1000)).unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         let total: u64 = plan.included_files.iter().map(|f| f.size).sum();
         assert_eq!(total, plan.summary.estimated_included_bytes);
         assert_eq!(plan.summary.estimated_included_bytes, 1000);
@@ -277,7 +367,14 @@ mod tests {
         fs::write(dir.path().join("empty.py"), "").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(plan.included_files.len(), 1);
         assert_eq!(plan.summary.estimated_included_bytes, 0);
     }
@@ -288,7 +385,14 @@ mod tests {
         fs::write(dir.path().join("main.py"), "x").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert_eq!(
             plan.project_name,
             dir.path().file_name().unwrap().to_string_lossy()
@@ -309,7 +413,14 @@ mod tests {
             ..ScanOptions::default()
         };
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         assert!(plan.included_files.is_empty());
         assert!(plan.excluded_files.is_empty());
         assert_eq!(plan.skipped_dirs, vec![".\\node_modules".to_string()]);
@@ -324,7 +435,14 @@ mod tests {
         fs::write(dir.path().join("src_main.rs"), "fn main() {}").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan = build_export_plan(dir.path(), &options, &rules, &cancel_never()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
         let included: Vec<&str> = plan
             .included_files
             .iter()

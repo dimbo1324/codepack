@@ -152,6 +152,77 @@ fn compare(artifact: &str, ours: &Value, reference: &Value) -> Option<String> {
     ))
 }
 
+/// `REPORT_PLUGINS.json` is compared as a superset with identical gating rather than
+/// field-for-field. See `tests/golden/generate_reference.py`'s specification for the
+/// two intended differences (filled `description`s, and the extra `AI_CONTEXT`/
+/// `AI_PROMPTS`/`REPORT_DASHBOARD.html` entries legacy builds outside its job list).
+/// A missing legacy entry or a changed `profiles` set still fails.
+fn compare_plugin_catalog(ours: &Value, reference: &Value) -> Option<String> {
+    let ours = ours.as_array().expect("catalog must be an array");
+    let reference = reference.as_array().expect("catalog must be an array");
+    let mut differences = Vec::new();
+
+    let ours_order: Vec<&str> = ours
+        .iter()
+        .filter_map(|entry| entry.get("filename").and_then(Value::as_str))
+        .collect();
+
+    for entry in reference {
+        let filename = entry
+            .get("filename")
+            .and_then(Value::as_str)
+            .expect("every catalog entry has a filename");
+        let Some(mine) = ours
+            .iter()
+            .find(|candidate| candidate.get("filename").and_then(Value::as_str) == Some(filename))
+        else {
+            differences.push(format!("{filename}: MISSING from our catalog"));
+            continue;
+        };
+        if mine.get("profiles") != entry.get("profiles") {
+            differences.push(format!(
+                "{filename}: profiles ours={} legacy={}",
+                mine.get("profiles").unwrap_or(&Value::Null),
+                entry.get("profiles").unwrap_or(&Value::Null)
+            ));
+        }
+    }
+
+    // Legacy's own entries must still appear in legacy's relative order.
+    let expected_order: Vec<&str> = reference
+        .iter()
+        .filter_map(|entry| entry.get("filename").and_then(Value::as_str))
+        .collect();
+    let ours_filtered: Vec<&str> = ours_order
+        .iter()
+        .copied()
+        .filter(|name| expected_order.contains(name))
+        .collect();
+    if ours_filtered != expected_order {
+        differences.push(format!(
+            "catalog order differs
+      ours(legacy entries only)={ours_filtered:?}
+      legacy={expected_order:?}"
+        ));
+    }
+
+    if differences.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "  REPORT_PLUGINS.json:
+{}",
+        differences
+            .iter()
+            .map(|line| format!("    - {line}"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+"
+            )
+    ))
+}
+
 fn run_one_fixture(fixture_name: &str) {
     let golden = golden_root();
     let fixture_src = golden.join("fixtures").join(fixture_name);
@@ -207,15 +278,16 @@ fn run_one_fixture(fixture_name: &str) {
             "reports/insights/06_security_scan.json",
         ),
         ("PROJECT_PROFILE.json", "PROJECT_PROFILE.json"),
-        (
-            "REPORT_PLUGINS.json",
-            "reports/insights/REPORT_PLUGINS.json",
-        ),
     ] {
         let ours = strip_volatile(&read_zip_json(zip, entry));
         let reference = read_json(&reference_dir.join(artifact));
         reports.extend(compare(artifact, &ours, &reference));
     }
+
+    reports.extend(compare_plugin_catalog(
+        &read_zip_json(zip, "reports/insights/REPORT_PLUGINS.json"),
+        &read_json(&reference_dir.join("REPORT_PLUGINS.json")),
+    ));
 
     let ours = subset(
         &strip_volatile(&read_zip_json(zip, "manifest.json")),

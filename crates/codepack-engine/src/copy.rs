@@ -155,7 +155,14 @@ mod tests {
     fn plan_for(source_root: &Path) -> ExportPlan {
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(source_root, &options);
-        build_export_plan(source_root, &options, &rules, &CancellationToken::new()).unwrap()
+        build_export_plan(
+            source_root,
+            &options,
+            &rules,
+            &codepack_scanner::no_safety_classification,
+            &CancellationToken::new(),
+        )
+        .unwrap()
     }
 
     #[test]

@@ -14,7 +14,9 @@
 use std::fs;
 
 use codepack_core::CancellationToken;
-use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
+use codepack_scanner::{
+    ExportIgnoreRules, ScanOptions, build_export_plan, no_safety_classification,
+};
 
 /// Asserts that `"key":` for every key in `keys_in_order` appears in `json`, and that
 /// their positions are strictly increasing.
@@ -38,7 +40,14 @@ fn export_plan_top_level_key_order_matches_the_documented_contract() {
     fs::write(dir.path().join("main.py"), "x").unwrap();
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let json = serde_json::to_string(&plan).unwrap();
     assert_key_order(
@@ -67,7 +76,14 @@ fn planned_file_key_order_matches_the_documented_contract() {
     fs::write(dir.path().join("main.py"), "x").unwrap();
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let json = serde_json::to_string(&plan.included_files[0]).unwrap();
     assert_key_order(
@@ -109,7 +125,14 @@ fn summary_key_order_matches_the_documented_contract() {
     let dir = tempfile::tempdir().unwrap();
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-    let plan = build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        dir.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let json = serde_json::to_string(&plan.summary).unwrap();
     assert_key_order(
