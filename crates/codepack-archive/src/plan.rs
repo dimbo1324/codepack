@@ -122,7 +122,7 @@ fn flush_part(parts: &mut Vec<ArchivePartPlan>, current_entries: &mut Vec<Archiv
     });
 }
 
-fn sort_entries(entries: &mut [ArchiveEntry]) {
+pub(crate) fn sort_entries(entries: &mut [ArchiveEntry]) {
     entries.sort_by(|a, b| {
         let a_key = (a.group, a.arcname.to_string_lossy().to_lowercase());
         let b_key = (b.group, b.arcname.to_string_lossy().to_lowercase());

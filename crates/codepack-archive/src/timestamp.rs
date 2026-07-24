@@ -1,10 +1,14 @@
 //! `generated_at` timestamp formatting, duplicated from
 //! `codepack-scanner::plan::timestamp` (and `codepack-security::scan::write::timestamp`)
-//! for the same out-of-scope-dependency reason (Q7, `docs/decisions/open-questions.md`):
-//! this crate cannot depend on `codepack-scanner`/`codepack-security`. Renders a UTC
-//! timestamp rather than legacy's local wall clock — a deliberate, documented
-//! deviation for a cosmetic, non-contractual field (nothing parses `generated_at`
-//! back).
+//! for the same reason those two duplicated it from each other: this crate depends
+//! only on `codepack-core` (S8's scope boundary), so it cannot pull in
+//! `codepack-scanner`/`codepack-security` just for one small formatting helper —
+//! the same duplication-over-cross-crate-dependency tradeoff Q7
+//! (`docs/decisions/open-questions.md`) records for a *different*, larger duplicated
+//! set (`TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/classification helpers), not this one.
+//! Renders a UTC timestamp rather than legacy's local wall clock — a deliberate,
+//! documented deviation for a cosmetic, non-contractual field (nothing parses
+//! `generated_at` back).
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

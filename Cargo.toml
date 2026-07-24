@@ -63,11 +63,12 @@ codepack-security = { path = "crates/codepack-security" }
 codepack-diff = { path = "crates/codepack-diff" }
 codepack-tokens = { path = "crates/codepack-tokens" }
 # S8 (codepack-archive): building the final ZIP/split-set output (BLUEPRINT §A.8).
-# `default-features = false` plus the `deflate` feature keeps `ZIP_DEFLATED` support
-# (via the crate's own bundled `flate2` backend) without pulling in encryption
-# (`aes-crypto`), other compression codecs (`bzip2`, `zstd`, `lzma`), or timestamp
-# crates this stage never needs.
-zip = { version = "8.6", default-features = false, features = ["deflate"] }
+# `default-features = false` plus `deflate-flate2-zlib-rs` keeps ZIP_DEFLATED support
+# at a specific compression level without pulling in encryption (`aes-crypto`), other
+# compression codecs (`bzip2`, `zstd`, `lzma`), or the `zopfli` high-ratio encoder the
+# broader `deflate` feature bucket also enables — this crate always writes at a fixed
+# level 6 via flate2/zlib-rs, never zopfli's own (different) compression path.
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

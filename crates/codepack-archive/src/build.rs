@@ -12,10 +12,12 @@ use std::path::Path;
 use codepack_core::{ArchiveBuildResult, CancellationToken, ExportPaths};
 use serde::Serialize;
 
-use crate::entry::ArchiveEntry;
+use crate::entry::{ArchiveEntry, collect_entries};
 use crate::error::{ArchiveError, Result};
 use crate::options::ArchiveOptions;
-use crate::plan::{ArchivePlan, plan_archive, plan_logical_parts, predicted_result_for_plan};
+use crate::plan::{
+    ArchivePlan, plan_archive, plan_logical_parts, predicted_result_for_plan, sort_entries,
+};
 use crate::report::format_bytes;
 use crate::timestamp::current_timestamp_utc;
 
@@ -163,9 +165,12 @@ The file `ARCHIVE_SET_MANIFEST.json` lists all archive parts and any oversized e
 /// 4. Call `on_plan_ready` once with this plan and its predicted result.
 /// 5. `plan_archive` again (third pass — picks up whatever `on_plan_ready` itself wrote).
 /// 6. If the plan is a single ZIP: write it, then check its *actual* on-disk size
-///    against the hard limit. If it fits, done. If not, discard it, flip to split mode
-///    reusing the already-collected entries (no re-walk), and call `on_plan_ready` a
-///    second time with the new split plan.
+///    against the hard limit. If it fits, done. If not, discard it, re-walk the
+///    staging tree (picking up anything the caller's `on_plan_ready` itself wrote —
+///    matches legacy, which re-walks after its second hook call too; an earlier
+///    version of this function reused the stale pre-hook entries here, silently
+///    dropping any content the second hook call added from the split archive),
+///    force split mode, and call `on_plan_ready` a second time with the new plan.
 /// 7. Write each split part, tracking any part whose actual written size still
 ///    exceeds the hard limit into `oversized_files` (no recursive re-split — matches
 ///    legacy).
@@ -235,15 +240,35 @@ pub fn build_final_archives(
         }
 
         // Oversized after write: discard the single ZIP (best-effort delete, matching
-        // legacy's `missing_ok=True`) and rebuild as a split set from the entries we
-        // already collected — no re-walk.
+        // legacy's `missing_ok=True`) and rebuild as a split set. Re-walk before
+        // committing to split mode, matching legacy's own re-walk after its second
+        // hook call — the caller's `on_plan_ready` (invoked just above, via the
+        // *first* on_plan_ready call at line ~198) may have already written new or
+        // updated content that must land in the split set.
         let _ = std::fs::remove_file(&paths.final_zip);
+        let (mut entries, skipped_project_files) =
+            collect_entries(paths, options.include_project, cancel)?;
+        sort_entries(&mut entries);
+        plan.entries = entries;
+        plan.skipped_project_files = skipped_project_files;
         plan.split = true;
         plan.parts = plan_logical_parts(&plan.entries, plan.target_bytes);
 
         if !cancel.is_cancelled() {
             let predicted = predicted_result_for_plan(paths, &plan);
             on_plan_ready(&plan, &predicted);
+
+            // Legacy re-walks a second time here too, to pick up whatever this
+            // *second* on_plan_ready call itself wrote before the split parts are
+            // physically built — otherwise content written only in response to
+            // "we're now definitely splitting" would be silently missing from the
+            // archive.
+            let (mut entries, skipped_project_files) =
+                collect_entries(paths, options.include_project, cancel)?;
+            sort_entries(&mut entries);
+            plan.entries = entries;
+            plan.skipped_project_files = skipped_project_files;
+            plan.parts = plan_logical_parts(&plan.entries, plan.target_bytes);
         }
     }
 
