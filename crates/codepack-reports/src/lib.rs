@@ -19,6 +19,18 @@
 //! written to. Every line of report output that quotes raw file content is redacted
 //! via [`context::redact_line`] before being written (invariant I3).
 //!
+//! **Known, disclosed gap (`.ai/project/12-domain-rules.md`'s "check cancellation
+//! inside loops" rule):** [`plugin::run_reports`] checks [`ReportContext::cancel`]
+//! only *between* whole jobs, not inside each report's own per-file loop. A single
+//! report job on a very large inventory therefore cannot be interrupted mid-job today.
+//! This is acceptable for now because no live caller exists yet — this crate isn't
+//! wired into an interactive pipeline (that's S9's job) — but the gap must be closed
+//! before S9 exposes real, user-triggered cancellation through this crate. When that
+//! happens, follow the precedent already established by
+//! `codepack_diff::snapshot::snapshot_project` and `codepack_security::scan::scan_project`:
+//! check `cancel.is_cancelled()` on every loop iteration and return a dedicated
+//! cancelled-error variant rather than silently truncating output.
+//!
 //! Earlier passes implemented Group G (the shared glue every other group depends on:
 //! [`context`], [`plugin`], [`plugins_json`], [`profile`], [`project_profile`]), Group A
 //! (the five simplest reports), Group B (the `06_security_scan.{txt,json,sarif}` adapter

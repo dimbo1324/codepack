@@ -29,13 +29,22 @@ use codepack_security::scan_project;
 use git2::{IndexAddOption, Repository, Signature};
 
 /// The raw secret *value* planted everywhere below. It is always paired with a
-/// `redact_secrets` keyword (`API_KEY`) so every plant is actually redactable by this
-/// crate's real, currently-implemented mechanism ([`codepack_security::redact_secrets`],
-/// keyword-based — see that crate's own module doc): a provider-signature-only value
-/// with no adjacent keyword is a known, separate detection layer (`scan_project`'s
-/// finding detector) that `redact_line` does not independently catch, so it would not
-/// exercise the invariant this sweep is actually verifying.
+/// keyword `crate::context::redact_line` actually matches (via
+/// `codepack_security::patterns::keyword::redacted_line`'s `SCAN_KEYWORDS`, a superset
+/// of the narrower `REDACT_KEYWORDS` plain `redact_secrets` uses — review found the
+/// crate originally called the narrower function, silently missing `DATABASE_URL`/
+/// `JWT_SECRET`/`ACCESS_KEY`/`CLIENT_SECRET`): a provider-signature-only value with no
+/// adjacent keyword is a known, separate detection layer (`scan_project`'s finding
+/// detector) that `redact_line` does not independently catch, so it would not exercise
+/// the invariant this sweep is actually verifying.
 const SECRET_VALUE: &str = "zZ9xQ7vLwPmR3sT8uAbCdEfGhIjKlmNoPqRs";
+
+/// A second secret, paired with a `SCAN_KEYWORDS`-only keyword (`DATABASE_URL`) that
+/// is NOT in the narrower `REDACT_KEYWORDS` set — regression coverage for the exact
+/// leak the independent review found empirically (a `DATABASE_URL=...` line in
+/// `docker-compose.yml` passing through unredacted before `redact_line` was fixed to
+/// call the stronger function).
+const DB_SECRET_VALUE: &str = "cC4mN8pQ2rT6vX0zA5bD9eF3gH7jK1lM";
 
 fn write_fixture(root: &Path) {
     std::fs::write(
@@ -66,7 +75,7 @@ fn write_fixture(root: &Path) {
     std::fs::write(
         root.join("docker-compose.yml"),
         format!(
-            "services:\n  app:\n    image: demo:latest\n    environment:\n      - API_KEY={SECRET_VALUE}\n"
+            "services:\n  app:\n    image: demo:latest\n    environment:\n      - API_KEY={SECRET_VALUE}\n      - DATABASE_URL=postgres://user:{DB_SECRET_VALUE}@host:5432/db\n"
         ),
     )
     .unwrap();
@@ -324,6 +333,11 @@ fn full_profile_produces_the_complete_expected_file_set() {
                 "planted secret leaked in {}",
                 path.display()
             );
+            assert!(
+                !content.contains(DB_SECRET_VALUE),
+                "planted DATABASE_URL secret leaked in {}",
+                path.display()
+            );
         }
     }
 
@@ -335,6 +349,12 @@ fn full_profile_produces_the_complete_expected_file_set() {
 
     let docker_report = std::fs::read_to_string(out_dir.path().join("10_docker.txt")).unwrap();
     assert!(docker_report.contains("REDACTED"));
+    // Regression for the DATABASE_URL gap the independent review found: this must be
+    // redacted too, not just the API_KEY line above.
+    assert!(
+        docker_report.matches("REDACTED").count() >= 2,
+        "expected both the API_KEY and DATABASE_URL lines to be redacted in 10_docker.txt"
+    );
 
     let git_deep = std::fs::read_to_string(out_dir.path().join("05_git_deep.txt")).unwrap();
     assert!(git_deep.contains("REDACTED"));

@@ -50,8 +50,16 @@ impl<'a> ReportContext<'a> {
 /// computed statistic) must route the quoted text through this — invariant I3
 /// (`docs/architecture/invariants.md`): a finding's/line's text is redacted before it
 /// reaches a report.
+///
+/// Uses `codepack_security::patterns::keyword::redacted_line`, not the narrower
+/// `codepack_security::redact_secrets` — the former also matches `DATABASE_URL`/
+/// `JWT_SECRET`/`ACCESS_KEY`/`CLIENT_SECRET` (`SCAN_KEYWORDS`), which the latter does
+/// not. Legacy's own `docker_report.py` imported this exact stronger function for the
+/// identical purpose; review found the plain `redact_secrets` call here left common
+/// secret-carrying variable names (`DATABASE_URL=...`) unredacted across every report
+/// that quotes raw content — a real narrowing versus legacy, not a documented gap.
 pub fn redact_line(line: &str) -> String {
-    codepack_security::redact_secrets(line)
+    codepack_security::patterns::keyword::redacted_line(line)
 }
 
 /// True when `staging_root`/`name` exists on disk. A single, bounded existence check
