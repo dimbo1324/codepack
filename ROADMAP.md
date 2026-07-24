@@ -465,6 +465,9 @@ CASCADE` на каждом внешнем ключе, `PRAGMA foreign_keys=ON`/`
 прогон — no-op). `rusqlite` подключён с фичей `bundled` — статическая сборка SQLite
 через `cc`, системная libsqlite3 не нужна (та же логика, что `git2`/`vendored-libgit2`
 в S4); MIT/dual MIT-Apache-2.0, новых исключений в `deny.toml` не потребовалось.
+`cargo xtask gate` зелёный локально (fmt, clippy `-D warnings`, тесты, `cargo deny
+check`, `sync-agents --check`); прогон в CI подтверждён живьём (run #46, коммит
+`f01721e`, все три ОС — `success`).
 
 Состав: `migrations.rs` (DDL + ранер + `PRAGMA`-настройка на каждое соединение),
 `project.rs` (`find_or_create_project` по уникальному `root_path`), `run.rs`
