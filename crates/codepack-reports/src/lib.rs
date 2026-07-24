@@ -19,12 +19,15 @@
 //! written to. Every line of report output that quotes raw file content is redacted
 //! via [`context::redact_line`] before being written (invariant I3).
 //!
-//! This pass implements Group G (the shared glue every other group depends on:
+//! An earlier pass implemented Group G (the shared glue every other group depends on:
 //! [`context`], [`plugin`], [`plugins_json`], [`profile`], [`project_profile`]) and
-//! Group A (the five simplest reports, in [`reports`]). Groups B (security wrapper),
-//! C (`git2` reports), D (manifest parsers), E (heuristic/derived reports), F (the AI
-//! bundle), and the dashboard/`manifest.json`/`INDEX.md`/localization slice of Group G
-//! are later, separate passes — see `task-checklist.md`.
+//! Group A (the five simplest reports, in [`reports`]). This pass adds Group B (the
+//! `06_security_scan.{txt,json,sarif}` adapter over `codepack-security`'s own writers)
+//! and Group D (the manifest-parser reports: `03_dependencies.txt`, `04_scripts.txt`,
+//! `09_config.txt`, `10_docker.txt`, `26_dependency_intelligence.md`). Group C (`git2`
+//! reports), E (heuristic/derived reports), F (the AI bundle), and the
+//! dashboard/`manifest.json`/`INDEX.md`/localization slice of Group G are later,
+//! separate passes — see `task-checklist.md`.
 
 pub mod context;
 mod error;
@@ -43,4 +46,4 @@ pub use error::{ReportError, Result};
 pub use plugin::{ReportJob, RunSummary, run_reports};
 pub use plugins_json::write_report_plugins_json;
 pub use project_profile::{ProjectProfile, build_project_profile, write_project_profile_json};
-pub use reports::group_a_jobs;
+pub use reports::{group_a_jobs, group_b_jobs, group_d_jobs};

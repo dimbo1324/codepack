@@ -26,6 +26,12 @@ pub enum ReportError {
 
     #[error("report job panicked: {0}")]
     Panicked(String),
+
+    #[error("security scan report failed: {source}")]
+    Security {
+        #[source]
+        source: codepack_security::SecurityError,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, ReportError>;

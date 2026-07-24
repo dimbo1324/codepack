@@ -8,12 +8,16 @@
 //! `counts`, `risk_level`, `risk_reasons`, `important_config_files`.
 //!
 //! `important_config_files`/`docker_compose_files` need "is this a known config file"
-//! classification; legacy imports `find_config_files` from `config_report.py`
-//! (`09_config.txt`, Group D — not built this pass). [`find_config_files`] here is a
-//! minimal, self-contained port of the same legacy name/prefix rules, scoped only to
-//! what this artifact needs. Documented tech debt: once Group D's `09_config` report
-//! exists with a public `find_config_files`, this local copy should be replaced by a
-//! call into it rather than kept as a second implementation.
+//! classification; legacy imports `find_config_files` from `config_report.py`. This
+//! module now calls [`crate::reports::config::find_config_files`] (Group D's
+//! `09_config.txt` report) directly rather than keeping its own copy — an earlier pass
+//! (Group G, before Group D existed) carried a self-contained duplicate of the same
+//! legacy name/prefix rules, documented as tech debt at the time; that duplicate is
+//! removed now that the canonical implementation exists. Legacy's own
+//! `project_profile.py::build_project_profile` truncates `important_config_files` to
+//! its first 100 entries at its own assignment site — `find_config_files` itself never
+//! truncates — so that same truncation happens here, locally, rather than inside the
+//! shared helper.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -79,83 +83,6 @@ pub struct ProjectProfile {
     pub risk_level: String,
     pub risk_reasons: Vec<String>,
     pub important_config_files: Vec<String>,
-}
-
-/// Legacy `CONFIG_FILES` (`constants.py`), name-matched case-insensitively.
-const CONFIG_FILE_NAMES: &[&str] = &[
-    "package.json",
-    "pnpm-lock.yaml",
-    "package-lock.json",
-    "yarn.lock",
-    "bun.lockb",
-    "tsconfig.json",
-    "jsconfig.json",
-    "vite.config.ts",
-    "vite.config.js",
-    "next.config.js",
-    "next.config.mjs",
-    "next.config.ts",
-    "eslint.config.js",
-    "eslint.config.mjs",
-    ".eslintrc",
-    ".eslintrc.js",
-    ".eslintrc.json",
-    ".prettierrc",
-    ".prettierrc.json",
-    "prettier.config.js",
-    "tailwind.config.js",
-    "tailwind.config.ts",
-    "postcss.config.js",
-    "components.json",
-    "pyproject.toml",
-    "requirements.txt",
-    "requirements-dev.txt",
-    "poetry.lock",
-    "Pipfile",
-    "Pipfile.lock",
-    "go.mod",
-    "go.sum",
-    "Cargo.toml",
-    "Cargo.lock",
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    ".env.example",
-    ".gitignore",
-    "README.md",
-    "LICENSE",
-];
-
-/// Legacy `config_report.py::find_config_files`, scoped to [`super::context::Inventory`]
-/// (already-included files) rather than a fresh walk.
-pub fn find_config_files(ctx: &ReportContext<'_>) -> Vec<String> {
-    let known_lower: std::collections::HashSet<String> = CONFIG_FILE_NAMES
-        .iter()
-        .map(|name| name.to_lowercase())
-        .collect();
-
-    let mut found: Vec<String> = ctx
-        .inventory
-        .files
-        .iter()
-        .filter(|file| {
-            let name = file_name_of(&file.relative_path);
-            let lower_name = name.to_lowercase();
-            let forward_slash_path = file.relative_path.replace('\\', "/");
-            CONFIG_FILE_NAMES.contains(&name)
-                || known_lower.contains(&lower_name)
-                || (forward_slash_path.starts_with(".github/workflows/")
-                    && (lower_name.ends_with(".yml") || lower_name.ends_with(".yaml")))
-                || lower_name.starts_with("dockerfile")
-                || lower_name.starts_with(".env")
-        })
-        .map(|file| file.relative_path.clone())
-        .collect();
-
-    found.sort_by_key(|path| path.to_lowercase());
-    found.dedup();
-    found.truncate(100);
-    found
 }
 
 fn detect_project_type(ctx: &ReportContext<'_>, stack: &DetectedStack) -> String {
@@ -384,7 +311,7 @@ pub fn build_project_profile(ctx: &ReportContext<'_>) -> ProjectProfile {
     let stack = crate::context::detect_stack(&ctx.staging_root, ctx.inventory);
     let package_json = safe_read_json(&ctx.staging_root.join("package.json"));
     let package_managers = crate::context::detect_package_managers(ctx.inventory);
-    let configs = find_config_files(ctx);
+    let configs = crate::reports::config::find_config_files(ctx);
     let (risk_level, risk_reasons) = detect_risk_level(ctx);
 
     let docker_compose_files: Vec<String> = configs
@@ -471,7 +398,7 @@ pub fn build_project_profile(ctx: &ReportContext<'_>) -> ProjectProfile {
         },
         risk_level,
         risk_reasons,
-        important_config_files: configs,
+        important_config_files: configs.into_iter().take(100).collect(),
     }
 }
 
