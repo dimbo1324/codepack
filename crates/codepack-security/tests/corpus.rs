@@ -29,6 +29,12 @@ fn parity_detect(line: &str) -> bool {
 /// Full-mode detection: parity plus provider signatures (prefilter-gated, matching
 /// `scan::collect_secret_hits`'s own gating exactly) plus the always-on telegram and
 /// entropy passes.
+///
+/// The early return on a parity hit is not just a short-circuit — it mirrors
+/// `scan::collect_secret_hits`'s precedence rule, where a keyword hit suppresses every
+/// provider/entropy hit on the same line (legacy emits at most one finding per line).
+/// Because that rule only ever collapses *duplicates* on an already-detected line, it
+/// cannot change any cell of this matrix: a line detected by parity stays detected.
 fn full_detect(line: &str) -> bool {
     if parity_detect(line) {
         return true;

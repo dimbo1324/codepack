@@ -116,19 +116,31 @@ struct SecretHit {
 /// Runs every secret detector over one line and applies the self-protection exemption
 /// once, uniformly, across all of them (keyword, provider, entropy) — not only the
 /// keyword cascade, which is the minimum legacy required.
+///
+/// **A keyword hit suppresses every provider/entropy hit on the same line.** Legacy's
+/// `_collect_security_findings` appends at most one `SecretFinding` per line, so a second
+/// finding on the identical file+line breaks golden parity outright. It also adds no
+/// information: the provider and entropy detectors (BLUEPRINT §B.1, 🎯 new — legacy has
+/// neither) exist to raise *recall* on lines the keyword cascade structurally cannot see,
+/// not to re-report a span it already reported. Lines the keyword cascade did **not**
+/// flag still yield provider/telegram/entropy hits — that is where the entire recall gain
+/// lives, and it is untouched (`tests/corpus.rs`'s `full_detect` models exactly this
+/// precedence).
 fn collect_secret_hits(line: &str) -> Vec<SecretHit> {
     if keyword::is_self_protected(line) {
         return Vec::new();
     }
 
+    let prefiltered = prefilter::has_hit(line);
+    if prefiltered && let Some(confidence) = keyword::secret_confidence(line) {
+        return vec![SecretHit {
+            rule: "secret_like_line",
+            confidence,
+        }];
+    }
+
     let mut hits = Vec::new();
-    if prefilter::has_hit(line) {
-        if let Some(confidence) = keyword::secret_confidence(line) {
-            hits.push(SecretHit {
-                rule: "secret_like_line",
-                confidence,
-            });
-        }
+    if prefiltered {
         for found in provider::find_provider_matches(line) {
             hits.push(SecretHit {
                 rule: found.rule_id,
@@ -157,11 +169,16 @@ fn collect_secret_hits(line: &str) -> Vec<SecretHit> {
 /// keyword-shaped `key=value`/`key: value` spans — a bare provider signature or
 /// entropy match with **no** adjacent keyword (for example a lone AWS key on its own
 /// line) has no keyword span for it to act on and would otherwise pass through
-/// untouched. This masks every provider/telegram/entropy match span on the line with a
-/// fixed placeholder *before* handing the line to [`keyword::redacted_line`], so every
-/// [`SecretRecord::message`] on a given line — regardless of which specific rule
-/// produced it — is built from a line with **all** known secret-shaped spans already
-/// removed, not just the span of the one rule that produced this particular record.
+/// untouched. This masks every provider/telegram/entropy match span with a fixed
+/// placeholder, so a message is never built from text that still holds a known
+/// secret-shaped span.
+///
+/// **Runs *after* [`keyword::redacted_line`], never before** (see
+/// [`redacted_message`]). Running it first destroys information legacy's redaction
+/// depends on: the entropy tokenizer's candidate alphabet includes `=`, so
+/// `JWT_SECRET=<value>` is one single token, and masking that span wipes the key name
+/// the finding exists to identify — leaving a useless `- <REDACTED>`. It equally erases
+/// the keyword text `redacted_line` needs to recognise the line as secret-shaped at all.
 fn mask_non_keyword_secret_spans(line: &str) -> std::borrow::Cow<'_, str> {
     let mut spans: Vec<(usize, usize)> = Vec::new();
     if prefilter::has_hit(line) {
@@ -200,6 +217,26 @@ fn mask_non_keyword_secret_spans(line: &str) -> std::borrow::Cow<'_, str> {
     }
     out.push_str(&line[cursor..]);
     std::borrow::Cow::Owned(out)
+}
+
+/// Builds the single [`Finding::message`] shared by every hit on one line.
+///
+/// Two passes, in this order and no other:
+///
+/// 1. [`keyword::redacted_line`] on the **raw** line — legacy `redacted_line` verbatim.
+///    Whenever the line is keyword-shaped this collapses it to `key=<REDACTED>` /
+///    `key: <REDACTED>`, keeping the key name that identifies *which* secret was found
+///    and dropping everything from the first `=`/`:` onward, value included.
+/// 2. [`mask_non_keyword_secret_spans`] on the result — a residual safety net for what
+///    step 1 legitimately leaves behind: the whole line when it holds no keyword at all
+///    (a bare AWS key, a lone high-entropy blob), and the surviving key prefix, which on
+///    a line such as `AKIA… token: x` would otherwise carry a provider token into the
+///    message exactly as legacy does. This is a deliberate strengthening over legacy in
+///    favour of invariant I3, and the only respect in which this message can differ from
+///    legacy's.
+fn redacted_message(line: &str) -> String {
+    let legacy = keyword::redacted_line(line);
+    mask_non_keyword_secret_spans(&legacy).into_owned()
 }
 
 struct RiskyHit {
@@ -296,8 +333,7 @@ pub fn scan_project(
                 // Computed once per line, shared by every hit on it (see
                 // `mask_non_keyword_secret_spans`'s doc comment for why this must not
                 // be scoped to only the current hit's own span).
-                let masked = mask_non_keyword_secret_spans(line);
-                let message = keyword::redacted_line(&masked);
+                let message = redacted_message(line);
                 for hit in secret_hits {
                     secrets.push(SecretRecord {
                         confidence: hit.confidence,
@@ -548,6 +584,137 @@ mod tests {
         for finding in &result.findings {
             assert!(!finding.message.contains("TAILSECRETPORTION"));
             assert!(!finding.message.contains(secret));
+        }
+    }
+
+    #[test]
+    fn keyword_hit_suppresses_a_duplicate_entropy_hit_on_the_same_line() {
+        // Golden-parity regression (fixture `python_app`, `app/main.py:5`, and fixture
+        // `mixed_stack`, `docker-compose.yml:10`): the line was reported twice, once as
+        // `secret_like_line` and once as `high-entropy-token`, on the identical
+        // file+line span. Legacy emits exactly one `SecretFinding` per line.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "main.py",
+            "SECRET_TOKEN = \"placeholder-token-for-fixture-only\"\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let secrets: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PotentialSecret)
+            .collect();
+        assert_eq!(
+            secrets.len(),
+            1,
+            "expected exactly one potential-secret finding, got {secrets:?}"
+        );
+        assert_eq!(secrets[0].rule, "secret_like_line");
+    }
+
+    #[test]
+    fn entropy_hit_survives_on_a_line_the_keyword_cascade_does_not_flag() {
+        // The other half of the suppression rule: the recall gain must not be lost. This
+        // line carries no keyword root anywhere, so the keyword cascade is silent and the
+        // entropy detector is the only thing that can see it.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(dir.path(), "notes.txt", "aZ9kQ2wLp7xR4tY8mN1cJ6hF3sD0eU\n");
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.rule == "high-entropy-token"),
+            "entropy findings must survive on lines the keyword cascade misses"
+        );
+    }
+
+    #[test]
+    fn provider_hit_survives_on_a_line_the_keyword_cascade_does_not_flag() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(dir.path(), "notes.txt", "AKIAABCDEFGHIJKLMNOP\n");
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.rule == "aws-access-key-id")
+        );
+    }
+
+    #[test]
+    fn redaction_keeps_the_key_name_that_identifies_the_finding() {
+        // Golden-parity regression (fixture `mixed_stack`, `docker-compose.yml:10`): the
+        // entropy tokenizer's alphabet includes `=`, so `JWT_SECRET=<value>` is a single
+        // token; masking that span before `keyword::redacted_line` wiped `JWT_SECRET=`
+        // too and produced a message — `- <REDACTED>` — that no longer said which secret
+        // was found. Legacy's message is `- JWT_SECRET=<REDACTED>`.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "docker-compose.yml",
+            "      - JWT_SECRET=fixture-placeholder-value\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let secret = result
+            .findings
+            .iter()
+            .find(|f| f.kind == FindingKind::PotentialSecret)
+            .expect("a potential-secret finding on the JWT_SECRET line");
+        assert_eq!(secret.message, "- JWT_SECRET=<REDACTED>");
+        assert!(!secret.message.contains("fixture-placeholder-value"));
+    }
+
+    #[test]
+    fn redaction_matches_legacy_when_only_the_value_carries_the_keyword() {
+        // Golden-parity regression (fixture `python_app`, `app/main.py:5`). Legacy's
+        // `SECRET_KEY_PATTERN` matches `\btoken\b` inside the *value*
+        // (`placeholder-token-for-fixture-only`), not inside `SECRET_TOKEN` (where `_`
+        // blocks the word boundary on both roots) — which is why legacy reports this line
+        // at `low` confidence and collapses it to `SECRET_TOKEN=<REDACTED>`. Masking the
+        // value first deleted that `token` substring, the collapse never fired, and the
+        // message came out as the uncollapsed `SECRET_TOKEN = "<REDACTED>"`.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "main.py",
+            "SECRET_TOKEN = \"placeholder-token-for-fixture-only\"\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let secret = result
+            .findings
+            .iter()
+            .find(|f| f.kind == FindingKind::PotentialSecret)
+            .expect("a potential-secret finding on the SECRET_TOKEN line");
+        assert_eq!(secret.confidence, "low");
+        assert_eq!(secret.message, "SECRET_TOKEN=<REDACTED>");
+    }
+
+    #[test]
+    fn provider_token_in_the_surviving_key_prefix_is_still_masked() {
+        // The residual pass in `redacted_message` is not decoration: `redacted_line`
+        // keeps everything before the first `=`/`:`, so a provider token sitting in that
+        // prefix reaches the message untouched in legacy. I3 forbids that here.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "notes.txt",
+            "AKIAABCDEFGHIJKLMNOP token: value\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        for finding in &result.findings {
+            assert!(
+                !finding.message.contains("AKIAABCDEFGHIJKLMNOP"),
+                "provider token leaked through the surviving key prefix: {}",
+                finding.message
+            );
         }
     }
 
