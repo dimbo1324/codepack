@@ -1,5 +1,11 @@
 //! `01_summary.txt`, ported from legacy
 //! `reports/insights/summary.py::write_project_summary_report`.
+//!
+//! This is the crate's RU/EN localization pilot report (`crate::i18n`): the job entry
+//! point still always renders English (unchanged from earlier passes — no existing
+//! behavior or test changes), but the rendering logic is now factored through
+//! [`Language`] and directly testable in both languages from the same
+//! [`ReportContext`] data.
 
 use std::path::Path;
 
@@ -7,6 +13,7 @@ use codepack_tokens::format_bytes;
 
 use crate::context::{ReportContext, detect_stack};
 use crate::error::ReportError;
+use crate::i18n::Language;
 use crate::paths::{file_name_of, looks_like_test_path};
 use crate::plugin::ReportJob;
 use crate::profile;
@@ -19,6 +26,14 @@ pub const JOB: ReportJob = ReportJob {
 };
 
 fn write_summary_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
+    let rendered = render_summary_report(ctx, Language::En);
+    std::fs::write(output_file, rendered).map_err(|source| ReportError::Write {
+        path: output_file.to_path_buf(),
+        source,
+    })
+}
+
+fn render_summary_report(ctx: &ReportContext<'_>, language: Language) -> String {
     let inventory = ctx.inventory;
     let stack = detect_stack(&ctx.staging_root, inventory);
 
@@ -86,25 +101,33 @@ fn write_summary_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
     let mut sorted_by_size: Vec<&crate::context::InventoryFile> = inventory.files.iter().collect();
     sorted_by_size.sort_by_key(|file| std::cmp::Reverse(file.size));
 
+    let yes = language.pick("yes", "да");
+    let no = language.pick("no", "нет");
+    let not_detected = language.pick("not detected", "не обнаружено");
+
     let mut out = String::new();
-    out.push_str("=== Project Summary ===\n");
-    out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
+    out.push_str(language.pick("=== Project Summary ===\n", "=== Сводка проекта ===\n"));
+    out.push_str(&format!(
+        "{}: {}\n",
+        language.pick("Generated", "Сформировано"),
+        ctx.plan.generated_at
+    ));
     out.push_str(&"=".repeat(100));
     out.push_str("\n\n");
 
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Source root",
+        language.pick("Source root", "Исходный корень"),
         ctx.source_root.display()
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Copied project root",
+        language.pick("Copied project root", "Скопированный корень"),
         ctx.staging_root.display()
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Project name",
+        language.pick("Project name", "Имя проекта"),
         ctx.staging_root
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -112,58 +135,69 @@ fn write_summary_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Total files",
+        language.pick("Total files", "Всего файлов"),
         inventory.files.len()
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Total folders", inventory.total_dirs
+        language.pick("Total folders", "Всего папок"),
+        inventory.total_dirs
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Total copied size",
+        language.pick("Total copied size", "Общий скопированный размер"),
         format_bytes(inventory.total_size)
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "README present",
-        if readmes > 0 { "yes" } else { "no" }
+        language.pick("README present", "Файл README"),
+        if readmes > 0 { yes } else { no }
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "LICENSE present",
-        if licenses > 0 { "yes" } else { "no" }
+        language.pick("LICENSE present", "Файл LICENSE"),
+        if licenses > 0 { yes } else { no }
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Tests detected",
+        language.pick("Tests detected", "Обнаружены тесты"),
         if test_files > 0 {
-            format!("yes ({test_files} files)")
+            format!("{yes} ({test_files} {})", language.pick("files", "файлов"))
         } else {
-            "no".to_string()
+            no.to_string()
         }
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "Docker detected",
+        language.pick("Docker detected", "Обнаружен Docker"),
         if docker_files > 0 || compose_files > 0 {
-            "yes"
+            yes
         } else {
-            "no"
+            no
         }
     ));
     out.push_str(&format!(
         "{:<32}: {}\n",
-        "CI/CD detected",
+        language.pick("CI/CD detected", "Обнаружен CI/CD"),
         if ci_files > 0 {
-            format!("yes ({ci_files} GitHub Actions workflows)")
+            format!(
+                "{yes} ({ci_files} {})",
+                language.pick("GitHub Actions workflows", "workflow-файлов GitHub Actions")
+            )
         } else {
-            "no".to_string()
+            no.to_string()
         }
     ));
-    out.push_str(&format!("{:<32}: {}\n", ".env-like files", env_files));
+    out.push_str(&format!(
+        "{:<32}: {}\n",
+        language.pick(".env-like files", "Файлов вида .env"),
+        env_files
+    ));
 
-    out.push_str("\n--- Detected stack ---\n");
+    out.push_str(language.pick(
+        "\n--- Detected stack ---\n",
+        "\n--- Обнаруженный стек ---\n",
+    ));
     for (group, values) in [
         ("frontend", &stack.frontend),
         ("backend", &stack.backend),
@@ -174,28 +208,38 @@ fn write_summary_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
         ("package_managers", &stack.package_managers),
     ] {
         let joined = if values.is_empty() {
-            "not detected".to_string()
+            not_detected.to_string()
         } else {
             values.join(", ")
         };
         out.push_str(&format!("{group}: {joined}\n"));
     }
 
-    out.push_str("\n--- Detected languages by file count ---\n");
+    out.push_str(language.pick(
+        "\n--- Detected languages by file count ---\n",
+        "\n--- Обнаруженные языки по числу файлов ---\n",
+    ));
     if inventory.by_language.is_empty() {
-        out.push_str("No known language extensions detected.\n");
+        out.push_str(language.pick(
+            "No known language extensions detected.\n",
+            "Известные расширения языков не обнаружены.\n",
+        ));
     } else {
         for stat in inventory.by_language.iter().take(30) {
             out.push_str(&format!(
-                "{:<28} {:>8} files   {:>12}\n",
+                "{:<28} {:>8} {}   {:>12}\n",
                 stat.language,
                 stat.count,
+                language.pick("files", "файлов"),
                 format_bytes(stat.total_size)
             ));
         }
     }
 
-    out.push_str("\n--- Largest files ---\n");
+    out.push_str(language.pick(
+        "\n--- Largest files ---\n",
+        "\n--- Самые большие файлы ---\n",
+    ));
     for file in sorted_by_size.iter().take(15) {
         out.push_str(&format!(
             "{:>12}  {}\n",
@@ -204,27 +248,42 @@ fn write_summary_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
         ));
     }
 
-    out.push_str("\n--- Useful next checks ---\n");
+    out.push_str(language.pick(
+        "\n--- Useful next checks ---\n",
+        "\n--- Полезные следующие шаги ---\n",
+    ));
     if readmes == 0 {
-        out.push_str("- Add or update README with setup/run instructions.\n");
+        out.push_str(language.pick(
+            "- Add or update README with setup/run instructions.\n",
+            "- Добавьте или обновите README с инструкциями по установке и запуску.\n",
+        ));
     }
     if licenses == 0 {
-        out.push_str("- Add LICENSE if this project will be shared externally.\n");
+        out.push_str(language.pick(
+            "- Add LICENSE if this project will be shared externally.\n",
+            "- Добавьте LICENSE, если проект будет передан за пределы команды.\n",
+        ));
     }
     if env_files > 0 {
-        out.push_str("- Review .env-like files before sharing the export.\n");
+        out.push_str(language.pick(
+            "- Review .env-like files before sharing the export.\n",
+            "- Проверьте файлы вида .env перед передачей экспорта.\n",
+        ));
     }
     if test_files == 0 {
-        out.push_str("- No obvious test files found; consider adding smoke/unit tests.\n");
+        out.push_str(language.pick(
+            "- No obvious test files found; consider adding smoke/unit tests.\n",
+            "- Явных тестовых файлов не найдено; рассмотрите добавление smoke/unit-тестов.\n",
+        ));
     }
     if ci_files == 0 {
-        out.push_str("- No GitHub Actions workflow detected; consider adding CI for checks.\n");
+        out.push_str(language.pick(
+            "- No GitHub Actions workflow detected; consider adding CI for checks.\n",
+            "- Workflow GitHub Actions не обнаружен; рассмотрите добавление CI для проверок.\n",
+        ));
     }
 
-    std::fs::write(output_file, out).map_err(|source| ReportError::Write {
-        path: output_file.to_path_buf(),
-        source,
-    })
+    out
 }
 
 #[cfg(test)]
@@ -271,5 +330,44 @@ mod tests {
         let content = std::fs::read_to_string(&output_file).unwrap();
         assert!(content.contains("Add or update README"));
         assert!(content.contains("No obvious test files found"));
+    }
+
+    #[test]
+    fn renders_the_same_underlying_data_in_english_and_russian() {
+        let fixture = Fixture::new(|root| {
+            std::fs::write(root.join("main.py"), "print('hi')\n").unwrap();
+            std::fs::write(
+                root.join("package.json"),
+                r#"{"dependencies": {"react": "18.0.0"}}"#,
+            )
+            .unwrap();
+        });
+        let ctx = fixture.context("full");
+
+        let english = render_summary_report(&ctx, Language::En);
+        let russian = render_summary_report(&ctx, Language::Ru);
+
+        assert!(english.starts_with("=== Project Summary ==="));
+        assert!(english.contains("README present"));
+        assert!(english.contains("frontend: React"));
+        assert!(english.contains("not detected"));
+
+        assert!(russian.starts_with("=== Сводка проекта ==="));
+        assert!(russian.contains("Файл README"));
+        assert!(russian.contains("frontend: React"));
+        assert!(russian.contains("не обнаружено"));
+
+        // Same underlying data drives both: the file count line must agree exactly.
+        let file_count = ctx.inventory.files.len().to_string();
+        let english_count_line = english
+            .lines()
+            .find(|line| line.starts_with("Total files"))
+            .unwrap();
+        let russian_count_line = russian
+            .lines()
+            .find(|line| line.starts_with("Всего файлов"))
+            .unwrap();
+        assert!(english_count_line.trim_end().ends_with(&file_count));
+        assert!(russian_count_line.trim_end().ends_with(&file_count));
     }
 }
