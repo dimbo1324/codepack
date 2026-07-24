@@ -1,0 +1,341 @@
+//! Pipeline step 2 ("copy"): materializes the staged project directory from an
+//! already-computed [`ExportPlan`], ported from legacy `services/copy_service.py`.
+//!
+//! ## Design deviation from legacy: no second, independent tree walk
+//!
+//! Legacy's `copy_project` performs its own `os.walk`, re-checking
+//! `should_ignore_dir`/`.exportignore`/safety inline as it goes. This crate's copy step
+//! instead iterates `ExportPlan.included_files` — the file list step 1
+//! ([`crate::plan::run_export_plan`]) already produced via a single real directory
+//! walk (`codepack_scanner::walk_project`) — and layers only the diff-selection and
+//! safety-mode filters on top (`task-checklist.md`'s S9 design decision). A real
+//! directory walk therefore happens exactly once per export run, not twice.
+//!
+//! This has real, documented consequences for [`CopyStats`]:
+//!
+//! - **`symlinks_skipped` is always `0` here.** `codepack_scanner::walk_project`
+//!   already excludes symlinked entries at scan time (invariant I7) — the same safety
+//!   guarantee legacy's copy step separately re-enforced now happens strictly earlier,
+//!   once, not a regression.
+//! - **`dirs_skipped` has no natural meaning inside a flat per-file loop** over an
+//!   already-filtered list (there is no directory-level recursion left to skip
+//!   *during* copying). It is populated from `export_plan.skipped_dirs.len()` instead
+//!   — the count step 1 already computed, surfaced through this field rather than
+//!   re-derived by a second walk.
+//! - **`files_skipped` can only become nonzero via the safety-skip branch** (always
+//!   paired with `files_skipped_by_safety`), since base-ignore/stack-ignore/custom-rule
+//!   exclusion already happened in step 1 and shows up in `export_plan.excluded_files`,
+//!   never surfacing here. The diff-skip branch increments only
+//!   `files_skipped_by_diff`, matching legacy's own separate counter for that branch.
+
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use codepack_core::{CancellationToken, CopyStats};
+use codepack_scanner::ExportPlan;
+use codepack_security::should_skip_file_for_safety;
+
+use crate::error::{EngineError, Result};
+
+/// Splits a backslash-joined relative path (`PlannedFile.relative_path`'s join
+/// convention, the same on every OS) into real path components. Never
+/// `Path::new(rel_str)` directly: on Linux/macOS a backslash is an ordinary filename
+/// character, not a separator, which would silently corrupt every nested path.
+fn to_relative_path(relative_path: &str) -> PathBuf {
+    relative_path.split('\\').collect()
+}
+
+/// Copies every file `export_plan` included into `project_dir`, applying the
+/// diff-selection filter (`include_relative_paths`) and safety-mode filter
+/// (`safe_export_mode`) on top. Never aborts on a per-file I/O error — matching
+/// legacy's bare `except Exception: stats.errors += 1; continue` — except for the
+/// initial creation of `project_dir` itself, which is not a per-file operation and is
+/// propagated as [`EngineError::Io`].
+///
+/// `log` is called exactly once per candidate file, whatever the outcome (copied,
+/// skipped, or errored) — mirroring legacy's per-file `log: Callable[[str], None]`
+/// progress narration. A future orchestrator adapts a real progress-channel sender
+/// into this callback shape, the same way it will for every other pipeline step.
+pub fn copy_project(
+    export_plan: &ExportPlan,
+    include_relative_paths: Option<&HashSet<String>>,
+    safe_export_mode: &str,
+    source_root: &Path,
+    project_dir: &Path,
+    cancel: &CancellationToken,
+    log: &dyn Fn(&str),
+) -> Result<CopyStats> {
+    fs::create_dir_all(project_dir).map_err(|source| EngineError::Io {
+        path: project_dir.to_path_buf(),
+        source,
+    })?;
+
+    let mut stats = CopyStats {
+        dirs_created: 1,
+        dirs_skipped: u32::try_from(export_plan.skipped_dirs.len()).unwrap_or(u32::MAX),
+        ..CopyStats::default()
+    };
+    let mut created_dirs: HashSet<PathBuf> = HashSet::new();
+    created_dirs.insert(project_dir.to_path_buf());
+
+    for planned in &export_plan.included_files {
+        if cancel.is_cancelled() {
+            break;
+        }
+
+        if let Some(selected) = include_relative_paths
+            && !selected.contains(&planned.relative_path)
+        {
+            stats.files_skipped_by_diff += 1;
+            log(&format!(
+                "skipped (not in diff selection): {}",
+                planned.relative_path
+            ));
+            continue;
+        }
+
+        let relative = to_relative_path(&planned.relative_path);
+        let decision = should_skip_file_for_safety(&relative, safe_export_mode);
+        if decision.skip {
+            stats.files_skipped += 1;
+            stats.files_skipped_by_safety += 1;
+            log(&format!(
+                "skipped by safety mode: {} ({})",
+                planned.relative_path, decision.reason
+            ));
+            continue;
+        }
+
+        let source_path = source_root.join(&relative);
+        let dest_path = project_dir.join(&relative);
+
+        let Some(parent) = dest_path.parent() else {
+            stats.errors += 1;
+            log(&format!(
+                "cannot determine parent directory for {}",
+                planned.relative_path
+            ));
+            continue;
+        };
+
+        if !created_dirs.contains(parent) {
+            match fs::create_dir_all(parent) {
+                Ok(()) => {
+                    created_dirs.insert(parent.to_path_buf());
+                    stats.dirs_created += 1;
+                }
+                Err(source) => {
+                    stats.errors += 1;
+                    log(&format!(
+                        "cannot create directory {}: {source}",
+                        parent.display()
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        match fs::copy(&source_path, &dest_path) {
+            Ok(_) => {
+                stats.files_copied += 1;
+                log(&format!("copied: {}", planned.relative_path));
+            }
+            Err(source) => {
+                stats.errors += 1;
+                log(&format!("cannot copy {}: {source}", planned.relative_path));
+            }
+        }
+    }
+
+    Ok(stats)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
+    use std::sync::Mutex;
+
+    fn no_log(_: &str) {}
+
+    fn plan_for(source_root: &Path) -> ExportPlan {
+        let options = ScanOptions::default();
+        let rules = ExportIgnoreRules::from_project_and_config(source_root, &options);
+        build_export_plan(source_root, &options, &rules, &CancellationToken::new()).unwrap()
+    }
+
+    #[test]
+    fn copies_every_included_file_preserving_the_tree() {
+        let source = tempfile::tempdir().unwrap();
+        fs::create_dir_all(source.path().join("src")).unwrap();
+        fs::write(source.path().join("src/main.rs"), "fn main() {}").unwrap();
+        fs::write(source.path().join("README.md"), "hello").unwrap();
+
+        let plan = plan_for(source.path());
+        let dest = tempfile::tempdir().unwrap();
+        let project_dir = dest.path().join("project");
+
+        let stats = copy_project(
+            &plan,
+            None,
+            "full",
+            source.path(),
+            &project_dir,
+            &CancellationToken::new(),
+            &no_log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.files_copied, 2);
+        assert_eq!(stats.errors, 0);
+        assert!(project_dir.join("src/main.rs").is_file());
+        assert!(project_dir.join("README.md").is_file());
+    }
+
+    #[test]
+    fn symlinks_skipped_is_always_zero_since_the_plan_already_excluded_them() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("main.py"), "x").unwrap();
+        let plan = plan_for(source.path());
+        let dest = tempfile::tempdir().unwrap();
+
+        let stats = copy_project(
+            &plan,
+            None,
+            "full",
+            source.path(),
+            &dest.path().join("project"),
+            &CancellationToken::new(),
+            &no_log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.symlinks_skipped, 0);
+    }
+
+    #[test]
+    fn dirs_skipped_surfaces_the_plans_own_skipped_dir_count() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("main.py"), "x").unwrap();
+        fs::create_dir_all(source.path().join("node_modules")).unwrap();
+        fs::write(source.path().join("node_modules/pkg.js"), "x").unwrap();
+        let plan = plan_for(source.path());
+        assert_eq!(plan.skipped_dirs.len(), 1);
+        let dest = tempfile::tempdir().unwrap();
+
+        let stats = copy_project(
+            &plan,
+            None,
+            "full",
+            source.path(),
+            &dest.path().join("project"),
+            &CancellationToken::new(),
+            &no_log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.dirs_skipped, 1);
+    }
+
+    #[test]
+    fn safety_mode_skip_increments_both_files_skipped_and_files_skipped_by_safety() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("main.py"), "x").unwrap();
+        fs::write(source.path().join(".env"), "SECRET=1").unwrap();
+        let plan = plan_for(source.path());
+        let dest = tempfile::tempdir().unwrap();
+
+        let stats = copy_project(
+            &plan,
+            None,
+            "safe",
+            source.path(),
+            &dest.path().join("project"),
+            &CancellationToken::new(),
+            &no_log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.files_copied, 1);
+        assert_eq!(stats.files_skipped, 1);
+        assert_eq!(stats.files_skipped_by_safety, 1);
+        assert!(!dest.path().join("project/.env").exists());
+    }
+
+    #[test]
+    fn diff_skip_increments_only_files_skipped_by_diff_not_files_skipped() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("main.py"), "x").unwrap();
+        fs::write(source.path().join("other.py"), "y").unwrap();
+        let plan = plan_for(source.path());
+        let dest = tempfile::tempdir().unwrap();
+
+        let mut selected = HashSet::new();
+        selected.insert("main.py".to_string());
+
+        let stats = copy_project(
+            &plan,
+            Some(&selected),
+            "full",
+            source.path(),
+            &dest.path().join("project"),
+            &CancellationToken::new(),
+            &no_log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.files_copied, 1);
+        assert_eq!(stats.files_skipped_by_diff, 1);
+        assert_eq!(stats.files_skipped, 0);
+    }
+
+    #[test]
+    fn cancellation_mid_loop_yields_a_partial_but_error_free_result() {
+        let source = tempfile::tempdir().unwrap();
+        for i in 0..20 {
+            fs::write(source.path().join(format!("file{i:02}.py")), "x").unwrap();
+        }
+        let plan = plan_for(source.path());
+        assert_eq!(plan.included_files.len(), 20);
+        let dest = tempfile::tempdir().unwrap();
+        let cancel = CancellationToken::new();
+
+        // Cancel the token from a controlled point rather than a real-time race:
+        // `log` fires exactly once per processed file, so flipping the token on its
+        // 5th call cancels after 5 files and lets the next loop iteration's
+        // `cancel.is_cancelled()` check stop the copy.
+        let cancel_for_log = cancel.clone();
+        let processed = Mutex::new(0u32);
+        let log = move |_: &str| {
+            let mut count = processed.lock().unwrap();
+            *count += 1;
+            if *count == 5 {
+                cancel_for_log.cancel();
+            }
+        };
+
+        let stats = copy_project(
+            &plan,
+            None,
+            "full",
+            source.path(),
+            &dest.path().join("project"),
+            &cancel,
+            &log,
+        )
+        .unwrap();
+
+        assert_eq!(stats.errors, 0);
+        assert!(
+            stats.files_copied >= 5,
+            "files_copied = {}",
+            stats.files_copied
+        );
+        assert!(
+            stats.files_copied < 20,
+            "files_copied = {}",
+            stats.files_copied
+        );
+    }
+}

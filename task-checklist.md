@@ -165,13 +165,28 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
 
 ## Implementation — S9 (`codepack-engine`), sequenced by group
 
-- [ ] Group P (paths + plan): `build_export_paths`, `StoredSnapshot →
-      codepack_diff::Snapshot` converter, step 1 wiring (`build_export_plan`,
-      `resolve_diff_selection`, `combined_selected_paths`,
-      `28_export_plan`/`29_export_comparison_report` writers)
-- [ ] Group C (copy): copy module, `CopyStats`, safety/diff/override filtering off
+- [+] Group P (paths + plan): `build_export_paths` (explicit `output_root` param,
+      UTC compact-stamp collision loop, `sanitize_name`), step 1 wiring
+      (`run_export_plan`: `ExportIgnoreRules` + file-override application,
+      `build_export_plan`, `resolve_diff_selection` with `previous_snapshot` as a real
+      parameter, `combined_selected_paths` minus the permanently-dead
+      `incremental_selection` branch, `28_export_plan`/`29_export_comparison_report`
+      writers) plus a new `ignored_dir_names_for` helper (`Config` has no
+      `effective_ignored_dirs()` equivalent yet). **Not done**: the
+      `StoredSnapshot → codepack_diff::Snapshot` converter — `codepack-storage` isn't
+      wired into this crate yet (that is Group Z's job once the storage dependency is
+      added); `run_export_plan` already takes `previous_snapshot:
+      Option<&codepack_diff::Snapshot>` as a real parameter so Group Z only needs to
+      supply a real value, not touch this function's signature.
+- [+] Group C (copy): `copy_project`, safety/diff/override filtering off
       `ExportPlan.included_files`, cross-platform backslash-path reconstruction
-      (never `Path::new(rel_str)` directly on a backslash-joined string)
+      (`to_relative_path`: splits on `\\`, never `Path::new(rel_str)` directly).
+      Documented `CopyStats` semantic shifts from the no-second-walk redesign:
+      `symlinks_skipped` always `0` (already enforced at scan time),
+      `dirs_skipped` sourced from `export_plan.skipped_dirs.len()`, `files_skipped`
+      only reachable via the safety-skip branch (paired with
+      `files_skipped_by_safety`; the diff-skip branch touches only
+      `files_skipped_by_diff`, matching legacy's separate counter).
 - [ ] Group R (structure + Git + text dump): PowerShell-style structure report;
       read-only `git2` Git report (status/branch/log/show, redacted); text dump
       (6-encoding fallback chain, redaction, developer-context header insertion)

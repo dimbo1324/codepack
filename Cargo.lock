@@ -107,6 +107,14 @@ dependencies = [
 [[package]]
 name = "codepack-engine"
 version = "2.0.0-dev"
+dependencies = [
+ "codepack-core",
+ "codepack-diff",
+ "codepack-scanner",
+ "codepack-security",
+ "tempfile",
+ "thiserror",
+]
 
 [[package]]
 name = "codepack-reports"
