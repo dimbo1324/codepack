@@ -22,11 +22,16 @@
 //!   *during* copying). It is populated from `export_plan.skipped_dirs.len()` instead
 //!   — the count step 1 already computed, surfaced through this field rather than
 //!   re-derived by a second walk.
-//! - **`files_skipped` can only become nonzero via the safety-skip branch** (always
-//!   paired with `files_skipped_by_safety`), since base-ignore/stack-ignore/custom-rule
-//!   exclusion already happened in step 1 and shows up in `export_plan.excluded_files`,
-//!   never surfacing here. The diff-skip branch increments only
-//!   `files_skipped_by_diff`, matching legacy's own separate counter for that branch.
+//! - **`files_skipped_by_safety` is counted from the plan, not from this loop.** Since
+//!   2026-07-25 `build_export_plan` classifies safe-mode exclusions itself (restoring
+//!   legacy's own behavior), so unsafe files never reach `included_files` and the
+//!   in-loop check below can no longer fire. That check is kept as defense in depth —
+//!   `copy_project` is public and a caller may hand it a plan built with
+//!   `no_safety_classification` — but the reported count is derived from
+//!   `export_plan.excluded_files`, which is where those files now are. Reading it from
+//!   the loop alone would have silently reported zero safety skips forever.
+//! - The diff-skip branch increments only `files_skipped_by_diff`, matching legacy's own
+//!   separate counter for that branch.
 
 use std::collections::HashSet;
 use std::fs;
@@ -64,9 +69,27 @@ pub fn copy_project(
         source,
     })?;
 
+    // Files step 1 excluded for safety reasons. An entry counts only when the recorded
+    // reason is the one the safety policy itself produced — a file excluded by an
+    // `.exportignore` rule that also happens to be unsafe was skipped by the rule, and
+    // legacy would not have counted it here either.
+    let skipped_by_safety = export_plan
+        .excluded_files
+        .iter()
+        .filter(|planned| {
+            let decision = should_skip_file_for_safety(
+                &to_relative_path(&planned.relative_path),
+                safe_export_mode,
+            );
+            decision.skip && decision.reason == planned.reason
+        })
+        .count();
+
     let mut stats = CopyStats {
         dirs_created: 1,
         dirs_skipped: u32::try_from(export_plan.skipped_dirs.len()).unwrap_or(u32::MAX),
+        files_skipped: u32::try_from(skipped_by_safety).unwrap_or(u32::MAX),
+        files_skipped_by_safety: u32::try_from(skipped_by_safety).unwrap_or(u32::MAX),
         ..CopyStats::default()
     };
     let mut created_dirs: HashSet<PathBuf> = HashSet::new();
