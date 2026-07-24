@@ -1,0 +1,228 @@
+//! End-to-end coverage for [`codepack_engine::run_export`]: the full eight-step
+//! pipeline, run once against a small fixture project with a real (tempdir-backed)
+//! `codepack-storage` database. A dedicated, later verification pass adds the golden
+//! per-stack fixtures, the full 8-scenario cancellation battery, and the
+//! large-fixture performance test (`task-checklist.md`'s S9 Verification section);
+//! this file only proves the wiring itself is correct end to end.
+
+use std::collections::HashMap;
+use std::fs;
+use std::io::Read as _;
+use std::path::Path;
+
+use codepack_core::CancellationToken;
+use codepack_core::config::Config;
+use codepack_engine::run_export;
+
+fn init_git_repo(root: &Path) {
+    let repo = git2::Repository::init(root).unwrap();
+    fs::write(root.join("tracked.txt"), "hello from git\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index
+        .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+        .unwrap();
+    index.write().unwrap();
+    let tree_id = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_id).unwrap();
+    let signature = git2::Signature::now("Test", "test@example.local").unwrap();
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        "initial commit",
+        &tree,
+        &[],
+    )
+    .unwrap();
+}
+
+fn read_zip_entry(zip_path: &Path, name: &str) -> String {
+    let file = fs::File::open(zip_path).unwrap();
+    let mut archive = zip::ZipArchive::new(file).unwrap();
+    let mut entry = archive.by_name(name).unwrap();
+    let mut contents = String::new();
+    entry.read_to_string(&mut contents).unwrap();
+    contents
+}
+
+fn zip_entry_names(zip_path: &Path) -> Vec<String> {
+    let file = fs::File::open(zip_path).unwrap();
+    let mut archive = zip::ZipArchive::new(file).unwrap();
+    (0..archive.len())
+        .map(|index| archive.by_index(index).unwrap().name().to_string())
+        .collect()
+}
+
+fn build_fixture(source: &Path) {
+    fs::write(source.join("main.py"), "print('hello')\n").unwrap();
+    fs::write(source.join("README.md"), "# Fixture project\n").unwrap();
+    fs::write(source.join(".env"), "API_KEY=super-secret-value\n").unwrap();
+    init_git_repo(source);
+}
+
+#[test]
+fn a_full_run_produces_an_archive_a_real_manifest_and_a_storage_row_then_cleans_staging() {
+    let source = tempfile::tempdir().unwrap();
+    build_fixture(source.path());
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    let config = Config::default();
+    let cancel = CancellationToken::new();
+    let (tx, rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+    drop(tx);
+
+    assert!(!outcome.cancelled);
+    assert!(outcome.successful, "copy_stats = {:?}", outcome.copy_stats);
+    assert_eq!(outcome.copy_stats.errors, 0);
+
+    // At least one progress event was actually sent (the channel is real, not a stub).
+    assert!(rx.try_iter().count() > 0);
+
+    let primary = outcome
+        .archive_result
+        .primary_result()
+        .expect("a successful run always produces a primary archive result");
+    assert!(primary.exists());
+    if !outcome.archive_result.split {
+        assert!(fs::metadata(primary).unwrap().len() > 0);
+    }
+
+    // The default safe export mode ("safe") excludes `.env`-shaped files: the secret
+    // never reaches the copy, so it can never reach the final archive either.
+    let final_zip = &outcome.paths.final_zip;
+    assert!(final_zip.exists());
+    let entry_names = zip_entry_names(final_zip);
+    assert!(
+        !entry_names.iter().any(|name| name.ends_with(".env")),
+        "entries = {entry_names:?}"
+    );
+
+    let manifest_json = read_zip_entry(final_zip, "manifest.json");
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_json).unwrap();
+    assert_ne!(manifest["archives"]["status"], "not_written_yet");
+
+    let run_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM export_run", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(run_count, 1);
+
+    let baseline = codepack_storage::latest_snapshot(&conn, outcome.project_id).unwrap();
+    assert!(
+        baseline.is_some(),
+        "a successful run must advance the project's latest snapshot"
+    );
+
+    assert!(
+        !outcome.paths.staging_dir.exists(),
+        "staging must be removed by default (keep_staging_folder = false)"
+    );
+}
+
+#[test]
+fn keep_staging_folder_true_leaves_the_staging_tree_in_place() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(source.path().join("main.py"), "print(1)\n").unwrap();
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    let config = Config {
+        keep_staging_folder: true,
+        ..Config::default()
+    };
+    let cancel = CancellationToken::new();
+    let (tx, _rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+
+    assert!(outcome.successful);
+    assert!(outcome.paths.staging_dir.exists());
+    assert!(outcome.paths.manifest_file.is_file());
+}
+
+#[test]
+fn a_pre_cancelled_run_still_writes_the_manifest_and_archive_and_records_the_attempt() {
+    let source = tempfile::tempdir().unwrap();
+    build_fixture(source.path());
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    // `keep_staging_folder: true` here is a test-observability choice, not a pipeline
+    // requirement: staging cleanup always runs regardless of cancellation (see
+    // `orchestrator.rs`'s own doc comment), and `manifest.json` lives inside the
+    // staging tree, so keeping it lets this test inspect it directly on disk instead
+    // of unzipping the final archive a second time.
+    let config = Config {
+        keep_staging_folder: true,
+        ..Config::default()
+    };
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let (tx, _rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+
+    assert!(outcome.cancelled);
+    assert!(!outcome.successful);
+    assert!(outcome.analytics.is_none());
+
+    // Steps 7-8 and history recording run unconditionally, cancelled or not.
+    assert!(outcome.paths.manifest_file.is_file());
+    let primary = outcome
+        .archive_result
+        .primary_result()
+        .expect("archiving still runs, and still produces a result, on a cancelled run");
+    assert!(primary.exists());
+
+    let run_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM export_run", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(run_count, 1);
+
+    let cancelled_flag: bool = conn
+        .query_row(
+            "SELECT cancelled FROM export_run WHERE id = ?1",
+            [outcome.run_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(cancelled_flag);
+
+    let baseline = codepack_storage::latest_snapshot(&conn, outcome.project_id).unwrap();
+    assert!(
+        baseline.is_none(),
+        "a cancelled run must never insert a snapshot row"
+    );
+}

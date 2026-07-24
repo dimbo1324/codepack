@@ -16,6 +16,12 @@ pub enum EngineError {
     #[error(transparent)]
     Report(#[from] codepack_reports::ReportError),
 
+    #[error(transparent)]
+    Storage(#[from] codepack_storage::StorageError),
+
+    #[error(transparent)]
+    Archive(#[from] codepack_archive::ArchiveError),
+
     #[error("cannot create directory {path}: {source}")]
     Io {
         path: PathBuf,

@@ -222,11 +222,46 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
       variable) for `ManifestInput`/`IndexInput`/structure/Git report consumption —
       **not yet wired into a real call site** (that is Group Z's top-level orchestrator);
       carries a disclosed, temporary `#[allow(dead_code)]` until that wiring lands.
-- [ ] Group Z (archive + storage close-out): `build_final_archives` +
+- [+] Group Z (archive + storage close-out): `build_final_archives` +
       `on_plan_ready`/dashboard-refresh closure + final post-archive refresh,
       success/failure gate, `record_export_run` wiring, staging cleanup
       (unconditional unless `keep_staging_folder`, on every code path including
-      cancelled/failed), progress/log channel wiring threaded through every group
+      cancelled/failed), progress/log channel wiring threaded through every group.
+      `AnalyticsOutcome` extended (additive) with owned `inventory`/`replan` fields so
+      the step-8 hook can rebuild an equivalent `ReportContext` for
+      `REPORT_DASHBOARD.html`'s mid-archiving refresh without re-planning a third
+      time. `crate::storage` (new module) hand-writes both `Snapshot ↔ New*/Stored*`
+      conversions — confirmed no `From` impl exists across the `codepack-diff`/
+      `codepack-storage` boundary on either side; both directions round-trip-tested.
+      New top-level `orchestrator::run_export` sequences all 8 steps; `ExportOutcome`
+      exposes `paths`/`cancelled`/`successful`/`copy_stats`/`text_stats`/
+      `archive_result`/`project_id`/`run_id`/`analytics`.
+      **Real cross-stage design gap found and resolved within this pass's own scope**:
+      `codepack_scanner::build_export_plan`/`codepack_diff::resolve_diff_selection`
+      (S2/S4, already shipped) hard-error (`ScannerError::Cancelled`/
+      `DiffError::Cancelled`) on an already-cancelled token, which would otherwise
+      make `run_export` propagate `Err` instead of honoring legacy's "steps 7-8 and
+      history always run" guarantee for a token cancelled before the pipeline even
+      starts. Resolved by short-circuiting steps 1-2 with a synthetic, clearly-labeled
+      "nothing planned/copied" `PlanOutcome` (`cancelled_before_planning_outcome`)
+      whenever `cancel.is_cancelled()` is already true before step 1 is called — a
+      pipeline-sequencing decision squarely within Group Z's scope, not a change to
+      S2/S4's own behavior. A token that becomes cancelled *during* step 1's own
+      parallel walk (a narrower timing race) is not specially handled and would still
+      propagate `Err` from `run_export` — disclosed, not silently accepted as fully
+      solved; judged not worth chasing given S8's own precedent for not pursuing
+      every timing-dependent race with a dedicated test.
+      **Deferred, disclosed**: `NewRunFile`/`NewFinding`/`NewArchivePart` population is
+      real (not stubbed) whenever step 6 (`analytics`) actually ran, but silently
+      empty (`&[]`) when it never ran (export cancelled before or during step 6) —
+      there is no re-planned file list, scan result, or archive-part grouping to draw
+      from in that case, and this is judged an acceptable, honestly-empty absence
+      rather than fabricated data. `NewArchivePart.groups` is always `None` (the
+      per-part group breakdown already lives in `27_archive_plan.md`/
+      `ARCHIVE_SET_MANIFEST.json`; duplicating it into a third place was not worth
+      this pass's time budget). `NewExportRun.redacted_count` is always `None` —
+      legacy's own history JSON never tracked this field either, an honest absence
+      carried forward, not a gap this pass introduces.
 
 ## Verification — S9
 

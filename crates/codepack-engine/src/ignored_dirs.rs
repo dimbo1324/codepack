@@ -44,14 +44,9 @@ pub(crate) fn ignored_dir_names_for(source_root: &Path, config: &Config) -> Hash
 /// determinism: callers need a stable, orderable list, even though `write_manifest`'s
 /// own `ignored_dirs_payload` re-sorts (into a `BTreeSet`) internally anyway.
 ///
-/// Disclosed, temporary `dead_code` allowance: this pass (S9's Group R+A) adds this
-/// helper for [`crate::manifest::write_manifest_and_index`]'s `extra_ignored_dirs`
-/// parameter and for [`crate::structure::write_structure_report`]/
-/// [`crate::git_report::write_git_report`]'s equivalent inputs, but the top-level
-/// orchestrator that actually computes this value once per run and threads it into all
-/// three call sites is Group Z's job (`task-checklist.md`), not yet written. Remove
-/// this attribute once that wiring lands.
-#[allow(dead_code)]
+/// [`crate::orchestrator::run_export`] is this helper's real call site: it computes
+/// this value once per run and threads it into [`crate::manifest::write_manifest_and_index`]
+/// and [`crate::structure::write_structure_report`].
 pub(crate) fn extra_ignored_display(source_root: &Path, config: &Config) -> Vec<String> {
     let base: HashSet<String> = codepack_scanner::IGNORED_DIR_NAMES
         .iter()

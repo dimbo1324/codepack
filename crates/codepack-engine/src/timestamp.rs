@@ -70,6 +70,19 @@ fn format_unix_seconds_human(total_seconds: u64) -> String {
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
 }
 
+/// Whole-second Unix epoch "now", for `codepack_storage`'s `NewExportRun.started_at`/
+/// `finished_at`/`NewSnapshot.created_at` timestamp fields. This crate's own copy of
+/// the same fallback-to-`0` pattern `codepack_storage::types::unix_timestamp` uses
+/// internally — that helper is `pub(crate)` to that crate, not reusable here (same
+/// duplication-over-cross-crate-visibility tradeoff as every other timestamp helper in
+/// this module).
+pub(crate) fn unix_timestamp_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 /// Howard Hinnant's `civil_from_days` (see [`compact_utc_stamp`]'s doc comment).
 /// `pub(crate)` rather than file-private: [`crate::structure`] (`ps_date`'s
 /// PowerShell-style `LastWriteTime` rendering) and [`crate::git_report`] (a commit's
@@ -125,6 +138,14 @@ mod tests {
             format_unix_seconds_human(1_704_112_496),
             "2024-01-01 12:34:56"
         );
+    }
+
+    #[test]
+    fn unix_timestamp_now_is_a_plausible_recent_epoch_second() {
+        let now = unix_timestamp_now();
+        // 2024-01-01T00:00:00Z, a loose lower bound that will hold for the life of
+        // this codebase without hardcoding a moving "current" value.
+        assert!(now > 1_700_000_000);
     }
 
     #[test]

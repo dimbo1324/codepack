@@ -13,6 +13,9 @@ codepack-scanner = { workspace = true }
 codepack-security = { workspace = true }
 codepack-diff = { workspace = true }
 codepack-reports = { workspace = true }
+codepack-storage = { workspace = true }
+codepack-archive = { workspace = true }
+codepack-tokens = { workspace = true }
 git2 = { workspace = true }
 encoding_rs = { workspace = true }
 thiserror = { workspace = true }
@@ -20,6 +23,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 serde_json = { workspace = true }
+zip = { workspace = true }
 
 [lints]
 workspace = true

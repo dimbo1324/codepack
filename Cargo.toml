@@ -78,6 +78,14 @@ codepack-reports = { path = "crates/codepack-reports" }
 # cp1251/cp866/utf-16 — MIT/Apache-2.0, no copyleft, maintained by the WHATWG/Mozilla
 # encoding working group.
 encoding_rs = "0.8"
+# S9 (codepack-engine): step 8's final archiving reuses the already-shipped, reviewed
+# codepack-archive crate (BLUEPRINT §A.8) rather than re-deriving ZIP/split logic in
+# the orchestrator itself.
+codepack-archive = { path = "crates/codepack-archive" }
+# S9 (codepack-engine): persists each export run's history/snapshot/findings via the
+# already-shipped, reviewed codepack-storage crate (BLUEPRINT §D) — the orchestrator is
+# this crate's first real caller.
+codepack-storage = { path = "crates/codepack-storage" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

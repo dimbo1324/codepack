@@ -27,16 +27,22 @@ use codepack_core::{CancellationToken, ExportPaths};
 use codepack_diff::DiffSelection;
 use codepack_reports::context::{Inventory, ReportContext};
 use codepack_reports::{ReportJob, RunSummary};
-use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
+use codepack_scanner::{ExportIgnoreRules, ExportPlan, ScanOptions, build_export_plan};
 use codepack_security::{ScanResult, SecurityOptions, scan_project};
 
 use crate::error::Result;
 use crate::relpath::to_relative_path;
 
-/// Everything later steps (manifest writing, storage) need from this step.
+/// Everything later steps (manifest writing, storage, the step-8 dashboard-refresh
+/// hook) need from this step. `inventory`/`replan` are owned copies of this function's
+/// own internal re-plan-over-the-copy, kept alive past this function's return so Group
+/// Z's `on_plan_ready` closure can rebuild an equivalent [`ReportContext`] for
+/// `REPORT_DASHBOARD.html`'s mid-archiving refresh without re-planning a third time.
 pub struct AnalyticsOutcome {
     pub scan_result: ScanResult,
     pub run_summary: RunSummary,
+    pub inventory: Inventory,
+    pub replan: ExportPlan,
 }
 
 fn full_job_catalog() -> Vec<ReportJob> {
@@ -121,6 +127,8 @@ pub fn run_analytics(
     Ok(AnalyticsOutcome {
         scan_result,
         run_summary,
+        inventory,
+        replan,
     })
 }
 

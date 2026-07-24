@@ -108,16 +108,20 @@ dependencies = [
 name = "codepack-engine"
 version = "2.0.0-dev"
 dependencies = [
+ "codepack-archive",
  "codepack-core",
  "codepack-diff",
  "codepack-reports",
  "codepack-scanner",
  "codepack-security",
+ "codepack-storage",
+ "codepack-tokens",
  "encoding_rs",
  "git2",
  "serde_json",
  "tempfile",
  "thiserror",
+ "zip",
 ]
 
 [[package]]
