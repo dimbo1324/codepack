@@ -151,10 +151,14 @@ within this one checklist.
       table, `16_key_files`/`22_project_health` scoring formulas, `AI_PROMPTS`
       legacy-emptiness, git2/no-subprocess, fault tolerance, architecture boundaries,
       scope) was independently re-derived and confirmed correct.
-- [ ] CI green on all three OSes — pending merge/push, needs owner sign-off first
+- [+] CI green on all three OSes — confirmed live (run #48, commit `cab79df`,
+      `gate (ubuntu-latest)`/`gate (macos-latest)`/`gate (windows-latest)` all
+      `success`)
 - [+] Commits: checklist first, then S6, then S7 (four passes: G+A, B+D, C+E,
       F+G-finish), then the review-driven fix commit, separated logically
-- [ ] Fast-forward merge into `main` — pending owner sign-off
+- [+] Fast-forward merge into `main` — done, with explicit owner sign-off; rebased
+      cleanly onto `main` first (main had advanced by one commit, the S5 CI
+      confirmation), then merged and pushed as `cab79df`
 - [+] Final report to owner (Russian, per language policy)
 
 ---
