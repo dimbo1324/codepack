@@ -394,9 +394,16 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
       pass; `codepack-engine`'s own non-`#[ignore]` test count is 79 including the
       3 new `StagingCleanupGuard` tests added by the review fix), `cargo xtask
       sync-agents --check` all green. `cargo deny check` unavailable in this
-      sandbox (pre-existing, documented gap — same as every prior S8/S9 pass). CI
-      on the three GitHub Actions OSes confirmed live for this pass — see this
-      pass's own final report for the run link/result.
+      sandbox (pre-existing, documented gap — same as every prior S8/S9 pass).
+      **CI not triggered by this pass**: `.github/workflows/ci.yml` only runs on
+      `push` to `main` or on a `pull_request` event, neither of which happened —
+      the branch was pushed to `origin` (a WIP branch push, allowed by
+      `.ai/universal/01-workflow.md` without asking) but no PR was opened and
+      `main` was not touched, both of which are separate, visible, harder-to-
+      reverse actions this pass did not take without asking first. Confirmed via
+      the GitHub Actions API: zero runs exist for this branch. A live three-OS
+      confirmation, as every prior stage recorded, requires either opening a PR or
+      merging to `main` — both deferred to the owner's explicit decision below.
 - [ ] Merge into `main` — **not performed**, per `.ai/universal/01-workflow.md`
       ("merge into `main` only fast-forward and only after the project's full
       quality gate is green" + explicit owner sign-off). Left for the owner to
