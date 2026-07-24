@@ -69,6 +69,15 @@ codepack-tokens = { path = "crates/codepack-tokens" }
 # broader `deflate` feature bucket also enables — this crate always writes at a fixed
 # level 6 via flate2/zlib-rs, never zopfli's own (different) compression path.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# S9 (codepack-engine): the orchestrator's analytics step (6) assembles and runs the
+# full report catalog and writes PROJECT_PROFILE.json/REPORT_PLUGINS.json over the
+# already-shipped, reviewed codepack-reports crate, rather than re-deriving any of it.
+codepack-reports = { path = "crates/codepack-reports" }
+# S9 (codepack-engine): the text-dump step's 6-encoding fallback chain
+# (utf-8/utf-8-sig/cp1251/cp866/utf-16/latin-1) needs total (never-failing) codecs for
+# cp1251/cp866/utf-16 — MIT/Apache-2.0, no copyleft, maintained by the WHATWG/Mozilla
+# encoding working group.
+encoding_rs = "0.8"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

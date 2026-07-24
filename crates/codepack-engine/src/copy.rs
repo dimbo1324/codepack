@@ -37,14 +37,7 @@ use codepack_scanner::ExportPlan;
 use codepack_security::should_skip_file_for_safety;
 
 use crate::error::{EngineError, Result};
-
-/// Splits a backslash-joined relative path (`PlannedFile.relative_path`'s join
-/// convention, the same on every OS) into real path components. Never
-/// `Path::new(rel_str)` directly: on Linux/macOS a backslash is an ordinary filename
-/// character, not a separator, which would silently corrupt every nested path.
-fn to_relative_path(relative_path: &str) -> PathBuf {
-    relative_path.split('\\').collect()
-}
+use crate::relpath::to_relative_path;
 
 /// Copies every file `export_plan` included into `project_dir`, applying the
 /// diff-selection filter (`include_relative_paths`) and safety-mode filter

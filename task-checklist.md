@@ -187,13 +187,41 @@ Both stages keep their own `**Status.**` line in `ROADMAP.md`.
       only reachable via the safety-skip branch (paired with
       `files_skipped_by_safety`; the diff-skip branch touches only
       `files_skipped_by_diff`, matching legacy's separate counter).
-- [ ] Group R (structure + Git + text dump): PowerShell-style structure report;
-      read-only `git2` Git report (status/branch/log/show, redacted); text dump
-      (6-encoding fallback chain, redaction, developer-context header insertion)
-- [ ] Group A (analytics + manifest): re-plan-on-copy, `scan_project`,
-      `ReportContext` assembly, `run_reports`, `write_project_profile_json`/
-      `write_report_plugins_json`/`write_custom_prompt`, first
-      `write_manifest`/`write_index_md` (`archive_result: None`)
+- [+] Group R (structure + Git + text dump): `structure::write_structure_report`
+      (manual `os.walk`-shaped recursion, PowerShell `Get-ChildItem`-style listing,
+      `ps_date` rendered in UTC not legacy's local wall clock — informational field,
+      documented, same precedent as `crate::timestamp`); `git_report::write_git_report`
+      (read-only `git2` equivalents of `status --short --branch`/`branch
+      --show-current`/`log --oneline -5`/`show --stat --name-status HEAD`/`show --patch
+      --find-renames HEAD`, via `Repository::discover` not `::open` — matches real `git`
+      CLI's upward `cwd` search, same call `codepack-diff`'s own `discover_repository`
+      already established; no fabricated `exit_code`/stdout/stderr framing, since none
+      of that is real for a `git2` call — **redaction strengthened to
+      `codepack_security::patterns::keyword::redacted_line`**, not legacy's own weaker
+      `redact_secrets`, following S7's own already-corrected precedent for exactly this
+      class of bug); `text_dump::write_text_dump` (6-encoding fallback chain via
+      `encoding_rs`, documented as an **honest approximation, not exact parity** — see
+      its own module doc comment for why `encoding_rs`'s total codecs can't reproduce
+      Python's `UnicodeDecodeError`-driven fallthrough bit-for-bit; redaction
+      deliberately left at the plain `redact_secrets`, matching legacy exactly, since
+      the DATABASE_URL bug S7 found was specific to `docker_report.py`'s call site, not
+      this one). Added a shared `relpath::to_relative_path` module (`copy.rs`'s helper,
+      generalized) and extended `timestamp.rs` with `human_now_utc`/
+      `human_from_system_time` plus a `pub(crate)`-visible `civil_from_days`.
+- [+] Group A (analytics + manifest): `analytics::run_analytics` (re-plan-on-copy over
+      `paths.project_dir`, the **only** call site for `codepack_security::scan_project`
+      in the whole pipeline; `ReportContext` assembly; full seven-group job catalog
+      chained in BLUEPRINT §A.7 order with `group_g_finish_jobs` last;
+      `write_report_plugins_json`/`write_project_profile_json`/`run_reports`).
+      `write_custom_prompt` needs no separate call site: it is already
+      `codepack_reports::reports::ai_prompts::JOB`, one of `group_f_jobs()`'s members,
+      and runs through `run_reports` like every other job. `manifest::write_manifest_and_index`
+      (first call, `archive_result: None`) designed for Group Z's second call from the
+      start — proven by this pass's own "call twice" test, not left for Group Z to
+      discover. Added `ignored_dirs::extra_ignored_display` (legacy's `extra_ignored`
+      variable) for `ManifestInput`/`IndexInput`/structure/Git report consumption —
+      **not yet wired into a real call site** (that is Group Z's top-level orchestrator);
+      carries a disclosed, temporary `#[allow(dead_code)]` until that wiring lands.
 - [ ] Group Z (archive + storage close-out): `build_final_archives` +
       `on_plan_ready`/dashboard-refresh closure + final post-archive refresh,
       success/failure gate, `record_export_run` wiring, staging cleanup

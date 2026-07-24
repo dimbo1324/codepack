@@ -37,7 +37,45 @@ fn format_unix_seconds_compact(total_seconds: u64) -> String {
 /// Howard Hinnant's `civil_from_days`: converts a day count since the Unix epoch
 /// (1970-01-01) into a proleptic-Gregorian `(year, month, day)`. Avoids pulling in a
 /// calendar/timezone crate for a single cosmetic timestamp field.
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
+/// UTC "human" timestamp, `YYYY-MM-DD HH:MM:SS`, analogous to legacy's `human_now()`
+/// (`datetime.now().isoformat(sep=" ", timespec="seconds")`) — used by every report
+/// header this pass writes (structure/Git/text-dump `Generated:` lines,
+/// `manifest.json`/`INDEX.md`'s `generated_at`). Same deliberate, documented UTC-over-
+/// local-wall-clock deviation as [`compact_utc_stamp`] above: reproducing legacy's local
+/// time would need a timezone-database dependency for a cosmetic field nothing parses
+/// back.
+pub(crate) fn human_now_utc() -> String {
+    let since_epoch = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    format_unix_seconds_human(since_epoch.as_secs())
+}
+
+/// [`human_now_utc`] for an arbitrary already-known [`SystemTime`] (a file's mtime,
+/// say) rather than "now" — shares the same formatting so every report's timestamp
+/// fields render identically.
+pub(crate) fn human_from_system_time(time: SystemTime) -> String {
+    let since_epoch = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+    format_unix_seconds_human(since_epoch.as_secs())
+}
+
+fn format_unix_seconds_human(total_seconds: u64) -> String {
+    let days = total_seconds / 86_400;
+    let seconds_of_day = total_seconds % 86_400;
+    let hour = seconds_of_day / 3600;
+    let minute = (seconds_of_day % 3600) / 60;
+    let second = seconds_of_day % 60;
+
+    let (year, month, day) = civil_from_days(days as i64);
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
+}
+
+/// Howard Hinnant's `civil_from_days` (see [`compact_utc_stamp`]'s doc comment).
+/// `pub(crate)` rather than file-private: [`crate::structure`] (`ps_date`'s
+/// PowerShell-style `LastWriteTime` rendering) and [`crate::git_report`] (a commit's
+/// UTC-formatted `Date:` line) both need the same epoch-day-to-civil-date conversion —
+/// reusing this one implementation instead of a third/fourth copy of the algorithm.
+pub(crate) fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = (z - era * 146_097) as u64;
@@ -74,5 +112,26 @@ mod tests {
         let stamp = compact_utc_stamp();
         assert_eq!(stamp.len(), "19700101_000000".len());
         assert_eq!(stamp.chars().nth(8), Some('_'));
+    }
+
+    #[test]
+    fn epoch_formats_as_human_stamp() {
+        assert_eq!(format_unix_seconds_human(0), "1970-01-01 00:00:00");
+    }
+
+    #[test]
+    fn known_date_formats_as_human_stamp() {
+        assert_eq!(
+            format_unix_seconds_human(1_704_112_496),
+            "2024-01-01 12:34:56"
+        );
+    }
+
+    #[test]
+    fn current_human_stamp_has_the_expected_shape() {
+        let stamp = human_now_utc();
+        assert_eq!(stamp.len(), "2024-01-01 12:34:56".len());
+        assert_eq!(stamp.chars().nth(4), Some('-'));
+        assert_eq!(stamp.chars().nth(10), Some(' '));
     }
 }

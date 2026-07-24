@@ -10,6 +10,12 @@ pub enum EngineError {
     #[error(transparent)]
     Diff(#[from] codepack_diff::DiffError),
 
+    #[error(transparent)]
+    Security(#[from] codepack_security::SecurityError),
+
+    #[error(transparent)]
+    Report(#[from] codepack_reports::ReportError),
+
     #[error("cannot create directory {path}: {source}")]
     Io {
         path: PathBuf,
