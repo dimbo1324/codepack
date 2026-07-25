@@ -17,6 +17,7 @@ use crate::error::ReportError;
 use crate::paths::file_name_of;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 use crate::text::read_text_lossy;
 
 pub const JOB: ReportJob = ReportJob {
@@ -172,7 +173,7 @@ fn write_docker_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<()
     out.push_str("=== Docker / Infrastructure Report ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
     out.push_str("Compose parsing is heuristic and works best with simple YAML files.\n");
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str("--- Dockerfiles ---\n");

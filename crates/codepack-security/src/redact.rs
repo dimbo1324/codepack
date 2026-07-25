@@ -35,46 +35,67 @@
 //! `[^\s'"\n]`). See `mismatched_quote_style_does_not_falsely_close_early` below — this
 //! is verified by test, not assumed.
 
-use regex::Captures;
+use crate::patterns::keyword::{KeySpacing, find_secret_spans, redact_value_after_separator};
 
-use crate::patterns::keyword::SECRET_PATTERNS;
-
+/// Rewrites one matched `KEY: value` / `KEY=value` / `BEARER <token>` span.
+///
+/// Shares [`redact_value_after_separator`] with the scan-report path (Q16). Keeping two
+/// copies is what let the content path — the more dangerous of the two, since its output
+/// is handed to whoever receives the bundle — retain the leak after the message path was
+/// fixed: `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
+/// `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
 fn replace_match(matched: &str) -> String {
-    // The retained key name goes through the same sanitizer as the scan-report path
-    // (Q16). This pass rewrites *exported file content* and the clipboard, so a secret
-    // surviving here is handed to whoever receives the bundle — strictly worse than the
-    // finding-message leak Q16 was opened for, and the identical split-on-first-`=`
-    // cause. `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
-    // `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
-    use crate::patterns::keyword::sanitize_key_prefix as sanitize;
-    if let Some(eq_pos) = matched.find('=') {
-        let key = sanitize(&matched[..eq_pos]);
-        return format!("{key}=<REDACTED>");
-    }
-    if let Some(colon_pos) = matched.find(':') {
-        let key = sanitize(&matched[..colon_pos]);
-        return format!("{key}: <REDACTED>");
-    }
-    "<REDACTED_SECRET>".to_string()
-}
-
-fn whole_match<'a>(caps: &Captures<'a>) -> &'a str {
-    caps.get(0).map(|m| m.as_str()).unwrap_or_default()
+    redact_value_after_separator(
+        matched,
+        // The match span starts at the keyword itself, and legacy preserved any space
+        // before the separator; golden references contain that spelling.
+        KeySpacing::Preserve,
+        // A `BEARER <token>` span carries no key at all, so there is nothing to name.
+        "<REDACTED_SECRET>",
+    )
 }
 
 /// Replaces `KEY: value` / `KEY=value` / `BEARER <token>` shapes in `text` with a
 /// redacted placeholder. Applied to file content before it is included in an export or
 /// copied to the clipboard — see `BLUEPRINT.md` §A.4.2.
+///
+/// Works line by line because the shapes themselves are line-scoped: the original
+/// patterns excluded `\n` from every value character class, so a value could never span
+/// a newline. Scanning per line also keeps the span offsets simple and bounds the work
+/// on a very large file.
 pub fn redact_secrets(text: &str) -> String {
-    let mut redacted = text.to_string();
-    for pattern in SECRET_PATTERNS.iter() {
-        redacted = pattern
-            .replace_all(&redacted, |caps: &Captures<'_>| {
-                replace_match(whole_match(caps))
-            })
-            .into_owned();
+    // `split_inclusive` keeps each line's terminator attached, so joining the results
+    // reproduces the original line endings exactly — including a missing final newline,
+    // and including `\r\n`, whose `\r` is simply part of the line's tail.
+    text.split_inclusive('\n').map(redact_line_spans).collect()
+}
+
+/// Replaces every secret span on one line, left to right.
+fn redact_line_spans(line: &str) -> String {
+    let spans = find_secret_spans(line);
+    if spans.is_empty() {
+        return line.to_string();
     }
-    redacted
+
+    // Applying the keyword spans first and the bearer spans after would shift offsets,
+    // so all spans are sorted and applied in one pass. Overlaps cannot occur in
+    // practice — a bearer token is not a `key=value` — but a later span starting inside
+    // an earlier one is skipped rather than corrupting the output.
+    let mut ordered = spans;
+    ordered.sort_unstable();
+
+    let mut out = String::with_capacity(line.len());
+    let mut cursor = 0usize;
+    for (start, end) in ordered {
+        if start < cursor {
+            continue;
+        }
+        out.push_str(&line[cursor..start]);
+        out.push_str(&replace_match(&line[start..end]));
+        cursor = end;
+    }
+    out.push_str(&line[cursor..]);
+    out
 }
 
 #[cfg(test)]

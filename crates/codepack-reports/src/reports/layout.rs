@@ -11,12 +11,22 @@ use std::collections::BTreeSet;
 
 use crate::context::Inventory;
 
-/// Legacy `SOURCE_CODE_EXTENSIONS` (`constants.py`), shared by the Group E reports
-/// that need it (`17_code_quality_report.md`, `23_refactoring_opportunities.md`).
-/// `08_code_metrics.txt` (Group A) carries its own private copy of this same
-/// verbatim-ported list from an earlier pass; both copies are independently faithful
-/// to the same fixed legacy constant, so the small duplication is left alone rather
-/// than risk an unrelated edit to already-tested Group A code for this pass's sake.
+/// Width of the `=`/`-` rule that separates sections in a plain-text report.
+///
+/// Legacy fixed this at 100 columns and every `.txt` report it produced used it, so it
+/// is part of what those artifacts look like rather than a styling choice. Previously
+/// written as a bare `100` at each of the fifteen places a rule is drawn.
+pub(crate) const SECTION_RULE_WIDTH: usize = 100;
+
+/// Draws a section rule of [`SECTION_RULE_WIDTH`] columns using `character`.
+pub(crate) fn section_rule(character: char) -> String {
+    character.to_string().repeat(SECTION_RULE_WIDTH)
+}
+
+/// Legacy `SOURCE_CODE_EXTENSIONS` (`constants.py`): the extensions treated as source
+/// code by every report that distinguishes code from data or documentation
+/// (`08_code_metrics.txt`, `17_code_quality_report.md`,
+/// `23_refactoring_opportunities.md`).
 pub(crate) const SOURCE_CODE_EXTENSIONS: &[&str] = &[
     "astro", "c", "cc", "cpp", "cs", "css", "cxx", "dart", "go", "h", "hpp", "html", "htm", "java",
     "js", "jsx", "kt", "kts", "less", "mjs", "php", "py", "pyi", "pyw", "rb", "rs", "sass", "scss",

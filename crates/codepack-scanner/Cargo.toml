@@ -15,10 +15,13 @@ serde_json.workspace = true
 thiserror.workspace = true
 walkdir.workspace = true
 rayon.workspace = true
-regex.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Test-only. `.exportignore` globs are matched directly rather than translated into
+# regex source and compiled; `regex` stays as the reference the matcher is differentially
+# checked against, including a verbatim copy of the translation it replaced.
+regex.workspace = true
 
 [lints]
 workspace = true

@@ -30,6 +30,7 @@ mod copy;
 mod error;
 mod git_report;
 mod ignored_dirs;
+mod layout;
 mod manifest;
 mod orchestrator;
 mod paths;

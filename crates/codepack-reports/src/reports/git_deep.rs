@@ -24,6 +24,7 @@ use crate::error::ReportError;
 use crate::git_support::{open_repository, short_oid};
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 
 pub const JOB: ReportJob = ReportJob {
     filename: "05_git_deep.txt",
@@ -34,9 +35,9 @@ pub const JOB: ReportJob = ReportJob {
 
 fn write_section(out: &mut String, label: &str, lines: &[String]) {
     out.push('\n');
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str(&format!("\n$ {label}\n"));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
     if lines.is_empty() {
         out.push_str("(no output)\n");
@@ -245,7 +246,7 @@ fn write_git_deep_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<
     out.push_str(
         "Important: this report is read-only and never switches branches or modifies the repository.\n",
     );
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     let Some(repo) = open_repository(&ctx.source_root) else {

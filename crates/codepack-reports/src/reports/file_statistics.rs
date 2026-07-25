@@ -10,6 +10,7 @@ use crate::error::ReportError;
 use crate::paths::path_depth;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 
 pub const JOB: ReportJob = ReportJob {
     filename: "02_file_statistics.txt",
@@ -81,7 +82,7 @@ fn write_file_statistics_report(
     let mut out = String::new();
     out.push_str("=== File Statistics ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str("--- Files by extension ---\n");

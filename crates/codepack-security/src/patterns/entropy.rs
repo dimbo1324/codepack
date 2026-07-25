@@ -19,14 +19,14 @@
 //! - a bare qualifying token (no adjacent context) is capped at `low` confidence — an
 //!   additive heuristic, never discarded outright;
 //! - a token immediately preceded (ignoring whitespace) by `=`/`:` or a secret-shaped
-//!   assignment ([`crate::patterns::keyword::ASSIGNMENT_SECRET_RE`]) is boosted one
+//!   assignment ([`crate::patterns::keyword::has_secret_assignment`]) is boosted one
 //!   confidence bucket; a token that clears its threshold by a wide margin starts at
 //!   `medium` instead of `low` before that boost is applied, so `medium → high` is
 //!   reachable, but **only** with context — without context the ceiling stays `medium`.
 
 use std::collections::HashMap;
 
-use crate::patterns::keyword::ASSIGNMENT_SECRET_RE;
+use crate::patterns::keyword::has_secret_assignment;
 
 const BASE64_MIN_LENGTH: usize = 20;
 const BASE64_MIN_ENTROPY: f64 = 4.0;
@@ -116,7 +116,7 @@ fn has_context(line: &str, token_start: usize) -> bool {
     if trimmed.ends_with('=') || trimmed.ends_with(':') {
         return true;
     }
-    ASSIGNMENT_SECRET_RE.is_match(prefix)
+    has_secret_assignment(prefix)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

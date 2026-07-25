@@ -285,7 +285,7 @@ struct RiskyHit {
 fn collect_risky_hits(line: &str) -> Vec<RiskyHit> {
     risky_code::RISKY_CODE_PATTERNS
         .iter()
-        .filter(|rule| rule.regex.is_match(line))
+        .filter(|rule| rule.is_match(line))
         .map(|rule| RiskyHit {
             severity: rule.severity,
             rule: rule.rule_id,

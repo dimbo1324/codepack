@@ -1,68 +1,61 @@
 //! Keyword-based secret detection, ported from legacy `reports/insights/security.py`
 //! (`_secret_confidence`, `redacted_line`) plus the shared `constants.py` patterns.
 //!
-//! Owns the canonical `SECRET_PATTERNS`/`SECRET_KEY_PATTERN`/`ASSIGNMENT_SECRET_RE`/
-//! `PRIVATE_KEY_RE` regex objects; [`crate::redact::redact_secrets`] reuses
-//! [`SECRET_PATTERNS`] rather than duplicating the regex definitions.
+//! The keyword roots themselves, and the matching of the `key = value` shapes built on
+//! them, live in [`crate::patterns::keyword_scan`]; this module is the cascade and the
+//! redaction policy layered over them. [`crate::redact::redact_secrets`] shares the same
+//! span finders rather than restating the shapes.
 
-use std::sync::LazyLock;
+use crate::patterns::keyword_scan::{
+    self, REDACT_ROOTS, assignment_roots, contains_root, find_keyword_assignments, scan_roots,
+};
 
-use regex::Regex;
+/// Every keyword/value span on the line — legacy's first `SECRET_PATTERNS` entry —
+/// followed by every `BEARER <token>` span, the second entry.
+///
+/// Content redaction replaces exactly these ranges, in this order.
+pub(crate) fn find_secret_spans(line: &str) -> Vec<(usize, usize)> {
+    let mut spans = find_keyword_assignments(line, REDACT_ROOTS);
+    spans.extend(keyword_scan::find_bearer_tokens(line));
+    spans
+}
 
-/// The five single/compound keyword roots that redaction acts on. Ported from
-/// legacy `_REDACT_KEYWORDS`.
-pub(crate) const REDACT_KEYWORDS: &str = "API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASS|PRIVATE[_-]?KEY";
+/// True when the line carries a keyword with a value, or a bearer token — legacy's
+/// `SECRET_PATTERNS` as a yes/no question. Yields `high` confidence.
+fn has_secret_with_value(line: &str) -> bool {
+    !find_secret_spans(line).is_empty()
+}
 
-/// [`REDACT_KEYWORDS`] plus four keyword roots that are scanned for (contributing to
-/// `low`-confidence findings) but are not themselves redaction targets. Ported from
-/// legacy `_SCAN_KEYWORDS`. Kept as an independent literal (Rust `const` cannot
-/// concatenate another `const &str` at compile time) with a test asserting it starts
-/// with [`REDACT_KEYWORDS`] to keep the two in sync by construction.
-pub(crate) const SCAN_KEYWORDS: &str = "API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASS|PRIVATE[_-]?KEY|DATABASE[_-]?URL|JWT[_-]?SECRET|ACCESS[_-]?KEY|CLIENT[_-]?SECRET";
-
-/// Legacy `SECRET_PATTERNS`: a keyword/value pattern (see `crate::redact` for the
-/// backreference-rewrite rationale) and a `BEARER <token>` pattern. A line matching
-/// either yields `high` confidence.
-pub(crate) static SECRET_PATTERNS: LazyLock<[Regex; 2]> = LazyLock::new(|| {
-    [
-        Regex::new(&format!(
-            r#"(?i)\b({REDACT_KEYWORDS})\b\s*[:=]\s*(?:"[^\s"\n]+"|'[^\s'\n]+'|[^\s'"\n]+)"#
-        ))
-        .expect("hand-written keyword/value pattern is a valid regex, proven by test coverage"),
-        Regex::new(r"(?i)\b(BEARER)\s+[A-Za-z0-9._\-+/=]{16,}")
-            .expect("hand-written BEARER pattern is a valid regex, proven by test coverage"),
-    ]
-});
-
-/// Legacy `SECRET_KEY_PATTERN`: a bare keyword mention (no value shape required).
-/// A line matching this — outside a comment — yields `low` confidence.
-pub(crate) static SECRET_KEY_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(&format!(r"(?i)\b({SCAN_KEYWORDS})\b"))
-        .expect("hand-written scan-keyword pattern is a valid regex, proven by test coverage")
-});
+/// Legacy `SECRET_KEY_PATTERN`: a bare keyword mention, no value shape required. A line
+/// matching this — outside a comment — yields `low` confidence.
+pub(crate) fn mentions_scan_keyword(line: &str) -> bool {
+    contains_root(line, &scan_roots())
+}
 
 /// Legacy `_ASSIGNMENT_SECRET_RE`: a secret-shaped key immediately followed by `:`/`=`,
 /// with no requirement on the value itself — deliberately looser than
-/// [`SECRET_PATTERNS`], yielding `medium` confidence.
-pub(crate) static ASSIGNMENT_SECRET_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
-        r"(?i)\b(api[_-]?key|secret|token|password|pass|private[_-]?key|database[_-]?url|jwt[_-]?secret)\b\s*[:=]",
-    )
-    .expect("hand-written assignment pattern is a valid regex, proven by test coverage")
-});
+/// [`has_secret_with_value`], yielding `medium` confidence.
+pub(crate) fn has_secret_assignment(line: &str) -> bool {
+    keyword_scan::has_assignment_operator_after_root(line, &assignment_roots())
+}
 
 /// Legacy `_PRIVATE_KEY_RE`: a PEM private-key header. The single `critical`-tier
-/// keyword rule; also reused by `patterns::provider` as the `pem-private-key` provider
-/// signature (same regex, two rule identities).
-pub(crate) static PRIVATE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
-        .expect("hand-written PEM header pattern is a valid regex, proven by test coverage")
-});
+/// keyword rule.
+///
+/// The shape lives in `patterns::token_scan` and is shared with the `pem-private-key`
+/// provider signature — one description, two rule identities, rather than the same
+/// pattern written twice.
+fn is_private_key_header(line: &str) -> bool {
+    crate::patterns::provider::is_pem_private_key(line)
+}
 
 /// Legacy `_SCANNER_CODE_HINTS`, respelled to this crate's own Rust identifiers. Any
 /// line containing one of these substrings is exempted from every detector (keyword,
 /// provider, entropy) — this is what keeps the scanner from flagging its own source.
 pub(crate) const SELF_PROTECTION_HINTS: &[&str] = &[
+    // Legacy's own identifier names, kept verbatim: this crate's source is not the only
+    // thing that trips the scanner -- any project that vendored or referenced the
+    // original Python scanner mentions these too, and legacy exempted them by name.
     "SECRET_PATTERNS",
     "SECRET_KEY_PATTERN",
     "redact_secrets",
@@ -71,6 +64,13 @@ pub(crate) const SELF_PROTECTION_HINTS: &[&str] = &[
     "ASSIGNMENT_SECRET_RE",
     "PRIVATE_KEY_RE",
     "PROVIDER_PATTERNS",
+    // This crate's current identifiers, which replaced several of the names above when
+    // the regexes became data. Without these, the scanner flags its own source.
+    "REDACT_ROOTS",
+    "SCAN_ONLY_ROOTS",
+    "ASSIGNMENT_ONLY_ROOTS",
+    "find_keyword_assignments",
+    "find_secret_spans",
 ];
 
 /// `true` when `line` mentions one of this crate's own pattern identifiers and must
@@ -86,17 +86,17 @@ pub fn secret_confidence(line: &str) -> Option<&'static str> {
     if is_self_protected(line) {
         return None;
     }
-    if PRIVATE_KEY_RE.is_match(line) {
+    if is_private_key_header(line) {
         return Some("critical");
     }
-    if SECRET_PATTERNS.iter().any(|pattern| pattern.is_match(line)) {
+    if has_secret_with_value(line) {
         return Some("high");
     }
-    if ASSIGNMENT_SECRET_RE.is_match(line) {
+    if has_secret_assignment(line) {
         return Some("medium");
     }
     let trimmed = line.trim_start();
-    if SECRET_KEY_PATTERN.is_match(line)
+    if mentions_scan_keyword(line)
         && !(trimmed.starts_with('#') || trimmed.starts_with("//") || trimmed.starts_with('*'))
     {
         return Some("low");
@@ -112,16 +112,14 @@ pub fn secret_confidence(line: &str) -> Option<&'static str> {
 /// output, only the key name survives.
 pub fn redacted_line(line: &str) -> String {
     let redacted = crate::redact::redact_secrets(line);
-    if SECRET_KEY_PATTERN.is_match(&redacted) {
-        if let Some(pos) = redacted.find('=') {
-            let key = sanitize_key_prefix(redacted[..pos].trim());
-            return format!("{key}=<REDACTED>");
-        }
-        if let Some(pos) = redacted.find(':') {
-            let key = sanitize_key_prefix(redacted[..pos].trim());
-            return format!("{key}: <REDACTED>");
-        }
-        return "<REDACTED_SECRET_LINE>".to_string();
+    if mentions_scan_keyword(&redacted) {
+        return redact_value_after_separator(
+            &redacted,
+            KeySpacing::Trim,
+            // No separator on the line means there is no key name worth keeping, so the
+            // whole line collapses rather than leaking an unidentifiable fragment.
+            "<REDACTED_SECRET_LINE>",
+        );
     }
     redacted.trim().to_string()
 }
@@ -156,6 +154,57 @@ const ENCODED_RUN_MIN_LEN: usize = 12;
 /// The rule deliberately over-masks rather than under-masks. `oauth2ClientSecret` is a
 /// legitimate identifier that carries a digit and will be masked; the result is a less
 /// informative message, never an exposed credential.
+/// Whether the retained key name keeps the whitespace it had in the original text.
+///
+/// The two redaction paths genuinely differ here and both behaviors are pinned by
+/// tests, so the difference is a parameter rather than a silent divergence between two
+/// copies of the same logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeySpacing {
+    /// Keep the text exactly as it appeared. Content redaction matches a span that
+    /// already starts at the keyword, and legacy preserved any space sitting before the
+    /// separator — `API_KEY = x` yields `API_KEY =<REDACTED>`, stray space included.
+    /// Golden references contain that spelling, so it is parity, not sloppiness.
+    Preserve,
+    /// Trim first. Scan-report messages redact a whole source line, so the key name
+    /// would otherwise carry the line's indentation into the finding.
+    Trim,
+}
+
+/// Splits `text` at its first `=` (else its first `:`), keeps the left side as the key
+/// name, and replaces everything after the separator with `<REDACTED>`.
+///
+/// This is the single implementation of legacy's split-on-first-separator redaction
+/// shape. It backs both redaction paths — exported file content
+/// ([`crate::redact::redact_secrets`]) and scan-report finding messages
+/// ([`redacted_line`]) — which previously carried separate, subtly divergent copies.
+/// That mattered: when Q16 fixed the leak on the message path, the content path kept
+/// the bug, and content redaction is the more dangerous of the two because its output
+/// is handed to whoever receives the bundle.
+///
+/// `fallback` is returned when the text holds neither separator, so the caller can
+/// distinguish "a matched value with no key" from "a whole line collapsed".
+pub(crate) fn redact_value_after_separator(
+    text: &str,
+    spacing: KeySpacing,
+    fallback: &str,
+) -> String {
+    // `=` is probed before `:` so that `key=value:with:colons` keeps `key`, matching
+    // legacy's ordering.
+    for (separator, joiner) in [('=', "="), (':', ": ")] {
+        let Some(position) = text.find(separator) else {
+            continue;
+        };
+        let raw_key = &text[..position];
+        let key = match spacing {
+            KeySpacing::Preserve => raw_key,
+            KeySpacing::Trim => raw_key.trim(),
+        };
+        return format!("{}{joiner}<REDACTED>", sanitize_key_prefix(key));
+    }
+    fallback.to_string()
+}
+
 pub(crate) fn sanitize_key_prefix(prefix: &str) -> String {
     let mut out = String::with_capacity(prefix.len());
     let mut run = String::new();
@@ -250,8 +299,61 @@ mod tests {
     }
 
     #[test]
-    fn scan_keywords_starts_with_redact_keywords() {
-        assert!(SCAN_KEYWORDS.starts_with(REDACT_KEYWORDS));
+    fn separator_redaction_splits_on_equals_before_colon() {
+        // `=` wins so that a value containing colons still yields the real key name.
+        assert_eq!(
+            redact_value_after_separator("key=host:5432", KeySpacing::Trim, "fallback"),
+            "key=<REDACTED>"
+        );
+        assert_eq!(
+            redact_value_after_separator("key: value", KeySpacing::Trim, "fallback"),
+            "key: <REDACTED>"
+        );
+    }
+
+    #[test]
+    fn separator_redaction_returns_the_fallback_when_no_separator_exists() {
+        assert_eq!(
+            redact_value_after_separator(
+                "BEARER abcdef",
+                KeySpacing::Preserve,
+                "<REDACTED_SECRET>"
+            ),
+            "<REDACTED_SECRET>"
+        );
+    }
+
+    #[test]
+    fn the_two_spacing_modes_differ_exactly_as_their_call_sites_require() {
+        // Preserve is what content redaction needs: legacy kept the space before the
+        // separator and the golden references contain that spelling. Trim is what a
+        // scan message needs, since it redacts a whole indented source line. Pinning
+        // both here is what stops the two paths drifting apart again.
+        assert_eq!(
+            redact_value_after_separator("  API_KEY = x", KeySpacing::Preserve, "f"),
+            "  API_KEY =<REDACTED>"
+        );
+        assert_eq!(
+            redact_value_after_separator("  API_KEY = x", KeySpacing::Trim, "f"),
+            "API_KEY=<REDACTED>"
+        );
+    }
+
+    #[test]
+    fn separator_redaction_masks_an_encoded_key_name_in_both_modes() {
+        // The sanitizer runs on the retained prefix regardless of spacing mode, so
+        // neither redaction path can leak a secret that happens to precede a separator.
+        for spacing in [KeySpacing::Preserve, KeySpacing::Trim] {
+            let out = redact_value_after_separator(
+                "Basic dXNlcjpwYXNzd29yZA==",
+                spacing,
+                "<REDACTED_SECRET>",
+            );
+            assert!(
+                !out.contains("dXNlcjpwYXNzd29yZA"),
+                "secret survived in {spacing:?} mode: {out}"
+            );
+        }
     }
 
     #[test]

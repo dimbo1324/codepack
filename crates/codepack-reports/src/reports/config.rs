@@ -22,6 +22,7 @@ use crate::error::ReportError;
 use crate::paths::file_name_of;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 
 pub const JOB: ReportJob = ReportJob {
     filename: "09_config.txt",
@@ -196,7 +197,7 @@ fn write_config_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<()
     let mut out = String::new();
     out.push_str("=== Configuration Report ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str("--- Capability checklist ---\n");

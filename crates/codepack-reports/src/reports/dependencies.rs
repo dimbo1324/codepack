@@ -26,6 +26,7 @@ use crate::error::ReportError;
 use crate::paths::path_depth;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 use crate::text::{read_text_lossy, safe_read_json};
 
 pub const JOB: ReportJob = ReportJob {
@@ -104,7 +105,7 @@ fn write_dependency_report(ctx: &ReportContext<'_>, output_file: &Path) -> Resul
     let mut out = String::new();
     out.push_str("=== Dependency Report ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str(&format!(

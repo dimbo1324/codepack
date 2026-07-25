@@ -3,14 +3,14 @@
 
 use std::path::Path;
 
-use regex::Regex;
-
 use crate::context::{ReportContext, redact_line};
 use crate::error::ReportError;
 use crate::paths::to_native_path;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 use crate::text::read_text_lossy;
+use crate::wordscan::{CODE_MARKERS, find_word};
 
 pub const JOB: ReportJob = ReportJob {
     filename: "07_todo_fixme.txt",
@@ -21,12 +21,6 @@ pub const JOB: ReportJob = ReportJob {
 
 const FINDINGS_LIMIT: usize = 1000;
 
-fn todo_pattern() -> Regex {
-    // Legacy `TODO_PATTERN` (`constants.py`), case-insensitive, word-bounded.
-    Regex::new(r"(?i)\b(TODO|FIXME|HACK|XXX|BUG|TEMP|REFACTOR|DEPRECATED)\b")
-        .expect("TODO_PATTERN is a fixed, compile-time-verified literal")
-}
-
 struct Finding {
     relative_path: String,
     line_number: usize,
@@ -35,7 +29,6 @@ struct Finding {
 }
 
 fn write_todo_fixme_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
-    let pattern = todo_pattern();
     let max_bytes = ctx.config.effective_max_text_file_bytes();
     let mut findings = Vec::new();
 
@@ -49,13 +42,12 @@ fn write_todo_fixme_report(ctx: &ReportContext<'_>, output_file: &Path) -> Resul
             continue;
         };
         for (index, line) in text.lines().enumerate() {
-            let Some(captures) = pattern.captures(line) else {
+            // `find_word` returns the canonical spelling, so a lowercase `todo` in the
+            // source is still reported as the `TODO` kind.
+            let Some(kind) = find_word(line, CODE_MARKERS) else {
                 continue;
             };
-            let kind = captures
-                .get(1)
-                .map(|m| m.as_str().to_uppercase())
-                .unwrap_or_default();
+            let kind = kind.to_string();
             findings.push(Finding {
                 relative_path: file.relative_path.clone(),
                 line_number: index + 1,
@@ -75,7 +67,7 @@ fn write_todo_fixme_report(ctx: &ReportContext<'_>, output_file: &Path) -> Resul
     let mut out = String::new();
     out.push_str("=== TODO / FIXME / Technical Debt Report ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str("--- Summary ---\n");

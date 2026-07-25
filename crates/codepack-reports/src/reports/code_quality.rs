@@ -13,6 +13,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use regex::Regex;
 
@@ -23,6 +24,9 @@ use crate::plugin::ReportJob;
 use crate::profile;
 use crate::reports::layout::SOURCE_CODE_EXTENSIONS;
 use crate::text::read_text_lossy;
+use crate::wordscan::{
+    CODE_MARKERS, MIXED_CONCERN_SYMBOLS, UI_INFRA_SYMBOLS, contains_word, matching_words,
+};
 
 pub const JOB: ReportJob = ReportJob {
     filename: "17_code_quality_report.md",
@@ -44,23 +48,17 @@ const MIXED_LIMIT: usize = 100;
 const DUPLICATE_GROUPS_LIMIT: usize = 50;
 const DUPLICATE_PATHS_PER_GROUP_LIMIT: usize = 20;
 
-fn todo_pattern() -> Regex {
-    Regex::new(r"(?i)\b(TODO|FIXME|HACK|XXX|BUG|TEMP|REFACTOR|DEPRECATED)\b")
-        .expect("fixed literal")
-}
-
-fn dangerous_mix_pattern() -> Regex {
-    Regex::new(r"\b(tkinter|subprocess|requests|fetch|sql|database|threading|Queue|open\(|write_text|read_text)\b")
-        .expect("fixed literal")
-}
-
-fn ui_infra_pattern() -> Regex {
-    Regex::new(r"\b(shutil|zipfile|subprocess|os\.walk|threading)\b").expect("fixed literal")
-}
+/// Python `def`/`async def`/`class` declarations, capturing the indentation and the
+/// symbol name. Built once per report run and reused across every file: constructing it
+/// inside the per-file loop, as this module previously did for its word-set patterns,
+/// recompiles the same pattern once per scanned file.
+static PYTHON_DEFINITION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(\s*)(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)")
+        .expect("fixed literal pattern, proven valid by this module's tests")
+});
 
 fn python_symbol_lengths(text: &str) -> Vec<(String, usize, usize)> {
-    let def_pattern = Regex::new(r"^(\s*)(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)")
-        .expect("fixed literal");
+    let def_pattern = &*PYTHON_DEFINITION;
     let lines: Vec<&str> = text.lines().collect();
     let mut results = Vec::new();
 
@@ -130,7 +128,7 @@ fn write_code_quality_report(
         if line_count >= LARGE_FILE_THRESHOLD {
             large_files.push((file.relative_path.as_str(), line_count));
         }
-        if todo_pattern().is_match(&text) {
+        if contains_word(&text, CODE_MARKERS) {
             todo_files.insert(file.relative_path.as_str());
         }
         if file.extension == "py" {
@@ -143,13 +141,10 @@ fn write_code_quality_report(
 
         let mut signals: Vec<&'static str> = Vec::new();
         let lower_path = file.relative_path.to_lowercase();
-        if lower_path.contains("ui") && ui_infra_pattern().is_match(&text) {
+        if lower_path.contains("ui") && contains_word(&text, UI_INFRA_SYMBOLS) {
             signals.push("UI file appears to contain infrastructure/threading/file-system logic");
         }
-        let distinct_concerns: std::collections::HashSet<String> = dangerous_mix_pattern()
-            .find_iter(&text)
-            .map(|m| m.as_str().to_string())
-            .collect();
+        let distinct_concerns = matching_words(&text, MIXED_CONCERN_SYMBOLS);
         if distinct_concerns.len() >= MIXED_MIN_CONCERNS && line_count >= MIXED_MIN_LINES {
             signals.push("many mixed technical concerns in a medium/large file");
         }

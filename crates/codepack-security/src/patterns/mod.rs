@@ -1,8 +1,11 @@
+pub mod code_shape;
 pub mod entropy;
 pub mod keyword;
+pub(crate) mod keyword_scan;
 pub mod prefilter;
 pub mod provider;
 pub mod risky_code;
+pub(crate) mod token_scan;
 
 pub(crate) fn confidence_rank(level: &str) -> u8 {
     match level {

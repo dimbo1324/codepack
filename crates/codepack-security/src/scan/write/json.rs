@@ -11,7 +11,7 @@ use serde::Serialize;
 use crate::error::{Result, SecurityError};
 use crate::scan::{Finding, ScanResult, ScanSummary};
 
-use super::timestamp::current_timestamp_utc;
+use codepack_core::time::now_human_utc;
 
 pub(crate) const SCHEMA_VERSION: &str = "1.0";
 
@@ -26,7 +26,7 @@ struct ScanReportJson<'a> {
 pub(crate) fn render_json(result: &ScanResult) -> Result<String> {
     let payload = ScanReportJson {
         schema_version: SCHEMA_VERSION,
-        generated_at: current_timestamp_utc(),
+        generated_at: now_human_utc(),
         summary: &result.summary,
         findings: &result.findings,
     };

@@ -6,8 +6,6 @@
 
 use std::path::Path;
 
-use regex::Regex;
-
 use crate::context::ReportContext;
 use crate::error::ReportError;
 use crate::graph::collect;
@@ -16,6 +14,7 @@ use crate::plugin::ReportJob;
 use crate::profile;
 use crate::reports::layout::SOURCE_CODE_EXTENSIONS;
 use crate::text::read_text_lossy;
+use crate::wordscan::{CODE_MARKERS, UI_INFRA_SYMBOLS, contains_word};
 
 pub const JOB: ReportJob = ReportJob {
     filename: "23_refactoring_opportunities.md",
@@ -25,13 +24,6 @@ pub const JOB: ReportJob = ReportJob {
 };
 
 const RESULT_LIMIT: usize = 80;
-
-fn todo_pattern() -> Regex {
-    Regex::new(r"(?i)\bTODO|FIXME|HACK|XXX|DEPRECATED\b").expect("fixed literal")
-}
-fn ui_infra_pattern() -> Regex {
-    Regex::new(r"\b(shutil|zipfile|subprocess|os\.walk|threading|Queue)\b").expect("fixed literal")
-}
 
 struct Opportunity<'a> {
     score: i64,
@@ -105,13 +97,13 @@ fn write_refactoring_opportunities_report(
             suggestions
                 .insert("group related dependencies behind service/helper modules".to_string());
         }
-        if todo_pattern().is_match(&text) {
+        if contains_word(&text, CODE_MARKERS) {
             score += 8;
             reasons.push("contains technical-debt markers".to_string());
             suggestions.insert("convert repeated TODO/FIXME items into tracked tasks".to_string());
         }
         let lower_rel = file.relative_path.to_lowercase();
-        if lower_rel.contains("ui") && ui_infra_pattern().is_match(&text) {
+        if lower_rel.contains("ui") && contains_word(&text, UI_INFRA_SYMBOLS) {
             score += 25;
             reasons.push(
                 "UI code contains infrastructure or worker orchestration concerns".to_string(),
