@@ -179,12 +179,8 @@ fn prepend_developer_context(output_file: &Path, context: &str, log: &dyn Fn(&st
     }
 }
 
-/// Runs pipeline step 5. `max_bytes_per_file` mirrors
-/// `config.effective_max_text_file_bytes()`; `redact` mirrors `config.redact_secrets`;
-/// `developer_context` mirrors `config.developer_context.trim()` — pass an empty string
-/// to skip the header-prepend step entirely.
 /// What the text-dump step produced. `stats` is the legacy-shaped structure that goes
-/// into `manifest.json`; `redacted_lines` is deliberately kept *outside* it so the
+/// into `manifest.json`; `redacted_substitutions` is deliberately kept *outside* it so the
 /// artifact's own shape is unchanged (invariant I5) while the export-history row can
 /// still record a real number instead of `NULL`.
 pub struct TextDumpOutcome {
@@ -193,7 +189,7 @@ pub struct TextDumpOutcome {
     /// Counted from the `<REDACTED>` markers the redaction actually produced, so it
     /// reflects work done rather than secrets detected — a line with two redacted
     /// values counts twice, which is the honest reading of "how much was redacted".
-    pub redacted_lines: u32,
+    pub redacted_substitutions: u32,
 }
 
 /// Counts `<REDACTED>` markers, which is how many substitutions the redaction made.
@@ -201,6 +197,10 @@ fn count_redaction_markers(text: &str) -> u32 {
     u32::try_from(text.matches("<REDACTED>").count()).unwrap_or(u32::MAX)
 }
 
+/// Runs pipeline step 5. `max_bytes_per_file` mirrors
+/// `config.effective_max_text_file_bytes()`; `redact` mirrors `config.redact_secrets`;
+/// `developer_context` mirrors `config.developer_context.trim()` — pass an empty string
+/// to skip the header-prepend step entirely.
 pub fn write_text_dump(
     root: &Path,
     output_file: &Path,
@@ -211,7 +211,7 @@ pub fn write_text_dump(
     cancel: &CancellationToken,
 ) -> Result<TextDumpOutcome> {
     let mut stats = TextDumpStats::default();
-    let mut redacted_lines = 0u32;
+    let mut redacted_substitutions = 0u32;
     let mut out = String::new();
 
     let root_name = root
@@ -285,7 +285,7 @@ pub fn write_text_dump(
         let (text, encoding) = decode_best_effort(&raw);
         let text = if redact {
             let redacted = codepack_security::redact_secrets(&text);
-            redacted_lines += count_redaction_markers(&redacted);
+            redacted_substitutions += count_redaction_markers(&redacted);
             redacted
         } else {
             text
@@ -335,7 +335,7 @@ pub fn write_text_dump(
 
     Ok(TextDumpOutcome {
         stats,
-        redacted_lines,
+        redacted_substitutions,
     })
 }
 

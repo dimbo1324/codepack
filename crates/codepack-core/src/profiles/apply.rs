@@ -3,7 +3,7 @@
 
 use super::{UserProfile, UserProfilesFile};
 use crate::config::Config;
-use crate::config::valid_sets::EXPORT_PROFILES;
+use crate::config::EXPORT_PROFILES;
 
 /// One entry of the profile picker: a key and the label to show for it.
 #[derive(Debug, Clone, PartialEq, Eq)]

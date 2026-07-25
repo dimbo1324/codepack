@@ -138,6 +138,16 @@ pub fn run_analytics(
     // Legacy's `project_profile_job` writes the catalog file and then copies it to the
     // bundle root (`shutil.copyfile`), rather than building the profile twice.
     let profile_in_catalog = paths.insights_dir.join("00_project_profile.json");
+    if !profile_in_catalog.is_file() {
+        // `run_reports` is fault tolerant: a failing job writes ERROR_<name>.txt and the
+        // run continues, and cancellation stops the catalog before any job runs. Either
+        // way `PROJECT_PROFILE.json` — an artifact named in invariant I5 — is simply
+        // absent from the bundle. Legacy was equally quiet about it; being quiet about a
+        // missing contract artifact is not something to reproduce.
+        log(
+            "PROJECT_PROFILE.json not written: report job 00_project_profile.json produced no file",
+        );
+    }
     if profile_in_catalog.is_file() {
         std::fs::copy(&profile_in_catalog, &paths.project_profile_file).map_err(|source| {
             crate::error::EngineError::Io {

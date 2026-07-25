@@ -61,6 +61,7 @@ import json
 import pathlib
 import shutil
 import sys
+import tempfile
 import threading
 import zipfile
 from queue import Queue
@@ -197,10 +198,11 @@ def main() -> int:
         print(f"no fixtures found under {fixtures_dir}", file=sys.stderr)
         return 1
 
-    staging = reference_dir.parent / ".legacy-run"
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.mkdir(parents=True)
+    # Outside the repository, per `.ai/project/14-legacy-reference.md`: legacy output is
+    # never staged inside the working tree. It holds a full export of every fixture,
+    # including copies of their `.env` files, and a hard kill used to leave that sitting
+    # untracked where `git add -A` would sweep it in.
+    staging = pathlib.Path(tempfile.mkdtemp(prefix="codepack-golden-"))
 
     try:
         for fixture in fixtures:

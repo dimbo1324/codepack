@@ -355,7 +355,7 @@ pub fn run_export(
             cancel,
         )?;
         text_stats = outcome.stats;
-        redacted_count = Some(outcome.redacted_lines);
+        redacted_count = Some(outcome.redacted_substitutions);
         send_step_finished(progress, "5/8: text dump");
     }
 

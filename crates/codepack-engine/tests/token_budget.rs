@@ -87,3 +87,26 @@ fn a_small_budget_drops_files_and_keeps_the_ranked_entrypoint() {
         "the entrypoint outranks bulk filler and must survive the budget, got {copied:?}"
     );
 }
+
+#[test]
+fn a_pinned_file_survives_a_budget_that_would_otherwise_drop_it() {
+    // `always_include_files` is an explicit user instruction; the budget is a heuristic.
+    // Without this the pass silently discarded pinned files on importance/tokens alone.
+    let config = Config {
+        token_budget: 100,
+        keep_staging_folder: true,
+        always_include_files: vec!["filler_3.txt".to_string()],
+        ..Config::default()
+    };
+    let (outcome, _source, _output) = export(&config);
+
+    let copied: Vec<String> = fs::read_dir(&outcome.paths.project_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+
+    assert!(
+        copied.iter().any(|name| name == "filler_3.txt"),
+        "a pinned file must outrank the budget, got {copied:?}"
+    );
+}

@@ -18,6 +18,11 @@
 //!   the pipeline reports (history, `01_summary`), and those use the fallback. Invariant
 //!   I4's rule — one estimate never silently standing in for the other — applies here.
 //!
+//! Files the user pinned (`always_include_files`/`always_include_dirs`, or a per-file
+//! override) are never dropped: an explicit instruction outranks a heuristic. They still
+//! consume budget, so pinning more than the budget allows simply means the budget is
+//! exceeded — silently discarding what the user demanded would be worse.
+//!
 //! The whole pass is skipped unless `Config::token_budget` is non-zero, which is the
 //! default, so an export that does not ask for a budget pays nothing for this module.
 
@@ -26,8 +31,10 @@ use std::collections::BTreeMap;
 use codepack_core::CancellationToken;
 use codepack_core::config::Config;
 use codepack_reports::context::{Inventory, ReportContext};
-use codepack_scanner::ExportPlan;
+use codepack_scanner::{ExportIgnoreRules, ExportPlan};
 use codepack_tokens::{BudgetCandidate, estimate_tokens_fallback};
+
+use crate::relpath::to_relative_path;
 
 use std::path::Path;
 
@@ -44,13 +51,24 @@ pub(crate) fn apply_token_budget(
     plan: &mut ExportPlan,
     source_root: &Path,
     config: &Config,
+    rules: &ExportIgnoreRules,
     cancel: &CancellationToken,
 ) -> usize {
     if config.token_budget == 0 || plan.included_files.is_empty() {
         return 0;
     }
+    // `importance_ranking` reads the text of every planned file to build the import
+    // graph, which on a large project is not a quick pass. Checking here keeps a
+    // cancelled export from starting work it will throw away; leaving the plan untouched
+    // is the right degradation, since the export is stopping anyway.
+    if cancel.is_cancelled() {
+        return 0;
+    }
 
     let ranking = importance_of_planned_files(plan, source_root, config, cancel);
+    if cancel.is_cancelled() {
+        return 0;
+    }
 
     let candidates: Vec<BudgetCandidate> = plan
         .included_files
@@ -69,10 +87,11 @@ pub(crate) fn apply_token_budget(
 
     let kept: std::collections::HashSet<&str> =
         selection.included.iter().map(String::as_str).collect();
+    let is_pinned = |relative_path: &str| rules.is_pinned_file(&to_relative_path(relative_path));
     let mut included = Vec::with_capacity(kept.len());
     let mut removed = 0usize;
     for file in std::mem::take(&mut plan.included_files) {
-        if kept.contains(file.relative_path.as_str()) {
+        if kept.contains(file.relative_path.as_str()) || is_pinned(&file.relative_path) {
             included.push(file);
         } else {
             let mut dropped = file;

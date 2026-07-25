@@ -97,8 +97,13 @@ pub fn run_export_plan(
     // BLUEPRINT §B.3. No-op unless the caller set a budget, so the default export path
     // is unchanged; when set, the plan written below already reflects the selection, so
     // the copy step and every report see one consistent file list.
-    let dropped_by_budget =
-        crate::budget::apply_token_budget(&mut export_plan, &paths.source_root, config, cancel);
+    let dropped_by_budget = crate::budget::apply_token_budget(
+        &mut export_plan,
+        &paths.source_root,
+        config,
+        &export_rules,
+        cancel,
+    );
     write_export_plan_files(
         &export_plan,
         &paths.insights_dir.join("28_export_plan.json"),

@@ -117,51 +117,88 @@ struct SecretHit {
 /// once, uniformly, across all of them (keyword, provider, entropy) — not only the
 /// keyword cascade, which is the minimum legacy required.
 ///
-/// **A keyword hit suppresses every provider/entropy hit on the same line.** Legacy's
-/// `_collect_security_findings` appends at most one `SecretFinding` per line, so a second
-/// finding on the identical file+line breaks golden parity outright. It also adds no
-/// information: the provider and entropy detectors (BLUEPRINT §B.1, 🎯 new — legacy has
-/// neither) exist to raise *recall* on lines the keyword cascade structurally cannot see,
-/// not to re-report a span it already reported. Lines the keyword cascade did **not**
-/// flag still yield provider/telegram/entropy hits — that is where the entire recall gain
-/// lives, and it is untouched (`tests/corpus.rs`'s `full_detect` models exactly this
-/// precedence).
+/// **At most one hit per line**, because legacy's `_collect_security_findings` appends at
+/// most one `SecretFinding` per line and a second finding on the identical file+line
+/// breaks golden parity outright.
+///
+/// Which one survives is chosen by how much it tells the user, not by detector order:
+///
+/// 1. **A confident keyword hit wins**, meaning `critical` or `high`. These are the tiers
+///    legacy itself treats as definitive (the `critical` tier is the PEM private-key
+///    header), so reporting anything else there would be a parity divergence with no
+///    gain — the line is already described as strongly as it can be.
+/// 2. **Otherwise a provider signature wins.** `aws-access-key-id`/`critical` names the
+///    provider and the real severity; a `medium`/`low` `secret_like_line` says only "this
+///    line contains a secret-ish word". An earlier version of this function let *any*
+///    keyword hit suppress provider hits, which silently demoted a confirmed AWS key to
+///    `low` on any line containing the word `token` or `key` — i.e. on most real lines,
+///    since people label their keys. The corpus test could not see that regression: it
+///    measures detection as a boolean per line, so rule id and severity are invisible to
+///    precision/recall/F1.
+/// 3. **Otherwise the weak keyword hit wins over entropy.** Entropy carries no provider
+///    identity and a fixed `low` confidence, so it adds nothing to a line the keyword
+///    cascade already described — and legacy, which has no entropy detector at all,
+///    reports exactly `secret_like_line` there.
+/// 4. **Entropy is the last resort**, which is where its whole recall contribution lives:
+///    lines no keyword and no provider signature can see.
+///
+/// The redaction applied to the surviving hit's message is unaffected by this choice —
+/// [`redacted_message`] masks every detected span regardless of which hit is reported.
 fn collect_secret_hits(line: &str) -> Vec<SecretHit> {
     if keyword::is_self_protected(line) {
         return Vec::new();
     }
 
     let prefiltered = prefilter::has_hit(line);
-    if prefiltered && let Some(confidence) = keyword::secret_confidence(line) {
+    let keyword_hit = if prefiltered {
+        keyword::secret_confidence(line)
+    } else {
+        None
+    };
+
+    // Rule 1: a keyword hit legacy would consider definitive.
+    if let Some(confidence) = keyword_hit
+        && matches!(confidence, "critical" | "high")
+    {
         return vec![SecretHit {
             rule: "secret_like_line",
             confidence,
         }];
     }
 
-    let mut hits = Vec::new();
-    if prefiltered {
-        for found in provider::find_provider_matches(line) {
-            hits.push(SecretHit {
-                rule: found.rule_id,
-                confidence: found.confidence,
-            });
-        }
-    }
-    // Never gated by the prefilter — see patterns::prefilter's documented scope limits.
-    for found in provider::find_telegram_matches(line) {
-        hits.push(SecretHit {
+    // Rule 2: a provider signature, which names what was found and how bad it is.
+    if prefiltered && let Some(found) = provider::find_provider_matches(line).into_iter().next() {
+        return vec![SecretHit {
             rule: found.rule_id,
             confidence: found.confidence,
-        });
+        }];
     }
-    for found in entropy::entropy_findings(line) {
-        hits.push(SecretHit {
+    // Never gated by the prefilter — see patterns::prefilter's documented scope limits.
+    if let Some(found) = provider::find_telegram_matches(line).into_iter().next() {
+        return vec![SecretHit {
+            rule: found.rule_id,
+            confidence: found.confidence,
+        }];
+    }
+
+    // Rule 3: the weaker keyword hit, which is what legacy would have reported.
+    if let Some(confidence) = keyword_hit {
+        return vec![SecretHit {
+            rule: "secret_like_line",
+            confidence,
+        }];
+    }
+
+    // Rule 4: entropy, on lines nothing else recognised.
+    entropy::entropy_findings(line)
+        .into_iter()
+        .next()
+        .map(|found| SecretHit {
             rule: "high-entropy-token",
             confidence: found.confidence,
-        });
-    }
-    hits
+        })
+        .into_iter()
+        .collect()
 }
 
 /// Invariant I3 (`.ai/project/12-domain-rules.md`): a `Finding.message` must never

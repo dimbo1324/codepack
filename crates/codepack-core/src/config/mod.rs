@@ -15,7 +15,7 @@ mod io;
 mod legacy;
 mod normalize;
 mod presets;
-pub mod valid_sets;
+mod valid_sets;
 
 pub use legacy::migrate_legacy_settings;
 pub use normalize::{DEFAULT_UI_ZOOM, UI_ZOOM_MAX, UI_ZOOM_MIN};

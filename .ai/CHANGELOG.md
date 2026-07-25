@@ -8,6 +8,20 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+### 2026-07-25 — `cargo xtask golden` добавлена в модуль команд
+
+**Что.** `.ai/project/11-commands.md` получил команду `cargo xtask golden` и абзац о
+том, что это команда для машины разработчика: ей нужен Python, CI её никогда не
+запускает, а перегенерировать эталоны ради зелёного теста запрещено.
+
+**Почему.** Команда появилась вместе с golden-паритетом (`ROADMAP.md` §8), но модуль
+правил о ней не знал. `sync-agents --check` такой пробел не ловит по построению —
+он проверяет синхронность `AGENTS.md` с модулями, а не полноту самих модулей.
+Прецедент ровно тот же, что с `cargo xtask deny` 2026-07-22.
+
+**Кто решил.** Найдено независимым ревью core-hardening-задачи.
+
+
 ## 2026-07-22 — `cargo xtask deny` documented
 
 **Changed.** `.ai/project/11-commands.md` now lists `cargo xtask deny` and notes that

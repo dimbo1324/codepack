@@ -29,7 +29,13 @@ const SECRET_VALUES: &[(&str, &str)] = &[
     // Provider signatures: bare tokens, no keyword anywhere on the line.
     ("aws", "AKIAABCDEFGHIJKLMNOPQRST"),
     ("github", "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-    ("google", "AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    // `AIza` + 35 characters. The original fixture was four characters short of the
+    // real Google format, so no detector ever fired on it — masked until 2026-07-25 by
+    // the total-count assertion below, which other lines padded by matching twice.
+    (
+        "google",
+        concat!("AIza", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    ),
     ("slack", "xoxb-1111111111111111111"),
     // Split across a `concat!` so no single string literal in the source text
     // matches GitHub's push-protection Stripe-key pattern (this is a synthetic,
@@ -61,11 +67,19 @@ fn no_finding_json_ever_contains_a_raw_secret_substring() {
     }
 
     let result = scan_project(dir.path(), &files, None, &CancellationToken::new()).unwrap();
-    assert!(
-        result.findings.len() >= SECRET_VALUES.len(),
-        "expected at least one finding per planted secret, got {}",
-        result.findings.len()
-    );
+    // Per file, not a total. A total only proves the *sum* is large enough, so one
+    // undetected secret stays hidden behind another line that matched twice — which is
+    // exactly what happened to the Google fixture above.
+    for (name, _) in SECRET_VALUES {
+        let file_stem = format!("{name}.txt");
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|finding| finding.file.ends_with(&file_stem)),
+            "planted secret {name} produced no finding at all"
+        );
+    }
 
     let json_path = dir.path().join("06_security_scan.json");
     write_json_report(&result, &json_path).unwrap();
