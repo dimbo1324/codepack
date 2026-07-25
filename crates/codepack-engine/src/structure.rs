@@ -11,13 +11,16 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use codepack_core::CancellationToken;
+use codepack_core::time::{UtcDateTime, unix_seconds_of};
 
 use crate::error::{EngineError, Result};
-use crate::timestamp::{civil_from_days, human_now_utc};
+use crate::timestamp::human_now_utc;
 
+/// Abbreviated English month names, in PowerShell's `Get-ChildItem` rendering order.
+/// Part of the reproduced legacy layout, not a localizable string.
 const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
@@ -29,17 +32,17 @@ fn ps_mode(is_dir: bool) -> &'static str {
 
 /// Legacy `ps_date`, rendered in UTC (see the module doc comment's documented
 /// deviation): `DD-Mon-YY     HH:MM`.
+///
+/// The run of spaces before the time is legacy's own column padding, reproduced
+/// verbatim so the listing lines up the way the original did.
 fn ps_date(mtime: SystemTime) -> String {
-    let since_epoch = mtime.duration_since(UNIX_EPOCH).unwrap_or_default();
-    let total_seconds = since_epoch.as_secs();
-    let days = total_seconds / 86_400;
-    let seconds_of_day = total_seconds % 86_400;
-    let hour = seconds_of_day / 3600;
-    let minute = (seconds_of_day % 3600) / 60;
-
-    let (year, month, day) = civil_from_days(days as i64);
-    let month_name = MONTHS[(month.clamp(1, 12) - 1) as usize];
-    let short_year = year.rem_euclid(100);
+    let at = UtcDateTime::from_unix_seconds(unix_seconds_of(mtime));
+    // `clamp` guards the array index against a hypothetical out-of-range month rather
+    // than trusting the calendar conversion blindly; `rem_euclid` keeps the two-digit
+    // year non-negative for pre-2000 dates.
+    let month_name = MONTHS[(at.month.clamp(1, 12) - 1) as usize];
+    let short_year = at.year.rem_euclid(100);
+    let (day, hour, minute) = (at.day, at.hour, at.minute);
     format!("{day:02}-{month_name}-{short_year:02}     {hour:02}:{minute:02}")
 }
 

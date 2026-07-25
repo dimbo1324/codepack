@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::error::{ArchiveError, Result};
 use crate::plan::ArchivePlan;
-use crate::timestamp::current_timestamp_utc;
+use codepack_core::time::now_human_utc;
 
 /// Duplicated from `codepack_tokens::format_bytes` for the same reason as
 /// `crate::timestamp`: this crate's scope boundary (`ROADMAP.md` S8) is
@@ -63,7 +63,7 @@ pub fn write_archive_plan_report(plan: &ArchivePlan, output_file: &Path) -> Resu
     }
 
     let data = ArchivePlanJson {
-        generated_at: current_timestamp_utc(),
+        generated_at: now_human_utc(),
         split_planned: plan.split,
         limit_bytes: plan.limit_bytes,
         limit_human: format_bytes(plan.limit_bytes),

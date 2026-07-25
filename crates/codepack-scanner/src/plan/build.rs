@@ -29,8 +29,8 @@ use crate::stack;
 use crate::walk::{self, IgnoredDirMatcher};
 
 use super::group::classify_group;
-use super::timestamp::current_timestamp_utc;
 use super::{ExportPlan, PlanSummary, PlannedFile};
+use codepack_core::time::now_human_utc;
 
 /// Decides whether a file must be excluded for export-safety reasons, returning
 /// `Some((reason, severity))` when it must. `codepack-engine` supplies
@@ -107,7 +107,7 @@ pub fn build_export_plan(
         .unwrap_or_default();
 
     Ok(ExportPlan {
-        generated_at: current_timestamp_utc(),
+        generated_at: now_human_utc(),
         project_name,
         source_root: source_root.display().to_string(),
         profile: options.export_profile.clone(),

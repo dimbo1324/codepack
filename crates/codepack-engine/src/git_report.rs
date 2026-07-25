@@ -46,7 +46,9 @@ use git2::{
 use codepack_core::CancellationToken;
 
 use crate::error::{EngineError, Result};
-use crate::timestamp::{civil_from_days, human_now_utc};
+use codepack_core::time::UtcDateTime;
+
+use crate::timestamp::human_now_utc;
 
 fn current_branch_name(repo: &Repository) -> Option<String> {
     let head_ref = repo.find_reference("HEAD").ok()?;
@@ -66,14 +68,13 @@ fn signature_display(signature: &Signature<'_>) -> String {
     format!("{name} <{email}>")
 }
 
+/// A commit's author date, rendered in UTC. Git stores the timestamp as signed epoch
+/// seconds plus a separate timezone offset; the offset is deliberately dropped here for
+/// the same reason every other timestamp in this crate renders UTC (see
+/// [`codepack_core::time`]) — a stable, unambiguous rendering beats reproducing each
+/// committer's local zone.
 fn format_commit_datetime(seconds_since_epoch: i64) -> String {
-    let days = seconds_since_epoch.div_euclid(86_400);
-    let seconds_of_day = seconds_since_epoch.rem_euclid(86_400);
-    let hour = seconds_of_day / 3600;
-    let minute = (seconds_of_day % 3600) / 60;
-    let second = seconds_of_day % 60;
-    let (year, month, day) = civil_from_days(days);
-    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
+    UtcDateTime::from_unix_seconds(seconds_since_epoch).format_human_utc()
 }
 
 fn short_status_code(status: Status) -> String {

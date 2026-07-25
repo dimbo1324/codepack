@@ -46,28 +46,10 @@ pub(crate) fn short_oid(oid: Oid) -> String {
     full.chars().take(7).collect()
 }
 
-/// `YYYY-MM-DD`, from a commit's author time (`git log --date=short`). Reimplements
-/// the same epoch-day-to-civil-date algorithm already used by
-/// `codepack_scanner`'s `ExportPlan.generated_at` formatting, rather than pulling in a
-/// calendar/timezone crate for one report field.
+/// `YYYY-MM-DD`, from a commit's author time (`git log --date=short`). Rendered in UTC
+/// via the workspace-wide calendar implementation in [`codepack_core::time`].
 pub(crate) fn format_commit_date(seconds_since_epoch: i64) -> String {
-    let days = seconds_since_epoch.div_euclid(86_400);
-    let (year, month, day) = civil_from_days(days);
-    format!("{year:04}-{month:02}-{day:02}")
-}
-
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = if month <= 2 { y + 1 } else { y };
-    (year, month, day)
+    codepack_core::time::UtcDateTime::from_unix_seconds(seconds_since_epoch).format_date()
 }
 
 /// `Name <email>`, from a `git2::Signature` — falls back to `"(unknown)"` for a

@@ -3,6 +3,7 @@ pub mod classify;
 mod error;
 mod paths;
 mod progress;
+pub mod time;
 mod types;
 
 pub mod config;

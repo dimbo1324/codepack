@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::error::{Result, SecurityError};
 use crate::scan::{Finding, FindingKind, ScanResult};
 
-use super::timestamp::current_timestamp_utc;
+use codepack_core::time::now_human_utc;
 
 const MAX_SENSITIVE_FILES_SHOWN: usize = 300;
 const MAX_SECRET_LINES_SHOWN: usize = 500;
@@ -44,7 +44,7 @@ fn write_section<'a>(
 pub(crate) fn render_txt(result: &ScanResult) -> String {
     let mut out = String::new();
     out.push_str("=== Enhanced Security Scan v3 ===\n");
-    let _ = writeln!(out, "Generated: {}", current_timestamp_utc());
+    let _ = writeln!(out, "Generated: {}", now_human_utc());
     out.push_str(
         "This is a heuristic scanner, not a professional secret scanner or SAST engine. Values are redacted.\n",
     );

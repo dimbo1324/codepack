@@ -5,7 +5,6 @@
 
 mod json;
 mod sarif;
-mod timestamp;
 mod txt;
 
 pub use json::write_json_report;

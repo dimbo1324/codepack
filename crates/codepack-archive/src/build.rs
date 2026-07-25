@@ -19,7 +19,7 @@ use crate::plan::{
     ArchivePlan, plan_archive, plan_logical_parts, predicted_result_for_plan, sort_entries,
 };
 use crate::report::format_bytes;
-use crate::timestamp::current_timestamp_utc;
+use codepack_core::time::now_human_utc;
 
 fn file_size_or_zero(path: &Path) -> u64 {
     std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
@@ -120,7 +120,7 @@ fn write_restore_files(
     })?;
 
     let manifest = ArchiveSetManifest {
-        generated_at: current_timestamp_utc(),
+        generated_at: now_human_utc(),
         bundle_name: paths.bundle_name.clone(),
         split: result.split,
         limit_bytes,
