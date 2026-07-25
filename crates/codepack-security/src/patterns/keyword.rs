@@ -115,20 +115,100 @@ pub fn redacted_line(line: &str) -> String {
     if SECRET_KEY_PATTERN.is_match(&redacted) {
         if let Some(pos) = redacted.find('=') {
             let key = redacted[..pos].trim();
-            return format!("{key}=<REDACTED>");
+            if looks_like_key_name(key) {
+                return format!("{key}=<REDACTED>");
+            }
+            return "<REDACTED_SECRET_LINE>".to_string();
         }
         if let Some(pos) = redacted.find(':') {
             let key = redacted[..pos].trim();
-            return format!("{key}: <REDACTED>");
+            if looks_like_key_name(key) {
+                return format!("{key}: <REDACTED>");
+            }
+            return "<REDACTED_SECRET_LINE>".to_string();
         }
         return "<REDACTED_SECRET_LINE>".to_string();
     }
     redacted.trim().to_string()
 }
 
+/// Length at which an unbroken alphanumeric run stops looking like something a person
+/// typed as a name. Real key names of this length are `_`-separated or camelCase, so
+/// they break into shorter runs; encoded blobs do not.
+const ENCODED_RUN_MIN_LEN: usize = 16;
+
+/// Whether the text before the separator can be shown as a key name.
+///
+/// **Q16 (owner decision 2026-07-25).** Legacy splits on the first `=`/`:` and keeps
+/// everything before it, which silently assumes the separator belongs to a `key=value`
+/// pair. When the separator is *inside* the secret — base64 padding, an
+/// `Authorization: Basic ...` header, a connection string — the "key name" is the secret
+/// itself, and it travelled into the finding message, the JSON, the SARIF, the database
+/// row and the log. That is a direct breach of invariant I3, which is absolute.
+///
+/// The check is deliberately narrow rather than a rewrite of the redaction: a prefix is
+/// rejected only when it contains a run of at least [`ENCODED_RUN_MIN_LEN`] alphanumeric
+/// (or `+`/`/`) characters that mixes upper case, lower case **and** digits. Encoded
+/// secrets look like that; key names do not, because `_`, `-`, `.` and spaces break them
+/// into short runs, and long camelCase identifiers rarely carry digits. Requiring all
+/// three properties is what keeps ordinary names — `SECRET_TOKEN`, `JWT_SECRET`,
+/// `AWS_ACCESS_KEY_ID` — accepted, so the golden references are unaffected.
+///
+/// A rejected prefix falls back to `<REDACTED_SECRET_LINE>`, the same output legacy
+/// already produced for a keyword line with no separator at all.
+fn looks_like_key_name(prefix: &str) -> bool {
+    let mut run_len = 0usize;
+    let mut has_upper = false;
+    let mut has_lower = false;
+    let mut has_digit = false;
+
+    for ch in prefix.chars().chain(std::iter::once(' ')) {
+        let in_run = ch.is_ascii_alphanumeric() || ch == '+' || ch == '/';
+        if in_run {
+            run_len += 1;
+            has_upper |= ch.is_ascii_uppercase();
+            has_lower |= ch.is_ascii_lowercase();
+            has_digit |= ch.is_ascii_digit();
+            continue;
+        }
+        if run_len >= ENCODED_RUN_MIN_LEN && has_upper && has_lower && has_digit {
+            return false;
+        }
+        run_len = 0;
+        has_upper = false;
+        has_lower = false;
+        has_digit = false;
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_secret_containing_an_equals_sign_does_not_survive_as_the_key_name() {
+        // Q16. The split-on-first-`=` rule treats everything before it as a key name.
+        // When the `=` is base64 padding inside the secret, the "key name" *is* the
+        // secret, so it travelled into the finding message and from there into the
+        // JSON, the SARIF, the database row and the log — a direct I3 breach.
+        let line = "curl -H 'Authorization: Basic dXNlcjpwYXNzd29yZA==' # token";
+        let message = redacted_line(line);
+        assert!(
+            !message.contains("dXNlcjpwYXNzd29yZA"),
+            "the secret leaked into the message: {message}"
+        );
+    }
+
+    #[test]
+    fn a_connection_string_password_does_not_survive_as_the_key_name() {
+        let line = "DATABASE_URL=postgres://admin:s3cr3tP4ss@db.internal:5432/app";
+        let message = redacted_line(line);
+        assert!(
+            !message.contains("s3cr3tP4ss"),
+            "the password leaked into the message: {message}"
+        );
+    }
 
     #[test]
     fn scan_keywords_starts_with_redact_keywords() {
