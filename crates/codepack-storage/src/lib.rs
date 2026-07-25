@@ -29,6 +29,7 @@
 
 mod baseline;
 mod error;
+mod history;
 pub mod import;
 mod migrations;
 mod project;
@@ -38,9 +39,10 @@ mod types;
 
 pub use baseline::latest_snapshot;
 pub use error::{Result, StorageError};
+pub use history::{ExportRunRecord, list_export_runs};
 pub use import::{ImportReport, import_legacy_history};
 pub use migrations::open;
-pub use project::find_or_create_project;
+pub use project::{find_or_create_project, find_project_id};
 pub use retention::cleanup_old_runs;
 pub use run::record_export_run;
 pub use rusqlite::Connection;

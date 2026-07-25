@@ -61,11 +61,48 @@ pub fn run_export_plan(
     previous_snapshot: Option<&Snapshot>,
     cancel: &CancellationToken,
 ) -> Result<PlanOutcome> {
-    let ignored_dir_names = ignored_dir_names_for(&paths.source_root, config);
+    let outcome = plan_export(
+        &paths.source_root,
+        config,
+        file_overrides,
+        previous_snapshot,
+        cancel,
+    )?;
+
+    write_export_plan_files(
+        &outcome.export_plan,
+        &paths.insights_dir.join("28_export_plan.json"),
+        &paths.insights_dir.join("28_export_plan.md"),
+    )?;
+    write_diff_report(
+        &paths.insights_dir.join("29_export_comparison_report.md"),
+        &outcome.diff_selection,
+    )?;
+
+    Ok(outcome)
+}
+
+/// Step 1 without writing anything.
+///
+/// [`run_export_plan`] is this plus the two report files, which is the right shape for
+/// the pipeline but the wrong one for a caller that only wants to know what *would* be
+/// exported — `codepack-cli`'s `preview` must not write into the user's project
+/// (invariant I2 makes that non-negotiable for the source tree, and writing a report
+/// nobody asked for is unwelcome anywhere).
+///
+/// Takes `source_root` rather than [`ExportPaths`] precisely because a preview has no
+/// output directory to derive them from.
+pub fn plan_export(
+    source_root: &Path,
+    config: &Config,
+    file_overrides: &HashMap<String, bool>,
+    previous_snapshot: Option<&Snapshot>,
+    cancel: &CancellationToken,
+) -> Result<PlanOutcome> {
+    let ignored_dir_names = ignored_dir_names_for(source_root, config);
 
     let scan_options = ScanOptions::from(config);
-    let mut export_rules =
-        ExportIgnoreRules::from_project_and_config(&paths.source_root, &scan_options);
+    let mut export_rules = ExportIgnoreRules::from_project_and_config(source_root, &scan_options);
     for (relative_path, include) in file_overrides {
         if *include {
             export_rules.add_always_include_file(relative_path);
@@ -86,42 +123,28 @@ pub fn run_export_plan(
             .skip
             .then_some((decision.reason, decision.severity))
     };
-    let mut export_plan = build_export_plan(
-        &paths.source_root,
-        &scan_options,
-        &export_rules,
-        &safety,
-        cancel,
-    )?;
+    let mut export_plan =
+        build_export_plan(source_root, &scan_options, &export_rules, &safety, cancel)?;
 
     // BLUEPRINT §B.3. No-op unless the caller set a budget, so the default export path
     // is unchanged; when set, the plan written below already reflects the selection, so
     // the copy step and every report see one consistent file list.
     let dropped_by_budget = crate::budget::apply_token_budget(
         &mut export_plan,
-        &paths.source_root,
+        source_root,
         config,
         &export_rules,
         cancel,
     );
-    write_export_plan_files(
-        &export_plan,
-        &paths.insights_dir.join("28_export_plan.json"),
-        &paths.insights_dir.join("28_export_plan.md"),
-    )?;
 
     let diff_options = DiffOptions::from(config);
     let diff_selection = resolve_diff_selection(
-        &paths.source_root,
+        source_root,
         &diff_options,
         previous_snapshot,
         &ignored_dir_names,
         &should_consider_text_file,
         cancel,
-    )?;
-    write_diff_report(
-        &paths.insights_dir.join("29_export_comparison_report.md"),
-        &diff_selection,
     )?;
 
     let include_relative_paths = combined_selected_paths(&diff_selection, file_overrides);

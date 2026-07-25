@@ -39,3 +39,60 @@ jobs:
 
       - name: cargo xtask gate
         run: cargo xtask gate
+
+      # Stage S10's own acceptance criterion: "a headless export runs in CI on three
+      # operating systems". The test suite exercises the binary too, but this runs it
+      # the way a user's pipeline would -- a release build, on a real checkout, driving
+      # the whole eight-step pipeline end to end.
+      - name: Headless export (S10 acceptance)
+        shell: bash
+        run: |
+          set -uo pipefail
+          cargo build --release -p codepack-cli || exit 1
+          mkdir -p "$RUNNER_TEMP/bundle"
+
+          # `|| exported=$?` rather than a bare call followed by `$?`: the shell
+          # GitHub runs this with has `errexit` on, so an unguarded non-zero exit would
+          # abort the step before the code below ever got to look at it -- which is
+          # exactly what happens on 3, the case this step exists to tolerate.
+          exported=0
+          ./target/release/codepack export . --out "$RUNNER_TEMP/bundle" --safe-mode safe --json > "$RUNNER_TEMP/export.json" || exported=$?
+
+          # 0 and 3 both mean the export itself worked; 3 additionally reports that the
+          # bundle contains critical findings. This repository trips that on purpose --
+          # codepack-security's own fixtures are credential-shaped, which is the point
+          # of them -- so treating 3 as failure here would make the acceptance step fail
+          # for a reason that has nothing to do with whether headless export works.
+          if [ "$exported" -ne 0 ] && [ "$exported" -ne 3 ]; then
+            echo "headless export failed with exit $exported" >&2
+            cat "$RUNNER_TEMP/export.json" >&2 || true
+            exit 1
+          fi
+
+          python3 tests/ci/check_export_report.py "$RUNNER_TEMP/export.json"
+
+      # The scanner's exit code is what a pipeline gates on, so verify the contract
+      # rather than assume it.
+      - name: Exit code contract (S10 acceptance)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fixture="$RUNNER_TEMP/secret-fixture"
+          mkdir -p "$fixture"
+          printf 'print(1)\n' > "$fixture/main.py"
+          printf 'API_KEY=%s\n' 'totally-fake-value-0001' > "$fixture/.env"
+
+          found=0
+          ./target/release/codepack scan "$fixture" > /dev/null 2>&1 || found=$?
+          if [ "$found" -ne 3 ]; then
+            echo "expected exit 3 for a project carrying a credential, got $found" >&2
+            exit 1
+          fi
+
+          missing=0
+          ./target/release/codepack scan "$RUNNER_TEMP/definitely-absent" > /dev/null 2>&1 || missing=$?
+          if [ "$missing" -ne 1 ]; then
+            echo "expected exit 1 for a missing project, got $missing" >&2
+            exit 1
+          fi
+          echo "exit code contract ok: 3 for findings, 1 for failure"

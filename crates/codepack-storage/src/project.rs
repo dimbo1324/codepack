@@ -5,6 +5,22 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::error::Result;
 use crate::types::unix_timestamp;
 
+/// Looks a project up without creating it.
+///
+/// [`find_or_create_project`] is the write path; a read-only command such as the CLI's
+/// `history` must not leave a `project` row behind merely because someone asked about a
+/// directory that has never been exported.
+pub fn find_project_id(conn: &Connection, root_path: &str) -> Result<Option<i64>> {
+    let id = conn
+        .query_row(
+            "SELECT id FROM project WHERE root_path = ?1",
+            params![root_path],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(id)
+}
+
 /// Returns the existing `project.id` for `root_path` if one exists, otherwise inserts
 /// a new row and returns its id. Never updates `name`/`primary_stack` on an existing
 /// row — a project that already exists keeps whatever it was first created with.
