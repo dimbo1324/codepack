@@ -21,7 +21,7 @@ use codepack_reports::plugins_json::write_report_plugins_json;
 use codepack_reports::project_profile::write_project_profile_json;
 use codepack_reports::reports::{
     group_a_jobs, group_b_jobs, group_c_jobs, group_d_jobs, group_e_jobs, group_f_jobs,
-    group_g_finish_jobs,
+    group_g_finish_jobs, group_h_human_jobs,
 };
 use codepack_reports::{IndexInput, ManifestInput, ReportContext, write_index_md, write_manifest};
 use codepack_scanner::{ExportIgnoreRules, ExportPlan, ScanOptions, build_export_plan};
@@ -134,6 +134,7 @@ fn all_full_catalog_jobs() -> Vec<ReportJob> {
     jobs.extend(group_d_jobs());
     jobs.extend(group_e_jobs());
     jobs.extend(group_f_jobs());
+    jobs.extend(group_h_human_jobs());
     jobs.extend(group_g_finish_jobs());
     jobs
 }
@@ -278,6 +279,9 @@ fn full_profile_produces_the_complete_expected_file_set() {
         "REPORT_DASHBOARD.html",
         "REPORT_PLUGINS.json",
         "PROJECT_PROFILE.json",
+        "PROJECT_OVERVIEW.html",
+        "ONBOARDING_GUIDE.md",
+        "REVIEW_CHECKLIST.md",
         "manifest.json",
         "INDEX.md",
     ];

@@ -15,12 +15,21 @@
 //! (the precedent set by every other Group A–E report), so the placeholder/title text
 //! itself is an English rendering of legacy's Russian original, not a literal
 //! translation requirement.
+//!
+//! **Stage S12 additions** (BLUEPRINT §B.9): an "Explain in plain words" section, built
+//! from [`crate::humanize::summarize`] — the same function [`crate::reports::overview`]
+//! uses, so the numbers on this page and on `PROJECT_OVERVIEW.html` can never silently
+//! disagree — and a client-side search box that filters the report-links list. The
+//! filter is a dozen lines of vanilla inline JS operating on elements already in the
+//! page; it is not a library, ships no network reference, and needs no build step,
+//! matching this file's own self-contained, offline-first shape.
 
 use std::path::Path;
 
 use crate::context::ReportContext;
 use crate::error::ReportError;
 use crate::html::escape_html;
+use crate::humanize;
 use crate::plugin::ReportJob;
 use crate::profile;
 
@@ -84,11 +93,17 @@ fn extract_security_summary(security_json: &Path) -> (String, String) {
     (total, secrets)
 }
 
-fn write_html_dashboard(_ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
+fn write_html_dashboard(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
     let reports_dir = output_file
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_default();
+
+    // The same summary PROJECT_OVERVIEW.html renders, so the two pages' numbers can
+    // never silently disagree. Computed from ctx directly (Inventory/ScanResult/
+    // Config), not from the best-effort sibling-file reads below — no ordering
+    // dependency on another job, unlike the health-score/archive-strategy cards.
+    let plain_language = humanize::summarize(ctx);
 
     let health_report = reports_dir.join("22_project_health_report.md");
     let archive_plan = reports_dir.join("27_archive_plan.md");
@@ -137,6 +152,9 @@ fn write_html_dashboard(_ctx: &ReportContext<'_>, output_file: &Path) -> Result<
         ("Health Report", "22_project_health_report.md"),
         ("AI Context", "AI_CONTEXT/00_PROJECT_OVERVIEW.md"),
         ("Custom Prompt", "AI_PROMPTS/CUSTOM_PROMPT.md"),
+        ("Project Overview (plain language)", "PROJECT_OVERVIEW.html"),
+        ("Onboarding Guide", "ONBOARDING_GUIDE.md"),
+        ("Review Checklist", "REVIEW_CHECKLIST.md"),
     ];
 
     let card_html: String = cards
@@ -154,14 +172,43 @@ fn write_html_dashboard(_ctx: &ReportContext<'_>, output_file: &Path) -> Result<
     let link_html: String = links
         .iter()
         .map(|(label, href)| {
+            // `data-search` holds the lowercased label the filter box below matches
+            // against; kept separate from the visible text so escaping the two never
+            // has to stay in sync by hand.
             format!(
-                "<li><a href=\"{}\">{}</a></li>",
+                "<li data-search=\"{}\"><a href=\"{}\">{}</a></li>",
+                escape_html(&label.to_lowercase()),
                 escape_html(href),
                 escape_html(label)
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
+
+    let risks_html: String = if plain_language.risks.is_empty() {
+        "<p>No specific risks stood out from the automated checks.</p>".to_string()
+    } else {
+        let items: String = plain_language
+            .risks
+            .iter()
+            .map(|risk| {
+                format!(
+                    "<li><span class=\"badge {sev}\">{sev}</span>{text}</li>",
+                    sev = risk.severity,
+                    text = escape_html(&risk.text)
+                )
+            })
+            .collect();
+        format!("<ul class=\"risks\">{items}</ul>")
+    };
+    let stack_line = escape_html(&if plain_language.stack.is_empty() {
+        "no specific stack detected".to_string()
+    } else {
+        plain_language.stack.join(", ")
+    });
+    let project_name = escape_html(&plain_language.project_name);
+    let project_type = escape_html(&plain_language.project_type);
+    let health_score = plain_language.health_score.clamp(0, 100);
 
     let export_plan_excerpt = read_text_best_effort(&export_plan, 6_000);
     let health_excerpt = read_text_best_effort(&health_report, 6_000);
@@ -177,7 +224,7 @@ fn write_html_dashboard(_ctx: &ReportContext<'_>, output_file: &Path) -> Result<
     };
 
     let html = format!(
-        r#"<!doctype html>
+        r##"<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -229,8 +276,34 @@ h1 {{ margin: 0 0 6px; font-size: 30px; }}
 nav, section.panel {{ border: 1px solid var(--border); border-radius: 8px; padding: 18px; background: var(--card); }}
 nav ul {{ margin: 0; padding-left: 20px; }}
 nav li {{ margin: 7px 0; }}
+nav li.hidden {{ display: none; }}
 a {{ color: var(--accent); }}
 pre {{ overflow: auto; padding: 14px; border-radius: 8px; background: rgba(127, 127, 127, 0.12); white-space: pre-wrap; }}
+input[type="search"] {{
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+}}
+.explain ul.risks {{ margin: 8px 0 0; padding-left: 20px; }}
+.explain li {{ margin: 5px 0; }}
+.badge {{
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-right: 8px;
+}}
+.badge.high {{ background: #b91c1c; color: #fff; }}
+.badge.medium {{ background: #b45309; color: #1f2937; }}
+.badge.low {{ background: var(--border); color: var(--fg); }}
 @media (max-width: 760px) {{
   body {{ padding: 18px; }}
   .grid {{ grid-template-columns: 1fr; }}
@@ -244,10 +317,17 @@ pre {{ overflow: auto; padding: 14px; border-radius: 8px; background: rgba(127, 
 <div class="cards">
 {card_html}
 </div>
+<section class="panel explain">
+<h2 style="margin-top:0">Explain in plain words</h2>
+<p>{project_name} is a {project_type} project ({stack_line}), scoring {health_score}/100 on the automated health checks.</p>
+{risks_html}
+<p><a href="PROJECT_OVERVIEW.html">Open the full plain-language overview &rarr;</a></p>
+</section>
 <div class="grid">
 <nav>
 <h2>Reports</h2>
-<ul>
+<input type="search" id="report-filter" placeholder="Filter reports&hellip;" aria-label="Filter reports">
+<ul id="report-list">
 {link_html}
 </ul>
 </nav>
@@ -259,9 +339,25 @@ pre {{ overflow: auto; padding: 14px; border-radius: 8px; background: rgba(127, 
 </section>
 </div>
 </main>
+<script>
+// Filters the report-links list by substring match against each entry's
+// data-search attribute. No library, no network reference: this is the entire
+// interactive surface of the page.
+(function () {{
+  var input = document.getElementById("report-filter");
+  var items = document.querySelectorAll("#report-list li");
+  input.addEventListener("input", function () {{
+    var query = input.value.trim().toLowerCase();
+    items.forEach(function (item) {{
+      var match = query === "" || item.getAttribute("data-search").indexOf(query) !== -1;
+      item.classList.toggle("hidden", !match);
+    }});
+  }});
+}})();
+</script>
 </body>
 </html>
-"#
+"##
     );
 
     std::fs::write(output_file, html).map_err(|source| ReportError::Write {
@@ -326,5 +422,89 @@ mod tests {
         assert!(content.contains("<div class=\"value\">1</div>"));
         assert!(content.contains("Included: 42 files"));
         assert!(content.contains("Overall score:"));
+    }
+
+    #[test]
+    fn the_plain_language_section_uses_the_same_summary_project_overview_renders() {
+        let fixture = Fixture::new(|root| {
+            std::fs::write(root.join(".env"), "KEY=x\n").unwrap();
+            std::fs::write(root.join("main.py"), "print(1)\n").unwrap();
+        });
+        let ctx = fixture.context("full");
+        let out_dir = tempfile::tempdir().unwrap();
+        let output_file = out_dir.path().join(JOB.filename);
+
+        write_html_dashboard(&ctx, &output_file).unwrap();
+        let content = std::fs::read_to_string(&output_file).unwrap();
+
+        let summary = humanize::summarize(&ctx);
+        assert!(content.contains("Explain in plain words"));
+        assert!(content.contains(&format!("scoring {}/100", summary.health_score)));
+        for risk in &summary.risks {
+            assert!(
+                content.contains(&escape_html(&risk.text)),
+                "missing risk text: {}",
+                risk.text
+            );
+        }
+    }
+
+    #[test]
+    fn the_search_filter_is_inline_js_with_no_outbound_reference() {
+        let fixture = Fixture::new(|_root| {});
+        let ctx = fixture.context("full");
+        let out_dir = tempfile::tempdir().unwrap();
+        let output_file = out_dir.path().join(JOB.filename);
+
+        write_html_dashboard(&ctx, &output_file).unwrap();
+        let content = std::fs::read_to_string(&output_file).unwrap();
+
+        assert!(content.contains("id=\"report-filter\""));
+        assert!(content.contains("getElementById(\"report-filter\")"));
+        assert!(!content.contains("http://"));
+        assert!(!content.contains("https://"));
+        assert!(!content.contains("cdn."));
+        assert!(
+            !content.contains("<script src"),
+            "the filter must be inline, not a fetched file"
+        );
+    }
+
+    #[test]
+    fn new_report_links_are_present_and_searchable() {
+        let fixture = Fixture::new(|_root| {});
+        let ctx = fixture.context("full");
+        let out_dir = tempfile::tempdir().unwrap();
+        let output_file = out_dir.path().join(JOB.filename);
+
+        write_html_dashboard(&ctx, &output_file).unwrap();
+        let content = std::fs::read_to_string(&output_file).unwrap();
+
+        for href in [
+            "PROJECT_OVERVIEW.html",
+            "ONBOARDING_GUIDE.md",
+            "REVIEW_CHECKLIST.md",
+        ] {
+            assert!(content.contains(href), "missing link to {href}");
+        }
+    }
+
+    #[test]
+    fn a_planted_secret_never_reaches_the_plain_language_section() {
+        let secret = concat!("sk-live-", "ABCDEF1234567890abcdef");
+        let fixture = Fixture::new(|root| {
+            std::fs::write(root.join("config.py"), format!("API_KEY = \"{secret}\"\n")).unwrap();
+        });
+        let ctx = fixture.context("full");
+        let out_dir = tempfile::tempdir().unwrap();
+        let output_file = out_dir.path().join(JOB.filename);
+
+        write_html_dashboard(&ctx, &output_file).unwrap();
+        let content = std::fs::read_to_string(&output_file).unwrap();
+
+        assert!(
+            !content.contains(secret),
+            "planted secret leaked into REPORT_DASHBOARD.html"
+        );
     }
 }
