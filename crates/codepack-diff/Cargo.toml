@@ -18,6 +18,9 @@ sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Test-only: the snapshot is persisted and read back across runs, so its serialized
+# shape is a compatibility surface worth pinning (BLUEPRINT §D.2).
+serde_json.workspace = true
 
 [lints]
 workspace = true

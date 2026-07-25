@@ -42,3 +42,65 @@ impl Snapshot {
         self.files.values().map(|file| file.size).sum()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot_of(entries: &[(&str, u64)]) -> Snapshot {
+        Snapshot {
+            files: entries
+                .iter()
+                .map(|(rel_path, size)| {
+                    (
+                        (*rel_path).to_string(),
+                        SnapshotFile {
+                            rel_path: (*rel_path).to_string(),
+                            sha256: "0".repeat(64),
+                            size: *size,
+                            loc: 1,
+                            mtime_ns: 0,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn an_empty_snapshot_reports_no_files_and_no_bytes() {
+        let snapshot = Snapshot::default();
+        assert!(snapshot.is_empty());
+        assert_eq!(snapshot.len(), 0);
+        assert_eq!(snapshot.total_bytes(), 0);
+    }
+
+    #[test]
+    fn totals_sum_every_file() {
+        // These two values become `NewSnapshot.file_count`/`bytes_total` in the history
+        // row, so they are what a later `last_export` comparison is measured against.
+        let snapshot = snapshot_of(&[("a.rs", 10), ("b.rs", 32), ("c.rs", 0)]);
+        assert!(!snapshot.is_empty());
+        assert_eq!(snapshot.len(), 3);
+        assert_eq!(snapshot.total_bytes(), 42);
+    }
+
+    #[test]
+    fn a_snapshot_round_trips_through_json() {
+        // The snapshot is persisted and read back across runs, so its serialized shape
+        // is a compatibility surface (BLUEPRINT §D.2).
+        let snapshot = snapshot_of(&[("src\\main.rs", 7)]);
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let parsed: Snapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, snapshot);
+    }
+
+    #[test]
+    fn serialized_field_names_match_the_documented_schema() {
+        let snapshot = snapshot_of(&[("a.rs", 1)]);
+        let json = serde_json::to_string(&snapshot).unwrap();
+        for field in ["rel_path", "sha256", "size", "loc", "mtime_ns"] {
+            assert!(json.contains(field), "missing field {field} in {json}");
+        }
+    }
+}
