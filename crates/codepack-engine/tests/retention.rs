@@ -8,6 +8,7 @@
 mod support;
 
 use std::collections::HashMap;
+use std::fs;
 
 use codepack_core::CancellationToken;
 use codepack_core::config::Config;
@@ -72,4 +73,34 @@ fn zero_disables_pruning_entirely() {
     }
 
     assert_eq!(run_rows(&conn), 3, "keep_last_n = 0 must keep everything");
+}
+
+#[test]
+fn a_run_that_redacted_something_records_a_real_count_not_null() {
+    let source = tempfile::tempdir().unwrap();
+    build_multi_type_fixture(source.path());
+    // The fixture's `.env` never reaches the bundle (safe mode excludes it), so the
+    // count must come from a file that really is exported. `redacted_count` reports
+    // what the text dump rewrote, not what the scanner detected.
+    fs::write(
+        source.path().join("settings.py"),
+        "API_KEY = \"placeholder-value\"\nDEBUG = True\n",
+    )
+    .unwrap();
+
+    let db_dir = tempfile::tempdir().unwrap();
+    let mut conn = open(&db_dir.path().join("codepack.db")).unwrap();
+    export_once(&mut conn, source.path(), &Config::default());
+
+    let recorded: Option<i64> = conn
+        .query_row("SELECT redacted_count FROM export_run", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+
+    assert_eq!(
+        recorded,
+        Some(1),
+        "the text dump redacted one line, so history must record 1 rather than NULL"
+    );
 }

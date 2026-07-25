@@ -312,6 +312,9 @@ pub fn run_export(
     let extra_ignored_vec = extra_ignored_display(&paths.source_root, config);
     let mut cancelled = cancel.is_cancelled();
     let mut text_stats = TextDumpStats::default();
+    // `None` means the text-dump step never ran, which is different from "ran and
+    // redacted nothing" — legacy's own history could not tell those apart.
+    let mut redacted_count: Option<u32> = None;
     let mut analytics_outcome: Option<AnalyticsOutcome> = None;
 
     if !cancelled {
@@ -342,7 +345,7 @@ pub fn run_export(
 
     if !cancelled && !cancel.is_cancelled() {
         send_step_started(progress, "5/8: text dump");
-        text_stats = write_text_dump(
+        let outcome = write_text_dump(
             &paths.project_dir,
             &paths.text_dump,
             config.effective_max_text_file_bytes(),
@@ -351,6 +354,8 @@ pub fn run_export(
             &log,
             cancel,
         )?;
+        text_stats = outcome.stats;
+        redacted_count = Some(outcome.redacted_lines);
         send_step_finished(progress, "5/8: text dump");
     }
 
@@ -494,9 +499,7 @@ pub fn run_export(
         files_copied: Some(i64::from(copy_stats.files_copied)),
         bytes_total: Some(bytes_total),
         tokens_est: Some(i64::try_from(token_count).unwrap_or(i64::MAX)),
-        // Legacy's own history JSON never tracked a redacted-secrets count either — an
-        // honest absence, not a gap this pass introduces.
-        redacted_count: None,
+        redacted_count: redacted_count.map(i64::from),
         cancelled,
         result_path: archive_result
             .primary_result()
