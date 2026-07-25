@@ -24,6 +24,11 @@ pub(crate) enum Outcome {
     Success,
     /// Finished, but `critical` findings were present.
     CriticalSecretsFound,
+    /// The command ran to completion but the work it was asked to do did not succeed —
+    /// an export that hit copy errors, or one that was cancelled. The bundle exists
+    /// (steps 7 and 8 always run) but describes an incomplete run, and a pipeline that
+    /// treated this as success would publish it.
+    Incomplete,
 }
 
 impl Outcome {
@@ -31,6 +36,7 @@ impl Outcome {
         match self {
             Self::Success => SUCCESS,
             Self::CriticalSecretsFound => CRITICAL_SECRETS,
+            Self::Incomplete => FAILURE,
         }
     }
 }
@@ -68,6 +74,13 @@ mod tests {
         // and found secrets" when in fact the scan did not complete.
         let failed: crate::error::Result<Outcome> = Err(CliError::Message("boom".into()));
         assert_eq!(resolve(&failed), FAILURE);
+    }
+
+    #[test]
+    fn an_incomplete_run_fails_even_though_the_command_itself_returned_ok() {
+        // An export that hit copy errors produces a bundle and returns Ok; exiting 0
+        // there would let a pipeline publish an incomplete snapshot.
+        assert_eq!(resolve(&Ok(Outcome::Incomplete)), FAILURE);
     }
 
     #[test]

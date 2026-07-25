@@ -74,11 +74,17 @@ impl ProjectConfig {
             path: path.clone(),
             source,
         })?;
-        let parsed: Self =
-            toml::from_str(&text).map_err(|source| CliError::ProjectConfigSyntax {
+        let parsed: Self = toml::from_str(&text).map_err(|error| {
+            let span = match error.span() {
+                Some(range) => format!(" at byte {}", range.start),
+                None => String::new(),
+            };
+            CliError::ProjectConfigSyntax {
                 path: path.clone(),
-                source,
-            })?;
+                span,
+                message: error.message().to_string(),
+            }
+        })?;
         Ok(Some((path, parsed)))
     }
 
@@ -161,10 +167,31 @@ mod tests {
             rendered.contains(PROJECT_CONFIG_FILE_NAME),
             "the message must name the file: {rendered}"
         );
-        let source = std::error::Error::source(&error).unwrap().to_string();
         assert!(
-            source.contains("safe_moed"),
-            "the message must name the offending key: {source}"
+            rendered.contains("safe_moed"),
+            "the message must name the offending key: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_parse_error_never_echoes_the_line_that_failed() {
+        // toml's own Display renders the offending source line, value and all, and
+        // deny_unknown_fields guarantees a stray key reaches that path. A secret
+        // someone pasted into this file must not come back out on stderr.
+        let secret = concat!("sk-live-", "ABCDEF1234567890");
+        let dir = project_with(&format!(
+            "api_token = \"{secret}\"
+"
+        ));
+        let rendered = ProjectConfig::load(dir.path()).unwrap_err().to_string();
+
+        assert!(
+            !rendered.contains(secret),
+            "the value leaked into the error: {rendered}"
+        );
+        assert!(
+            rendered.contains("api_token"),
+            "the key must still be named so the user can find it: {rendered}"
         );
     }
 

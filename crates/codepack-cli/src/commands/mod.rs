@@ -69,13 +69,13 @@ pub(crate) fn resolve_project_root(path: &Path) -> Result<PathBuf> {
             path: path.to_path_buf(),
         });
     }
-    dunce_canonicalize(path)
+    canonicalize_existing(path)
 }
 
 /// `std::fs::canonicalize` returns a `\\?\`-prefixed path on Windows, which is correct
 /// but leaks into every artifact and error message the user reads. Strip that prefix
 /// when it is safe to do so; everywhere else this is plain canonicalization.
-fn dunce_canonicalize(path: &Path) -> Result<PathBuf> {
+pub(crate) fn canonicalize_existing(path: &Path) -> Result<PathBuf> {
     let canonical = std::fs::canonicalize(path).map_err(|source| CliError::Read {
         path: path.to_path_buf(),
         source,

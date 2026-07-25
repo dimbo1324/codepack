@@ -1,9 +1,13 @@
 //! The CLI's error type.
 //!
-//! `.ai/project/12-domain-rules.md` reserves `anyhow` for binaries, but this binary
-//! wants two things `anyhow` does not give for free: an error that is `PartialEq` in
-//! tests, and a shape that renders identically in human and `--json` mode. It is small
-//! enough that `thiserror` costs nothing here.
+//! `.ai/project/12-domain-rules.md` reserves `anyhow` for binaries. This one uses
+//! `thiserror` anyway, because two call sites match on the variant rather than on the
+//! message (`commands::mod`'s `NotADirectory`), and because
+//! [`CliError::ProjectConfigSyntax`] has to control its own rendering to keep a
+//! configuration file's contents out of the message. `anyhow` gives neither without
+//! downcasting. The deviation is small and local; the rule's intent — binaries should
+//! not force typed errors on their callers — is not at stake in a crate with no
+//! callers.
 
 use std::path::PathBuf;
 
@@ -22,11 +26,22 @@ pub(crate) enum CliError {
         source: std::io::Error,
     },
 
-    #[error("{path} is not valid TOML: {source}")]
+    /// Rendered from the error's own message and span, never from its `Display`.
+    ///
+    /// `toml::de::Error`'s `Display` embeds the offending source line verbatim, value
+    /// included, and `deny_unknown_fields` guarantees that any non-schema key is echoed
+    /// that way. That would make this the one path in the binary that prints raw
+    /// repository file content — a `.codepack.toml` carrying a stray
+    /// `api_token = "…"` would have the value read back on stderr and into a CI log.
+    /// Passing it through `redact_secrets` is not enough: the redactor keys on its own
+    /// keyword list, and an arbitrary key name in an arbitrary file need not be on it.
+    /// Reporting the position instead of the text says everything the user needs to
+    /// find the line themselves.
+    #[error("{path} is not valid TOML{}: {}", .span, .message)]
     ProjectConfigSyntax {
         path: PathBuf,
-        #[source]
-        source: toml::de::Error,
+        span: String,
+        message: String,
     },
 
     #[error(transparent)]
@@ -34,9 +49,6 @@ pub(crate) enum CliError {
 
     #[error(transparent)]
     Engine(#[from] codepack_engine::EngineError),
-
-    #[error(transparent)]
-    Scanner(#[from] codepack_scanner::ScannerError),
 
     #[error(transparent)]
     Security(#[from] codepack_security::SecurityError),

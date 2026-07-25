@@ -5,7 +5,7 @@
 //! outcome into a report and an exit code.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use codepack_core::{CancellationToken, ProgressEvent};
 use serde::Serialize;
@@ -42,7 +42,7 @@ pub(crate) struct ExportReport {
 
 pub(crate) fn run(args: &ExportArgs, format: Format) -> Result<Outcome> {
     let context = commands::prepare(&args.project)?;
-    let output_root = resolve_output_root(args.out.as_deref())?;
+    let output_root = resolve_output_root(args.out.as_deref(), &context.root)?;
 
     let mut conn = commands::open_history_db()?;
     let (progress, events) = codepack_core::progress_channel();
@@ -125,32 +125,60 @@ pub(crate) fn run(args: &ExportArgs, format: Format) -> Result<Outcome> {
         print_human(&report);
     }
 
-    // An export that produced a bundle containing critical findings still succeeded as
-    // an export; the exit code reports what was found, which is what a pipeline gates
-    // on. A failed export is a plain failure and never reaches here.
-    Ok(if report.critical_findings > 0 {
+    // Order matters, and it is the same rule the rest of this binary follows: whether
+    // the work succeeded outranks what the work found. An export that hit copy errors
+    // or was cancelled still writes a bundle — steps 7 and 8 always run — so returning
+    // 0 or 3 for it would tell a pipeline an incomplete snapshot is fit to publish.
+    Ok(if !report.successful {
+        Outcome::Incomplete
+    } else if report.critical_findings > 0 {
         Outcome::CriticalSecretsFound
     } else {
         Outcome::Success
     })
 }
 
-/// `--out` defaults to the current directory rather than to the desktop: legacy was a
-/// Windows desktop application, this is a tool run from a shell, very often in CI where
-/// there is no desktop at all.
-fn resolve_output_root(requested: Option<&std::path::Path>) -> Result<PathBuf> {
+/// Decides where the bundle is written, and refuses to put it inside the project.
+///
+/// **Invariant I2: the export never writes into the source project folder.** The first
+/// version of this defaulted `--out` to the current directory, which for the documented
+/// invocation — `cd myproject && codepack export` — is the project itself. Two runs then
+/// leave two archives in the tree, and the second one has to skip the first one's output
+/// as if it were source. The default is therefore the project's *parent*: predictable,
+/// outside the project, and matching the "export this project" mental model. Legacy used
+/// the Desktop for the same reason; a shell tool has no Desktop, and often no user.
+///
+/// An explicit `--out` pointing inside the project is a hard error rather than a
+/// warning. I2 is absolute, and a warning in CI is a line nobody reads.
+fn resolve_output_root(
+    requested: Option<&std::path::Path>,
+    source_root: &std::path::Path,
+) -> Result<PathBuf> {
     let path = match requested {
         Some(path) => path.to_path_buf(),
-        None => std::env::current_dir().map_err(|source| CliError::Read {
-            path: PathBuf::from("."),
-            source,
+        None => source_root.parent().map(Path::to_path_buf).ok_or_else(|| {
+            CliError::message(format!(
+                "{} has no parent directory to write the bundle into; pass --out",
+                source_root.display()
+            ))
         })?,
     };
+
     std::fs::create_dir_all(&path).map_err(|source| CliError::Read {
         path: path.clone(),
         source,
     })?;
-    Ok(path)
+
+    // Compared after creation so both sides can be canonicalized: `--out ./dist` and the
+    // project root must be comparable as real paths, not as the strings the user typed.
+    let resolved = commands::canonicalize_existing(&path)?;
+    if resolved.starts_with(source_root) {
+        return Err(CliError::message(format!(
+            "refusing to write the bundle into the project being exported ({}): the              export never writes inside the source folder. Choose an --out outside it.",
+            resolved.display()
+        )));
+    }
+    Ok(resolved)
 }
 
 fn print_human(report: &ExportReport) {

@@ -62,6 +62,17 @@ pub(crate) fn resolve(
     // A profile is resolved before a preset so that an explicit `--preset` still wins:
     // both set overlapping fields, and the preset is the more specific request.
     if let Some(name) = &overrides.profile {
+        // Validated here rather than left to `apply_custom_profile`, which falls back to
+        // `full` for an unknown key — legacy behaviour that is right for a GUI combobox
+        // and wrong for a flag. `--profile minimul` would otherwise *widen* the export to
+        // `full` while the trace still claimed the typed name had been applied. Same
+        // reasoning as `--preset`: a typo must not silently produce a different export.
+        if !is_known_profile(name, user_profiles) {
+            let known = known_profile_names(user_profiles).join(", ");
+            return Err(CliError::message(format!(
+                "unknown profile `{name}`; available profiles: {known}"
+            )));
+        }
         config = codepack_core::profiles::apply_custom_profile(&config, user_profiles, name);
         trace.profile = Some(name.clone());
     }
@@ -85,6 +96,20 @@ pub(crate) fn resolve(
     }
 
     Ok((config, trace))
+}
+
+fn known_profile_names(user_profiles: &codepack_core::profiles::UserProfilesFile) -> Vec<String> {
+    let mut names: Vec<String> = codepack_core::config::EXPORT_PROFILES
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect();
+    names.extend(user_profiles.profiles.keys().cloned());
+    names
+}
+
+fn is_known_profile(name: &str, user_profiles: &codepack_core::profiles::UserProfilesFile) -> bool {
+    codepack_core::config::EXPORT_PROFILES.contains(&name)
+        || user_profiles.profiles.contains_key(name)
 }
 
 /// Looks a preset up by name, case-insensitively, listing the valid names on failure.
@@ -263,6 +288,51 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.safe_export_mode, "full");
+    }
+
+    #[test]
+    fn an_unknown_profile_is_rejected_rather_than_silently_widening_the_export() {
+        // `apply_custom_profile` falls back to `full` for an unknown key. Reaching that
+        // fallback from a flag would mean `--profile minimul` exports *more* than the
+        // user asked for, while the trace reported the name they typed.
+        let dir = empty_project();
+        let overrides = Overrides {
+            profile: Some("minimul".to_string()),
+            ..Overrides::default()
+        };
+        let error = resolve(
+            Config::default(),
+            dir.path(),
+            &overrides,
+            &UserProfilesFile::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("minimul"));
+        assert!(error.contains("available profiles"));
+    }
+
+    #[test]
+    fn a_user_defined_profile_is_accepted() {
+        let dir = empty_project();
+        let mut profiles = UserProfilesFile::default();
+        profiles.profiles.insert(
+            "team".to_string(),
+            codepack_core::profiles::UserProfile {
+                safe_export_mode: Some("safe".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let overrides = Overrides {
+            profile: Some("team".to_string()),
+            ..Overrides::default()
+        };
+        let (config, trace) =
+            resolve(Config::default(), dir.path(), &overrides, &profiles).unwrap();
+        assert_eq!(config.safe_export_mode, "safe");
+        assert_eq!(trace.profile.as_deref(), Some("team"));
     }
 
     #[test]
