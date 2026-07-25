@@ -2,7 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Every branch, not just main. Until 2026-07-25 a topic branch got no CI at all,
+    # so work was only ever verified after it had already been merged. The
+    # concurrency group below keys on the ref, so pushing repeatedly to one branch
+    # cancels its own superseded runs instead of queueing them.
+    branches: ['**']
   pull_request:
 
 concurrency:
