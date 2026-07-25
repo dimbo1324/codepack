@@ -16,6 +16,11 @@ pub(crate) const SECTION_RULE_WIDTH: usize = 100;
 /// containing hundreds of files.
 pub(crate) const FILE_BANNER_RULE_WIDTH: usize = 120;
 
+/// The distinction between the two widths is the point: a per-file banner must stand
+/// out from the section rules around it. Enforced at compile time, since both values are
+/// constants and a runtime assertion could never fail.
+const _: () = assert!(FILE_BANNER_RULE_WIDTH > SECTION_RULE_WIDTH);
+
 /// Draws a rule `width` columns wide using `character`.
 pub(crate) fn rule(character: char, width: usize) -> String {
     character.to_string().repeat(width)
@@ -42,12 +47,5 @@ mod tests {
         assert_eq!(section_rule('-').len(), SECTION_RULE_WIDTH);
         assert!(section_rule('-').chars().all(|c| c == '-'));
         assert_eq!(file_banner_rule().len(), FILE_BANNER_RULE_WIDTH);
-    }
-
-    #[test]
-    fn the_file_banner_is_wider_than_a_section_rule() {
-        // The distinction is the point: a per-file banner must stand out from the
-        // section rules around it.
-        assert!(FILE_BANNER_RULE_WIDTH > SECTION_RULE_WIDTH);
     }
 }
