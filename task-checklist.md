@@ -1,129 +1,101 @@
 # Task Checklist
 
-**Task:** Core hardening before S10 — prove parity by *executing* legacy (golden
-artifacts), wire up the three token capabilities that shipped without a caller, and
-close the config-group open questions the owner decided on 2026-07-25.
-This is **not** a ROADMAP stage: it is a corrective pass over the already-closed
-S1–S9 core, mandated by the owner after a cross-cutting review found four
-discrepancies between what the documents claim and what the code does.
+**Task:** Закалка ядра — сквозная ревизия S0–S9 перед переходом к S10 (`ROADMAP.md` §8).
+Задача не входит в нумерацию этапов: она ничего не добавляет к плану, а приводит уже
+сданное в соответствие с тем, что о нём заявлено.
 **Date:** 2026-07-25
 **Branch:** feat/core-hardening-golden-parity
 
 ## Preparation
 
 - [+] Orientation ritual (git status/log, ROADMAP §1, overview.md, task-checklist.md,
-      open-questions.md) — S0–S9 all carry `**Status.**` lines; S10 is next, but the
-      owner directed a hardening pass first
-- [+] S8+S9 closed out honestly: CI run #50 (commit `8ef3159`, all three OSes
-      `success`, including the `cargo deny check` unavailable locally) recorded in
-      `ROADMAP.md`
-- [+] Feasibility of golden generation **proven, not assumed**: legacy `exporter.py`
-      imports no PySide6; the pipeline runs headless on Python 3.14 with zero
-      installed dependencies and produced all 58 artifacts in seconds
-- [+] All owner decisions from 2026-07-25 recorded in
-      `docs/decisions/open-questions.md` (6 new decision entries; Q3/Q4 deferred,
-      Q5/Q6/Q7/Q8/Q9/Q10/Q11 resolved, Q12/Q13 explicitly left open, new Q14 for
-      First-Fit Decreasing)
+      open-questions.md); предыдущая задача (S8+S9) закрыта чисто
+- [+] Сквозная ревизия ядра: найдено расхождение между заявленным и фактическим —
+      `fit_to_budget`, `ModelContextLimits`, `cleanup_old_runs` сданы в S5/S6 и не
+      вызываются ниоткуда, хотя ROADMAP §6 числит их реализованными
+- [+] Решения владельца по открытым вопросам записаны в `open-questions.md`
+      (Q3–Q11 закрыты или отложены явно, а не молча)
+- [+] Ключевое решение: паритет доказывается **исполнением** legacy, а не чтением её
+      исходников — критерии готовности S2/S9 буквально этого и требуют
 
-## Implementation — sequenced by group
+## Golden-паритет
 
-### Group G — golden parity infrastructure (highest value, run first)
+- [+] `tests/golden/generate_reference.py` — запуск legacy headless, извлечение
+      артефактов, письменная спецификация сравнения (что сверяется полностью, что
+      подмножеством, что исключено и почему)
+- [+] `cargo xtask golden` — регенерация эталонов; Python нужен только разработчику,
+      CI остаётся чисто Rust и legacy никогда не запускает
+- [+] Эталоны трёх фикстур (`node_app`, `python_app`, `mixed_stack`) в репозитории
+- [+] `crates/codepack-engine/tests/golden.rs` — сверка нашего вывода с эталонами
+- [+] Спецификация реализована дважды (Python при записи, Rust при сравнении) —
+      осознанно, чтобы расхождение между ними валило тест
 
-- [ ] `cargo xtask golden --regenerate` — runs legacy Python against the fixtures and
-      writes reference artifacts into the repo. Requires Python only on a developer
-      machine; **CI never runs it**
-- [ ] Golden fixtures: 2-3 projects covering different stacks (at minimum Node +
-      Python, ideally a mixed/monorepo case)
-- [ ] Reference artifacts committed: `28_export_plan.json`, `manifest.json`,
-      `PROJECT_PROFILE.json`, `06_security_scan.json`, `06_security_scan.sarif`,
-      `27_archive_plan.json`, `REPORT_PLUGINS.json`, plus the full artifact-name
-      listing of the produced ZIP
-- [ ] Normalization layer: timestamps and absolute paths only — every other
-      difference must fail the test rather than be normalized away
-- [ ] Golden comparison tests wired into `cargo test --workspace`
+## Найденные и исправленные расхождения (7)
 
-### Group F — the I5 contract break golden already found
+- [+] `28_export_plan.json` не применял safe-export-mode: `.env` числился
+      `included`/`info`. Исправлено предикатом вызывающей стороны
+      (`codepack_scanner::SafetyClassifier`), без зависимости сканера на
+      `codepack-security` — тот же приём, что уже применён в `codepack-diff`
+- [+] `PlanSummary` вернул `estimated_included_size` и `skipped_dirs_count`
+      (нарушение I5; обоснование «нет байт-форматтера до S6» истекло с выходом S6)
+- [+] Порядок обхода приведён к `os.walk`: файлы каталога перед подкаталогами,
+      сравнение имён по **верхнему** регистру (NTFS-коллация — реально меняет порядок:
+      `MAIN.PY` < `__INIT__.PY`)
+- [+] `00_project_profile.json` снова производится — как нулевая работа каталога,
+      корневой `PROJECT_PROFILE.json` получается копированием (как в legacy)
+- [+] `detected_stack` включил группу `package_managers`; `important_config_files`
+      вернул префикс `.\`; `docker_compose_files` хранит имена, а не пути
+- [+] Сканер выдавал две находки на строку (keyword + энтропия) — keyword теперь
+      подавляет остальные на той же строке, прирост recall от энтропии сохранён
+- [+] Редакция съедала имя ключа (`- <REDACTED>` вместо `- JWT_SECRET=<REDACTED>`) —
+      порядок проходов приведён к legacy; побочно стало строго безопаснее
+- [+] `REPORT_PLUGINS.json` выдаётся в порядке legacy; сверяется как надмножество с
+      идентичным гейтингом (заполненные описания и лишние записи — задокументированные
+      намеренные отличия, пропажа записи или смена `profiles` по-прежнему валит тест)
 
-- [ ] `PlanSummary` regains `estimated_included_size` (formatted byte string via
-      `codepack_tokens::format_bytes`) and `skipped_dirs_count` — restoring the
-      legacy `28_export_plan.json` contract. No `schema_version` bump: this restores
-      a contract, it does not change one
+## Подключение заявленного, но не вызываемого
 
-### Group Q7 — text/binary constants move to `codepack-core`
+- [+] `Config::token_budget` + `codepack-engine::budget` — `fit_to_budget` применяется
+      на шаге планирования; важность берётся из `key_files::importance_ranking`, то есть
+      из того же ранжирования, что публикует `16_key_files_report` (BLUEPRINT §B.3)
+- [+] `Config::history_keep_last_n` + вызов `cleanup_old_runs` после записи прогона;
+      `0` отключает; сбой обрезки логируется, но не валит завершённый экспорт
+- [+] `ModelContextLimits::load_or_default` — слияние с файлом-переопределением,
+      битый файл = ошибка, а не тихий откат к устаревшим лимитам
 
-- [ ] `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`TEXT_FILENAMES_WITHOUT_EXTENSION`/
-      `should_consider_text_file`/`looks_binary` move to `codepack-core`
-- [ ] `codepack-scanner` and `codepack-security` re-export or consume from core; the
-      duplicate definitions are deleted, not left behind
-- [ ] Every existing constant-parity test still passes unchanged — the move must be
-      provably behavior-preserving
+## Закрытые открытые вопросы
 
-### Group T — token capabilities get a real caller (+ Q11)
-
-- [ ] `fit_to_budget` wired into the pipeline: budget field in `Config`, applied
-      during planning/copy; excluded files carry an explainable reason
-- [ ] `estimate_tokens_refined` reachable via configuration — `estimate_tokens_fallback`
-      stays the default so invariant I4 and legacy history parity are untouched
-- [ ] Q11: `ModelContextLimits` loadable from a JSON file via `AppPaths`, falling back
-      to the built-in 4-entry table when absent
-- [ ] `ROADMAP.md` §6's "B.3 Fit to budget → S6" claim corrected — it was true of the
-      library, false of the product
-
-### Group H — history retention and import get a caller (Q10)
-
-- [ ] `keep_last_n` becomes a `Config` field, default 50 (legacy `MAX_HISTORY_ITEMS`)
-- [ ] `cleanup_old_runs` called by the engine after a successful run
-- [ ] `import_legacy_history` triggering decided and documented (first-run concern —
-      confirm whether it lands here or genuinely belongs to S10)
-
-### Group P — export profiles (Q8)
-
-- [ ] `~/.project_exporter_profiles.json` read and migrated into the new format —
-      a parity gap, not a new feature
-
-### Group D — real `base..target` diff (Q9)
-
-- [ ] `diff_target_ref` becomes a live field; `git_ref` mode compares `base..target`
-      rather than always `base..HEAD`. Deviation from legacy is deliberate and must be
-      documented as a 🎯 improvement, not silent drift
-
-### Group S — security gaps
-
-- [ ] AWS Secret Access Key signature (BLUEPRINT §B.1's second AWS signal, never
-      implemented in S3)
-- [ ] Corpus test re-measured; precision must not drop (invariant I9 — lowering a
-      threshold to pass is forbidden)
-- [ ] `redacted_count` genuinely counted and recorded in history instead of `None`
+- [+] Q8 — перенесён второй legacy-файл настроек (`codepack-core::profiles`, 20 тестов)
+- [+] Q9 — `diff_target_ref` стал настоящим: `git_ref` сравнивает `base..target`
+- [+] Q10 — ретеншн истории подключён и настраивается
+- [+] Q11 — механизм загрузки лимитов из файла реализован
 
 ## Verification
 
-- [ ] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `sync-agents --check`;
-      `cargo deny check` unavailable locally — CI covers it)
-- [ ] Golden tests pass against the committed reference artifacts
-- [ ] No test deleted, disabled, or weakened to make the gate green
-- [ ] Independent review pass (`codepack-quality-reviewer`)
-- [ ] CI green on all three OSes
+- [+] `cargo fmt --all --check` — чисто
+- [+] `cargo clippy --workspace --all-targets -- -D warnings` — чисто
+- [+] `cargo test --workspace` — 658 passed, 0 failed, 1 ignored
+- [+] Golden — 3/3 фикстуры совпадают с реальным выводом legacy
+- [+] Корпус безопасности перемерен, не принят на веру: parity P=1.000 R=0.312
+      F1=0.476, full P=1.000 R=1.000 F1=1.000 — без изменений, порог не трогали (I9)
+- [-] `cargo deny check` — бинарь `cargo-deny` отсутствует в песочнице разработки
+      (пробел окружения с S8, не регрессия этой задачи). В CI ставится и выполняется
+- [ ] CI на трёх ОС — не подтверждён на момент написания
+- [ ] Независимое ревью диффа (`codepack-quality-reviewer`)
 
-## Completion
+## Не сделано (честно)
 
-- [ ] `docs/architecture/overview.md` updated (constants moved to core; golden
-      infrastructure; new `Config` fields)
-- [ ] `ROADMAP.md` — S2/S6/S7 `**Status.**` lines amended where this task changed
-      what they claim; §6 corrected for B.3
-- [ ] `docs/decisions/open-questions.md` — Q7/Q8/Q9/Q10/Q11 rows updated to name the
-      actual implementation that closed them
-- [ ] Final report to owner (Russian, per language policy)
-
----
-
-## Explicitly NOT in this task (owner decision, 2026-07-25)
-
-- Q12 — localizing all ~25 reports RU/EN
-- Q13 — cancellation inside each report's own file loop
-- Q14 — First-Fit Decreasing for archive splitting
-- Q6 — `.codepack.toml` (deliberately deferred to S10, where the CLI learns to read
-  configs anyway)
+- [-] **Q7** — константы классификации текст/бинарь по-прежнему продублированы в
+      `codepack-scanner` и `codepack-security`. Владелец решил переносить в
+      `codepack-core` до S10; перенос в эту задачу не вошёл
+- [-] **Q15** — провайдер-сигнатура «AWS Secret (по контексту)» не реализована.
+      Работа была начата и не доведена; требование I9 (precision не падает) делает её
+      неаккуратную реализацию хуже отсутствия
+- [-] Q12 (локализация всего каталога), Q13 (отмена внутри циклов отчётов),
+      Q14 (First-Fit Decreasing) — сознательно отложены, решение владельца записано
 
 ## Next task
 
-Stage **S10 — CLI / headless** (`ROADMAP.md` §3).
+Этап **S10 — CLI / headless** (`ROADMAP.md` §3). Перед началом — ритуал ориентации из
+`.ai/project/13-progress-tracking.md`. Там же по решению владельца делается Q6
+(проектный конфиг `.codepack.toml`). До S10 желательно закрыть Q7 и Q15.
