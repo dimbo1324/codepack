@@ -1,0 +1,77 @@
+{
+  "diff_export_mode": "all",
+  "excluded_files": [
+    {
+      "group": "other",
+      "reason": "high-risk credential filename",
+      "relative_path": ".env",
+      "severity": "critical",
+      "size": 56,
+      "status": "excluded"
+    }
+  ],
+  "included_files": [
+    {
+      "group": "other",
+      "reason": "",
+      "relative_path": ".env.example",
+      "severity": "info",
+      "size": 30,
+      "status": "included"
+    },
+    {
+      "group": "other",
+      "reason": "",
+      "relative_path": ".gitignore",
+      "severity": "info",
+      "size": 20,
+      "status": "included"
+    },
+    {
+      "group": "config_and_locks",
+      "reason": "",
+      "relative_path": "package.json",
+      "severity": "info",
+      "size": 280,
+      "status": "included"
+    },
+    {
+      "group": "docs",
+      "reason": "",
+      "relative_path": "README.md",
+      "severity": "info",
+      "size": 96,
+      "status": "included"
+    },
+    {
+      "group": "frontend_source",
+      "reason": "",
+      "relative_path": "src\\index.js",
+      "severity": "info",
+      "size": 310,
+      "status": "included"
+    }
+  ],
+  "incremental_enabled": false,
+  "profile": "full",
+  "project_name": "node_app",
+  "rules": {
+    "always_include_dirs": [],
+    "always_include_files": [],
+    "excluded_dirs": [],
+    "excluded_extensions": [],
+    "excluded_files": [],
+    "loaded_rules": [],
+    "source_file": null
+  },
+  "safe_export_mode": "safe",
+  "skipped_dirs": [],
+  "summary": {
+    "estimated_included_bytes": 736,
+    "estimated_included_size": "736 B",
+    "excluded_count": 1,
+    "included_count": 5,
+    "skipped_dirs_count": 0
+  },
+  "warnings": []
+}

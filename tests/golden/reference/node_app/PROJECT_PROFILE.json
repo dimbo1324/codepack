@@ -1,0 +1,66 @@
+{
+  "capabilities": {
+    "has_ci": false,
+    "has_docker": false,
+    "has_env_files": true,
+    "has_git": false,
+    "has_license": false,
+    "has_readme": true,
+    "has_tests": false
+  },
+  "commands": {
+    "build": [
+      "npm run build"
+    ],
+    "install": [
+      "npm install"
+    ],
+    "test": [
+      "npm run test"
+    ]
+  },
+  "counts": {
+    "files": 5,
+    "folders": 1,
+    "total_size_bytes": 736
+  },
+  "detected_stack": [
+    "Express",
+    "Jest"
+  ],
+  "docker_compose_files": [],
+  "entrypoints": [],
+  "important_config_files": [
+    ".\\.env.example",
+    ".\\.gitignore",
+    ".\\package.json",
+    ".\\README.md"
+  ],
+  "npm_scripts": {
+    "build": "webpack --mode production",
+    "test": "jest"
+  },
+  "package_managers": [],
+  "project_name": "node_app",
+  "project_type": "fullstack",
+  "risk_level": "high",
+  "risk_reasons": [
+    "1 .env-like file(s) detected",
+    "no obvious test files detected",
+    "no GitHub Actions workflow detected"
+  ],
+  "schema_version": 1,
+  "stack_by_group": {
+    "backend": [
+      "Express"
+    ],
+    "frontend": [],
+    "infrastructure": [],
+    "package_managers": [],
+    "styling": [],
+    "testing": [
+      "Jest"
+    ],
+    "tools": []
+  }
+}

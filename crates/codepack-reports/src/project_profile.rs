@@ -85,6 +85,19 @@ pub struct ProjectProfile {
     pub important_config_files: Vec<String>,
 }
 
+/// Legacy `rel_display`: a relative path rendered with a leading `.\`. `configs`
+/// already carries backslash-separated relative paths, so only the prefix is added.
+/// Omitted originally, which left `important_config_files` as the one list in this
+/// artifact whose entries did not match legacy's rendering (found by the golden suite,
+/// 2026-07-25).
+fn rel_display(relative_path: &str) -> String {
+    if relative_path.is_empty() || relative_path == "." {
+        ".".to_string()
+    } else {
+        format!(".\\{relative_path}")
+    }
+}
+
 fn detect_project_type(ctx: &ReportContext<'_>, stack: &DetectedStack) -> String {
     let has_frontend = !stack.frontend.is_empty()
         || [
@@ -314,6 +327,8 @@ pub fn build_project_profile(ctx: &ReportContext<'_>) -> ProjectProfile {
     let configs = crate::reports::config::find_config_files(ctx);
     let (risk_level, risk_reasons) = detect_risk_level(ctx);
 
+    // Legacy stores the bare file name here (`p.name`), not the relative path — it is
+    // the one list in this artifact that is not path-shaped.
     let docker_compose_files: Vec<String> = configs
         .iter()
         .filter(|path| {
@@ -322,7 +337,7 @@ pub fn build_project_profile(ctx: &ReportContext<'_>) -> ProjectProfile {
                 "docker-compose.yml" | "docker-compose.yaml" | "compose.yml" | "compose.yaml"
             )
         })
-        .cloned()
+        .map(|path| file_name_of(path).to_string())
         .collect();
 
     let npm_scripts: BTreeMap<String, String> = package_json
@@ -398,9 +413,26 @@ pub fn build_project_profile(ctx: &ReportContext<'_>) -> ProjectProfile {
         },
         risk_level,
         risk_reasons,
-        important_config_files: configs.into_iter().take(100).collect(),
+        important_config_files: configs
+            .into_iter()
+            .take(100)
+            .map(|path| rel_display(&path))
+            .collect(),
     }
 }
+
+/// Legacy's report job #0. The catalog entry matters as much as the file: legacy
+/// derives `REPORT_PLUGINS.json` from the job list, so a profile written outside the
+/// catalog (as this crate did until 2026-07-25) silently dropped both
+/// `reports/insights/00_project_profile.json` and its catalog entry. The top-level
+/// `PROJECT_PROFILE.json` is a copy of this file in legacy (`shutil.copyfile`), which
+/// `codepack-engine` reproduces after the catalog has run.
+pub const JOB: crate::plugin::ReportJob = crate::plugin::ReportJob {
+    filename: "00_project_profile.json",
+    profiles: &["quick", "full", "ai_review", "security", "minimal"],
+    description: "Machine-readable project profile: stack, entrypoints, commands, risk level.",
+    run: write_project_profile_json,
+};
 
 pub fn write_project_profile_json(
     ctx: &ReportContext<'_>,
@@ -432,6 +464,7 @@ mod tests {
             source.path(),
             &ScanOptions::default(),
             &ExportIgnoreRules::default(),
+            &codepack_scanner::no_safety_classification,
             &CancellationToken::new(),
         )
         .unwrap();
@@ -465,6 +498,14 @@ mod tests {
         assert!(parsed.get("counts").is_some());
         assert!(parsed.get("risk_level").is_some());
         assert!(parsed.get("important_config_files").is_some());
-        assert_eq!(parsed["detected_stack"], serde_json::json!(["Rust"]));
+        // "Cargo" comes from the `package_managers` group, which legacy's own
+        // `_flatten_stack` includes (it iterates every group of the dict). This
+        // expectation previously asserted `["Rust"]`, encoding the bug the golden
+        // reference disproved: real legacy output for a pip project lists
+        // `["pip/requirements.txt", "Python"]`.
+        assert_eq!(
+            parsed["detected_stack"],
+            serde_json::json!(["Cargo", "Rust"])
+        );
     }
 }

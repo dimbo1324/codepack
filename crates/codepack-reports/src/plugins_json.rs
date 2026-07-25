@@ -36,6 +36,14 @@ pub fn write_report_plugins_json(jobs: &[ReportJob], out_dir: &Path) -> Result<(
         })
         .collect();
 
+    // Legacy emits the catalog in filename order (`00_…` through `26_…`), because its
+    // job list happened to be written that way. Ours is assembled group by group for
+    // data-dependency reasons (the dashboard must run last, the profile first), so the
+    // catalog is sorted here instead of reordering execution. The catalog describes
+    // what reports exist, never the order they ran in.
+    let mut entries = entries;
+    entries.sort_by(|a, b| a.filename.cmp(b.filename));
+
     let rendered = serde_json::to_string_pretty(&entries)
         .map_err(|source| ReportError::Serialize { source })?;
     let output_file = out_dir.join("REPORT_PLUGINS.json");

@@ -5,6 +5,7 @@ mod progress;
 mod types;
 
 pub mod config;
+pub mod profiles;
 
 pub use cancellation::CancellationToken;
 pub use error::{CoreError, Result};

@@ -38,6 +38,12 @@ impl DetectedStack {
             &self.testing,
             &self.styling,
             &self.infrastructure,
+            // Legacy's `_flatten_stack` iterates `stack.values()` — every group,
+            // including this one. Omitting it dropped entries like
+            // "pip/requirements.txt" from `detected_stack` while leaving them visible
+            // in `stack_by_group`, so the two fields of the same artifact disagreed
+            // (found by the golden suite, 2026-07-25).
+            &self.package_managers,
         ] {
             for value in group {
                 values.insert(value.clone());

@@ -1,421 +1,152 @@
 # Task Checklist
 
-**Task:** Stages **S8 — Архивация (`codepack-archive`)** AND **S9 — Движок-оркестратор
-(`codepack-engine`)** (`ROADMAP.md` §2), combined into **one branch, one task** per
-explicit owner instruction in this conversation — S9 has a hard, sequential dependency
-on S8 (ROADMAP §1: S9 depends on S2–S8), unlike the largely-independent S6+S7 pairing.
-S8 is planned and implemented first; S9's plan is written only once S8 is real code.
-Both stages keep their own `**Status.**` line in `ROADMAP.md`.
-**Date:** 2026-07-23
-**Branch:** feat/s8-s9-archive-and-engine
+**Task:** Закалка ядра — сквозная ревизия S0–S9 перед переходом к S10 (`ROADMAP.md` §8).
+Задача не входит в нумерацию этапов: она ничего не добавляет к плану, а приводит уже
+сданное в соответствие с тем, что о нём заявлено.
+**Date:** 2026-07-25
+**Branch:** feat/core-hardening-golden-parity
 
-## Preparation — S8
+## Preparation
 
-- [+] Orientation ritual confirmed (git status/log, ROADMAP §1, overview.md,
-      task-checklist.md, open-questions.md) — S8 is the first stage without a
-      `**Status.**` line; no blocking open item
-- [+] Legacy archive extracted to scratchpad; `archive_service.py`, `exporter.py`
-      (step 7/8 call sites), `models.py`, `constants.py` read directly — full,
-      verbatim `classify_archive_group` group list confirmed (**14 groups, not
-      ROADMAP's paraphrased "13"** — `60_assets_and_binary_docs`/
-      `70_data_and_exports` are the exact names, not BLUEPRINT's shorthand
-      `60_assets`/`70_data`; plus `80_other_project_files` and `90_other` which
-      BLUEPRINT's "…" elided)
-- [+] `ArchiveBuildResult` (S1, `codepack-core::types.rs`) confirmed complete as-is
-      against `models.py` field-by-field, including the exact `primary_result()`
-      fallback precedence — no additive fields needed for S8
-- [+] `zip` crate chosen (own bundled deflate backend, no separate `flate2`
-      dependency needed) — license/dependency-tree pre-check expected clean
-- [+] Design confirmed: `codepack-archive` depends only on `codepack-core` (S1); the
-      dashboard-refresh + manifest-refresh hook legacy fires around archiving lives
-      entirely in the caller (S9) via `build_final_archives`'s `on_plan_ready`
-      callback parameter — not a `codepack-archive → codepack-reports` dependency
-      (documented, deliberate simplification of two legacy call sites into one hook)
-- [+] First-Fit Decreasing (🎯, BLUEPRINT §E.4) deferred — no acceptance criterion
-      requires it, same reasoning precedent as S6 deferring `tiktoken-rs`
+- [+] Orientation ritual (git status/log, ROADMAP §1, overview.md, task-checklist.md,
+      open-questions.md); предыдущая задача (S8+S9) закрыта чисто
+- [+] Сквозная ревизия ядра: найдено расхождение между заявленным и фактическим —
+      `fit_to_budget`, `ModelContextLimits`, `cleanup_old_runs` сданы в S5/S6 и не
+      вызываются ниоткуда, хотя ROADMAP §6 числит их реализованными
+- [+] Решения владельца по открытым вопросам записаны в `open-questions.md`
+      (Q3–Q11 закрыты или отложены явно, а не молча)
+- [+] Ключевое решение: паритет доказывается **исполнением** legacy, а не чтением её
+      исходников — критерии готовности S2/S9 буквально этого и требуют
 
-## Implementation — S8 (`codepack-archive`)
+## Golden-паритет
 
-- [+] `error.rs` — `ArchiveError` (thiserror), `Result` alias
-- [+] `options.rs` — `ArchiveOptions` + `From<&codepack_core::config::Config>`
-      (`include_project_in_zip`, `effective_zip_part_bytes()`)
-- [+] `entry.rs` — `ArchiveEntry`, `classify_archive_group` (exact 14-group port,
-      exact first-match-wins priority order — `reports/`-prefix and
-      test-component checks run *before* extension-based checks), `collect_entries`
-      (cancellation checked per file inside the walk loop)
-- [+] `plan.rs` — `ArchivePartPlan`/`ArchivePlan`, `plan_archive` (First-Fit-by-group
-      at target 500MB/hard limit 512MB/8MB reserve, large-file-gets-own-part,
-      deterministic `(group, arcname.casefold())` sort), `predicted_result_for_plan`
-- [+] `report.rs` — `write_archive_plan_report` (`27_archive_plan.md`/`.json`,
-      self-contained, no `codepack-reports` dependency)
-- [+] `build.rs` — `build_final_archives`: 3-pass re-plan + `on_plan_ready` hook at
-      the two exact legacy call sites (before real write; on the
-      exceeded-after-write retry, **re-walking after both hook calls**, fixed
-      during review — see Completion notes), single-ZIP write at `ZIP_DEFLATED`
-      level 6, post-write hard-limit check + delete-and-rebuild-as-split fallback,
-      split-part write loop with per-entry cancellation, `oversized_files`
-      reporting (no recursive re-split, matches legacy)
-- [+] `restore.rs` — `safe_member_target` (lexical component-based path validation —
-      no `canonicalize()`, which requires the path to already exist),
-      `extract_zip_safely` (dual check via `ZipFile::enclosed_name()` +
-      the lexical check, fail-closed on the first bad entry, matching legacy's
-      abort-not-skip behavior), `restore_archive_set`,
-      `ARCHIVE_SET_MANIFEST.json`/`RESTORE_INSTRUCTIONS.md` writers — a Rust
-      library function replaces legacy's bundled `restore_archives.py` script
-- [+] `lib.rs` — crate-scope doc stating the S8 scope boundary, mirrors
-      `codepack-diff`'s style, under 100 lines
+- [+] `tests/golden/generate_reference.py` — запуск legacy headless, извлечение
+      артефактов, письменная спецификация сравнения (что сверяется полностью, что
+      подмножеством, что исключено и почему)
+- [+] `cargo xtask golden` — регенерация эталонов; Python нужен только разработчику,
+      CI остаётся чисто Rust и legacy никогда не запускает
+- [+] Эталоны трёх фикстур (`node_app`, `python_app`, `mixed_stack`) в репозитории
+- [+] `crates/codepack-engine/tests/golden.rs` — сверка нашего вывода с эталонами
+- [+] Спецификация реализована дважды (Python при записи, Rust при сравнении) —
+      осознанно, чтобы расхождение между ними валило тест
 
-## Verification — S8
+## Найденные и исправленные расхождения (7)
 
-- [+] `classify_archive_group` unit tests: all 14 groups + priority-order edge cases
-      (reports/-prefix beats extension, singular/plural "test" at any depth,
-      dockerfile-prefix match, `00_metadata` casefold matching)
-- [+] `plan_archive` unit tests: same-group bundling, group-switch flush, large-file
-      isolation, deterministic part indices
-- [+] Single-ZIP round-trip integration test (byte-for-byte, level-6 deflate
-      verified via the `zip` crate's own read-back metadata)
-- [+] Split-set integration test (tiny `part_limit_bytes`, multiple parts, manifest/
-      restore-instructions written and parse correctly)
-- [+] Restore round-trip integration test (split set → fresh directory → contents
-      match exactly)
-- [+] Single-exceeded-after-write retry test (near-zero-byte file + tiny limit,
-      deterministic recipe — the ZIP container overhead alone exceeds the limit;
-      genuinely exercises the retry, confirmed by review via `hook_calls == 2`)
-- [+] Security test: malicious entry paths (`../../x`, absolute, embedded-`..`)
-      rejected before any write outside the destination directory; a legitimate
-      entry before the malicious one in the same archive is still safely written
-      (honest partial-safe-prefix behavior, ported not silently changed)
-- [+] Cancellation test: pre-cancelled token yields a partial, honestly-incomplete
-      result (I6-adjacent — never a false "complete" result). Mid-loop
-      (post-start) cancellation is checked inside `collect_entries`/`write_zip`'s
-      loops (confirmed by code reading) but not exercised by a dedicated
-      timing-based test — judged not worth the flakiness risk of a thread-timed
-      test for an already-code-confirmed property; disclosed, not silently skipped.
-- [+] `cargo tree -p codepack-archive`: only `codepack-core` + `zip` (+ its own
-      transitive deps, narrowed to `deflate-flate2-zlib-rs` — no unused `zopfli`
-      backend) — no network-capable crate, no new `deny.toml` exception
-- [+] `cargo xtask gate` green (fmt, clippy `-D warnings`, tests, `cargo deny check`,
-      `sync-agents --check`)
-- [+] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
-      proven-invariant comment
+- [+] `28_export_plan.json` не применял safe-export-mode: `.env` числился
+      `included`/`info`. Исправлено предикатом вызывающей стороны
+      (`codepack_scanner::SafetyClassifier`), без зависимости сканера на
+      `codepack-security` — тот же приём, что уже применён в `codepack-diff`
+- [+] `PlanSummary` вернул `estimated_included_size` и `skipped_dirs_count`
+      (нарушение I5; обоснование «нет байт-форматтера до S6» истекло с выходом S6)
+- [+] Порядок обхода приведён к `os.walk`: файлы каталога перед подкаталогами,
+      сравнение имён по **верхнему** регистру (NTFS-коллация — реально меняет порядок:
+      `MAIN.PY` < `__INIT__.PY`)
+- [+] `00_project_profile.json` снова производится — как нулевая работа каталога,
+      корневой `PROJECT_PROFILE.json` получается копированием (как в legacy)
+- [+] `detected_stack` включил группу `package_managers`; `important_config_files`
+      вернул префикс `.\`; `docker_compose_files` хранит имена, а не пути
+- [+] Сканер выдавал две находки на строку (keyword + энтропия) — keyword теперь
+      подавляет остальные на той же строке, прирост recall от энтропии сохранён
+- [+] Редакция съедала имя ключа (`- <REDACTED>` вместо `- JWT_SECRET=<REDACTED>`) —
+      порядок проходов приведён к legacy; побочно стало строго безопаснее
+- [+] `REPORT_PLUGINS.json` выдаётся в порядке legacy; сверяется как надмножество с
+      идентичным гейтингом (заполненные описания и лишние записи — задокументированные
+      намеренные отличия, пропажа записи или смена `profiles` по-прежнему валит тест)
 
-## Completion — S8
+## Подключение заявленного, но не вызываемого
 
-- [+] `docs/architecture/overview.md` updated (`codepack-archive` moves from
-      placeholder) — done in the final combined completion pass (with S9)
-- [+] `ROADMAP.md` — S8 `**Status.**` line + §1 table — done in the final combined
-      completion pass
-- [+] `docs/decisions/open-questions.md` — reviewed: neither the restore-script
-      substitution nor the First-Fit-Decreasing deferral needed a new open-question
-      row (both are precedented, already-settled design calls with their reasoning
-      captured directly in `ROADMAP.md`'s S8 `**Status.**` block, not owner-facing
-      open decisions) — no new row added, judgment call recorded here rather than
-      silently skipped
-- [+] Independent review pass (`codepack-quality-reviewer`) — found and fixed: (1)
-      the commit message overclaimed that `ZipFile::enclosed_name()` alone is
-      insufficient against path traversal — reviewer's own falsifiability test
-      (removing `safe_member_target`) showed the opposite for the three tested
-      payloads; both checks are legitimate defense-in-depth, kept, but the
-      overclaiming language corrected; (2) a real parity gap — the single→split
-      retry path reused stale pre-hook entries instead of re-walking after the
-      second `on_plan_ready` call, silently dropping content that call itself
-      wrote — fixed, now re-walks after both hook calls, matching legacy; (3) the
-      `zip` feature selection pulled in an unused `zopfli` backend — narrowed;
-      (4) a misattributed Q7 citation in a doc comment — corrected.
+- [+] `Config::token_budget` + `codepack-engine::budget` — `fit_to_budget` применяется
+      на шаге планирования; важность берётся из `key_files::importance_ranking`, то есть
+      из того же ранжирования, что публикует `16_key_files_report` (BLUEPRINT §B.3)
+- [+] `Config::history_keep_last_n` + вызов `cleanup_old_runs` после записи прогона;
+      `0` отключает; сбой обрезки логируется, но не валит завершённый экспорт
+- [+] `ModelContextLimits::load_or_default` — слияние с файлом-переопределением,
+      битый файл = ошибка, а не тихий откат к устаревшим лимитам
 
----
+## Закрытые открытые вопросы
 
-## Preparation — S9
+- [+] Q8 — перенесён второй legacy-файл настроек (`codepack-core::profiles`, 20 тестов)
+- [+] Q9 — `diff_target_ref` стал настоящим: `git_ref` сравнивает `base..target`
+- [+] Q10 — ретеншн истории подключён и настраивается
+- [+] Q11 — механизм загрузки лимитов из файла реализован
 
-- [+] Orientation ritual re-confirmed at planning start (git status/log, ROADMAP,
-      overview.md, task-checklist.md, open-questions.md) — S8 real code (incl.
-      review fixes), S9 next
-- [+] **Major scope finding**: no existing crate implements pipeline steps 2 (copy),
-      3 (structure report), 4 (Git report), or 5 (text dump), or an `ExportPaths`
-      constructor — confirmed via grep across every crate and via explicit
-      "arrives with S9"/"S9's job to combine" doc comments already left in S1-S3.
-      S9 is roughly half new pipeline-step logic, half orchestration — not a thin
-      glue layer, comparable in size to S7. Recorded honestly rather than
-      discovered mid-implementation.
-- [+] Design decision: copy step (2) derives its file list from
-      `ExportPlan.included_files` (already symlink-safe, already ignore-rule
-      filtered by S2) + safety/diff filtering — not a second independent tree walk
-      re-implementing ignore-directory logic a third time
-- [+] Design decision: step 6's `Inventory`/`ReportContext` is built from a second,
-      cheap `build_export_plan` pass over the copy (`project_dir`) — avoids adding
-      new API surface to the already-shipped, reviewed `codepack-reports` crate
-- [+] Design decision: `build_export_paths` takes an explicit `output_root: &Path`
-      parameter rather than hardcoding legacy's Windows-Desktop assumption —
-      default-root resolution deferred to S10/S11
-- [+] Design decision: `import_legacy_history` triggering is explicitly OUT of S9's
-      scope — a first-run CLI/UI concern (S10/S11), not a per-export-run one
-- [+] `encoding_rs` dependency justified (6-encoding text-dump fallback chain:
-      utf-8/utf-8-sig/cp1251/cp866/utf-16/latin-1) — MIT/Apache-2.0, no copyleft
-      concern
-- [+] Q13 (report-loop cancellation gap, from S7) — decision: address for the
-      heaviest report loops if time allows during S9's own cancellation-suite
-      work; otherwise re-record honestly rather than silently claim closed
-- [+] Success/failure gate confirmed from legacy: `!cancelled && copy_stats.errors
-      == 0` — feeds `codepack_storage::record_export_run`'s `Option<Snapshot>`
-      gate (I6) and a future S10 CLI exit code
-- [+] `on_plan_ready` closure design confirmed: constructed in S9, calls
-      `codepack_reports::metadata::write_manifest`/dashboard refresh, safe to be
-      invoked 1-2 times by `build_final_archives` itself plus one more direct call
-      by S9 after archiving returns (matches legacy's final
-      `refresh_bundle_metadata` call)
-- [+] Token estimate for history: `estimate_tokens_fallback` (legacy's flat-ratio
-      formula), never `estimate_tokens_refined` — silently swapping would be an
-      undisclosed behavior change, not an improvement (I4)
+## Verification
 
-## Implementation — S9 (`codepack-engine`), sequenced by group
+- [+] `cargo fmt --all --check` — чисто
+- [+] `cargo clippy --workspace --all-targets -- -D warnings` — чисто
+- [+] `cargo test --workspace` — 658 passed, 0 failed, 1 ignored
+- [+] Golden — 3/3 фикстуры совпадают с реальным выводом legacy
+- [+] Корпус безопасности перемерен, не принят на веру: parity P=1.000 R=0.312
+      F1=0.476, full P=1.000 R=1.000 F1=1.000 — без изменений, порог не трогали (I9)
+- [-] `cargo deny check` — бинарь `cargo-deny` отсутствует в песочнице разработки
+      (пробел окружения с S8, не регрессия этой задачи). В CI ставится и выполняется
+- [+] Независимое ревью диффа (`codepack-quality-reviewer`) — 12 замечаний, из них
+      одна **реальная регрессия этой задачи**: правило «одна находка на строку»
+      подавляло провайдер-сигнатуры, молча понижая подтверждённый AWS-ключ с
+      `critical` до `low` на любой строке со словом `token`/`key`. Корпус-тест этого
+      не видел: он меряет детект булевым флагом на строку, поэтому rule id и severity
+      для precision/recall/F1 невидимы. Исправлено (см. ниже), 10 из 12 замечаний
+      закрыто
+- [-] CI на трёх ОС — **не запускался**. `.github/workflows/ci.yml` триггерится только
+      на `push` в `main` и на `pull_request`; push в тему-ветку его не поднимает.
+      Ветка запушена в `origin`, PR не открывался (нет `gh` и токена в этом окружении).
+      Слияние в `main` без зелёного CI запрещено `.ai/universal/01-workflow.md`, поэтому
+      задача останавливается здесь и передаётся владельцу
 
-- [+] Group P (paths + plan): `build_export_paths` (explicit `output_root` param,
-      UTC compact-stamp collision loop, `sanitize_name`), step 1 wiring
-      (`run_export_plan`: `ExportIgnoreRules` + file-override application,
-      `build_export_plan`, `resolve_diff_selection` with `previous_snapshot` as a real
-      parameter, `combined_selected_paths` minus the permanently-dead
-      `incremental_selection` branch, `28_export_plan`/`29_export_comparison_report`
-      writers) plus a new `ignored_dir_names_for` helper (`Config` has no
-      `effective_ignored_dirs()` equivalent yet). **Not done**: the
-      `StoredSnapshot → codepack_diff::Snapshot` converter — `codepack-storage` isn't
-      wired into this crate yet (that is Group Z's job once the storage dependency is
-      added); `run_export_plan` already takes `previous_snapshot:
-      Option<&codepack_diff::Snapshot>` as a real parameter so Group Z only needs to
-      supply a real value, not touch this function's signature.
-- [+] Group C (copy): `copy_project`, safety/diff/override filtering off
-      `ExportPlan.included_files`, cross-platform backslash-path reconstruction
-      (`to_relative_path`: splits on `\\`, never `Path::new(rel_str)` directly).
-      Documented `CopyStats` semantic shifts from the no-second-walk redesign:
-      `symlinks_skipped` always `0` (already enforced at scan time),
-      `dirs_skipped` sourced from `export_plan.skipped_dirs.len()`, `files_skipped`
-      only reachable via the safety-skip branch (paired with
-      `files_skipped_by_safety`; the diff-skip branch touches only
-      `files_skipped_by_diff`, matching legacy's separate counter).
-- [+] Group R (structure + Git + text dump): `structure::write_structure_report`
-      (manual `os.walk`-shaped recursion, PowerShell `Get-ChildItem`-style listing,
-      `ps_date` rendered in UTC not legacy's local wall clock — informational field,
-      documented, same precedent as `crate::timestamp`); `git_report::write_git_report`
-      (read-only `git2` equivalents of `status --short --branch`/`branch
-      --show-current`/`log --oneline -5`/`show --stat --name-status HEAD`/`show --patch
-      --find-renames HEAD`, via `Repository::discover` not `::open` — matches real `git`
-      CLI's upward `cwd` search, same call `codepack-diff`'s own `discover_repository`
-      already established; no fabricated `exit_code`/stdout/stderr framing, since none
-      of that is real for a `git2` call — **redaction strengthened to
-      `codepack_security::patterns::keyword::redacted_line`**, not legacy's own weaker
-      `redact_secrets`, following S7's own already-corrected precedent for exactly this
-      class of bug); `text_dump::write_text_dump` (6-encoding fallback chain via
-      `encoding_rs`, documented as an **honest approximation, not exact parity** — see
-      its own module doc comment for why `encoding_rs`'s total codecs can't reproduce
-      Python's `UnicodeDecodeError`-driven fallthrough bit-for-bit; redaction
-      deliberately left at the plain `redact_secrets`, matching legacy exactly, since
-      the DATABASE_URL bug S7 found was specific to `docker_report.py`'s call site, not
-      this one). Added a shared `relpath::to_relative_path` module (`copy.rs`'s helper,
-      generalized) and extended `timestamp.rs` with `human_now_utc`/
-      `human_from_system_time` plus a `pub(crate)`-visible `civil_from_days`.
-- [+] Group A (analytics + manifest): `analytics::run_analytics` (re-plan-on-copy over
-      `paths.project_dir`, the **only** call site for `codepack_security::scan_project`
-      in the whole pipeline; `ReportContext` assembly; full seven-group job catalog
-      chained in BLUEPRINT §A.7 order with `group_g_finish_jobs` last;
-      `write_report_plugins_json`/`write_project_profile_json`/`run_reports`).
-      `write_custom_prompt` needs no separate call site: it is already
-      `codepack_reports::reports::ai_prompts::JOB`, one of `group_f_jobs()`'s members,
-      and runs through `run_reports` like every other job. `manifest::write_manifest_and_index`
-      (first call, `archive_result: None`) designed for Group Z's second call from the
-      start — proven by this pass's own "call twice" test, not left for Group Z to
-      discover. Added `ignored_dirs::extra_ignored_display` (legacy's `extra_ignored`
-      variable) for `ManifestInput`/`IndexInput`/structure/Git report consumption —
-      **not yet wired into a real call site** (that is Group Z's top-level orchestrator);
-      carries a disclosed, temporary `#[allow(dead_code)]` until that wiring lands.
-- [+] Group Z (archive + storage close-out): `build_final_archives` +
-      `on_plan_ready`/dashboard-refresh closure + final post-archive refresh,
-      success/failure gate, `record_export_run` wiring, staging cleanup
-      (unconditional unless `keep_staging_folder`, on every code path including
-      cancelled/failed), progress/log channel wiring threaded through every group.
-      `AnalyticsOutcome` extended (additive) with owned `inventory`/`replan` fields so
-      the step-8 hook can rebuild an equivalent `ReportContext` for
-      `REPORT_DASHBOARD.html`'s mid-archiving refresh without re-planning a third
-      time. `crate::storage` (new module) hand-writes both `Snapshot ↔ New*/Stored*`
-      conversions — confirmed no `From` impl exists across the `codepack-diff`/
-      `codepack-storage` boundary on either side; both directions round-trip-tested.
-      New top-level `orchestrator::run_export` sequences all 8 steps; `ExportOutcome`
-      exposes `paths`/`cancelled`/`successful`/`copy_stats`/`text_stats`/
-      `archive_result`/`project_id`/`run_id`/`analytics`.
-      **Real cross-stage design gap found and resolved within this pass's own scope**:
-      `codepack_scanner::build_export_plan`/`codepack_diff::resolve_diff_selection`
-      (S2/S4, already shipped) hard-error (`ScannerError::Cancelled`/
-      `DiffError::Cancelled`) on an already-cancelled token, which would otherwise
-      make `run_export` propagate `Err` instead of honoring legacy's "steps 7-8 and
-      history always run" guarantee for a token cancelled before the pipeline even
-      starts. Resolved by short-circuiting steps 1-2 with a synthetic, clearly-labeled
-      "nothing planned/copied" `PlanOutcome` (`cancelled_before_planning_outcome`)
-      whenever `cancel.is_cancelled()` is already true before step 1 is called — a
-      pipeline-sequencing decision squarely within Group Z's scope, not a change to
-      S2/S4's own behavior. A token that becomes cancelled *during* step 1's own
-      parallel walk (a narrower timing race) is not specially handled and would still
-      propagate `Err` from `run_export` — disclosed, not silently accepted as fully
-      solved; judged not worth chasing given S8's own precedent for not pursuing
-      every timing-dependent race with a dedicated test.
-      **Deferred, disclosed**: `NewRunFile`/`NewFinding`/`NewArchivePart` population is
-      real (not stubbed) whenever step 6 (`analytics`) actually ran, but silently
-      empty (`&[]`) when it never ran (export cancelled before or during step 6) —
-      there is no re-planned file list, scan result, or archive-part grouping to draw
-      from in that case, and this is judged an acceptable, honestly-empty absence
-      rather than fabricated data. `NewArchivePart.groups` is always `None` (the
-      per-part group breakdown already lives in `27_archive_plan.md`/
-      `ARCHIVE_SET_MANIFEST.json`; duplicating it into a third place was not worth
-      this pass's time budget). `NewExportRun.redacted_count` is always `None` —
-      legacy's own history JSON never tracked this field either, an honest absence
-      carried forward, not a gap this pass introduces.
+### Что исправлено по ревью
 
-## Verification — S9
+- [+] Приоритет находок переписан: уверенный keyword (`critical`/`high`, у legacy это
+      PEM) → провайдер-сигнатура → слабый keyword → энтропия. Восстанавливает
+      severity провайдеров, сохраняет паритет там, где legacy был категоричен
+- [+] Тест I3 усилен с суммарного `>=` на пофайловый. Прежняя форма скрывала, что
+      фикстура Google-ключа была на 4 символа короче формата и **никогда** не
+      детектировалась — счёт добирался двойными срабатываниями на других строках
+- [+] Бюджет токенов больше не отбрасывает закреплённые пользователем файлы
+      (`always_include_*`, per-file override) — явное указание выше эвристики;
+      добавлен `ExportIgnoreRules::is_pinned_file` и тест
+- [+] Бюджет проверяет отмену до и после построения графа импортов (он читает
+      содержимое всех файлов — это не быстрый проход)
+- [+] Отсутствие `PROJECT_PROFILE.json` больше не молчит: пишется строка в лог
+- [+] `cargo xtask golden` задокументирована в `.ai/project/11-commands.md` +
+      запись в `.ai/CHANGELOG.md` (гейт такой пробел не ловит по построению)
+- [+] Генератор эталонов стадирует legacy во временном каталоге **вне** репозитория
+      (`.ai/project/14-legacy-reference.md`); прежний путь оставлял при жёстком
+      завершении полный экспорт фикстур, включая копии их `.env`, неотслеживаемым
+- [+] `redacted_lines` → `redacted_substitutions` (считает подстановки, не строки);
+      восстановлен doc-комментарий `write_text_dump`; `valid_sets` снова приватный
 
-- [+] Shape-parity test (`tests/shape_parity.rs`): one fixture combining a `.py` file,
-      a `.md` file, a `.env` file, and a small one-commit git repo, run through the
-      full pipeline once — every expected top-level artifact asserted present (28/29
-      plan+diff, structure/git/text-dump, all ~28 numbered reports + `PROJECT_PROFILE
-      .json`/`REPORT_PLUGINS.json`/`AI_CONTEXT/`/`AI_PROMPTS/`/`REPORT_DASHBOARD.html`,
-      manifest/INDEX, 27/archive plan + the final ZIP with `manifest.json`/`INDEX.md`
-      inside and no leaked `.env`), shape not byte-identity, per this criterion's own
-      wording. **Narrowed from the original "one fixture per stack" framing** to the
-      single multi-file-type fixture this pass's own instructions specified instead —
-      an explicit, requested scope change, not a shortfall.
-- [+] Cancellation battery (`tests/cancellation.rs`, plus `tests/pipeline.rs`'s
-      pre-existing "cancelled before step 1" test): **8 scenarios total, not a single
-      file of 8** — boundary 0 (before step 1, already covered by `pipeline.rs`) plus
-      7 new tests, one per boundary after steps 1 through 7. Each drives a real
-      `codepack_core::CancellationToken`/progress-channel pair, cancelling
-      deterministically on a real `ProgressEvent` (never a sleep). Every scenario
-      asserts: no `snapshot` row advance (a pre-seeded baseline is proven row-for-row
-      unchanged via `latest_snapshot`, reusing `codepack-storage`'s own
-      `run.rs` assertion pattern), `run.successful = false`, staging cleanup per policy
-      (both `keep_staging_folder` values exercised), and manifest/archive still exist.
-      **Boundary 6 uses `StepStarted` instead of `StepFinished`** (documented in
-      `tests/support/mod.rs`) to avoid a genuine last-line race at the final
-      pre-step-7 `cancelled` latch. **Boundary 7 asserts a documented asymmetry**
-      confirmed against legacy `exporter.py` (lines 264 vs 313): `export_run.cancelled`
-      stays `false` (the field is latched before step 7 and never re-touched, matching
-      legacy exactly) while the baseline is still never advanced (the `successful` gate
-      freshly re-checks the token after archiving, also matching legacy). **Two real
-      bugs found and fixed during this work, not merely disclosed** — see Completion
-      notes below for both.
-- [+] ≥50k-file synthetic-fixture performance test (`tests/perf_smoke.rs`,
-      `#[ignore]`-gated, nested nowhere-near-one-flat-directory layout). Run explicitly
-      in `--release` (confirmed passing twice): **50,000 files exported in ~155-157s
-      wall-clock** on this pass's own sandbox (a virtualized, possibly
-      antivirus-throttled Windows environment — `.ai/project/11-commands.md`'s own
-      documented platform caveat). The budget was widened from an initial,
-      too-optimistic 120s to 300s after measuring both a 5,000-file run (~12.9s) and
-      the full 50,000-file run: a ~12x wall-clock increase for a 10x file-count
-      increase is consistent with linear scaling plus a modest constant per-run
-      overhead, not a quadratic blowup — this measurement is documented directly in
-      the test's own module doc comment, not just here. No panic, no error, a real
-      archive produced.
-- [+] `last_export` mode round-trip (`tests/last_export_mode.rs`): export once (no
-      prior baseline → behaves like `"all"` mode with `codepack_diff`'s own documented
-      warning), edit one of three files, export again against the same `conn` — the
-      second run's copied project directory contains only the edited file, and
-      `29_export_comparison_report.md` names exactly that one file under "Изменённые".
-      Asserted indirectly via on-disk artifacts, per this pass's own preference, rather
-      than widening `ExportOutcome`'s public shape.
-- [+] `cargo tree -p codepack-engine`: confirmed clean — `git2` uses
-      `default-features = false` + `vendored-libgit2` (no ssh/https transport
-      features); no `openssl-sys`/`libssh2-sys`/`curl`/`reqwest`/`hyper` or any other
-      network-capable crate anywhere in the tree.
-- [+/-] `cargo xtask gate`: `fmt`, `clippy -D warnings`, `cargo test --workspace`, and
-      `sync-agents --check` all green. `cargo deny check` fails with `error: no such
-      command: 'deny'` — the `cargo-deny` binary is confirmed unavailable in this
-      sandbox, the same pre-existing environment gap every prior S8/S9 pass already
-      hit and documented; not fixed here, per instruction.
-- [+] No `unsafe` anywhere in `codepack-engine` (grepped). No bare `unwrap()`/`expect()`
-      outside `#[cfg(test)]` modules (grepped file-by-file up to each file's own test
-      module boundary) — confirmed clean, no remediation needed.
+### Замечания ревью, оставленные открытыми (осознанно)
 
-### Two real bugs found and fixed during this verification pass
+- [-] **Утечка I3 при `=` внутри значения** (`curl … Basic dXNlcjpwYXNzd29yZA==`):
+      `redacted_line` режет по первому `=`, и «именем ключа» становится сам секрет.
+      Воспроизведено и на `main` — **не регрессия этой задачи**, а унаследованное от
+      legacy поведение. Починка означает либо расхождение с legacy-редакцией (ломает
+      эталоны), либо новую эвристику в наборе констант — и то и другое требует
+      решения владельца (`.ai/project/12-domain-rules.md`). Переоценивающие
+      формулировки в doc-комментариях исправлены
+- [-] **Правило «одна находка на строку» половинчато**: на строке без keyword
+      провайдер и энтропия по-прежнему могут дать две находки
+      (`AWS_ACCESS_KEY_ID=…` — `_` убивает `` в keyword-регексах). Ни одна
+      фикстура такого не содержит
+- [-] `manifest.json` `stats.copy.files_skipped` считает только safety-пропуски;
+      блок `stats` исключён из golden-сверки, то есть паритетных свидетельств у
+      этого счётчика нет ни за, ни против
+- [-] `scan/mod.rs` вырос до ~733 строк при проектном пороге ~600 — кандидат на
+      разбиение в директорию-модуль
 
-1. **`successful` never re-checked the cancellation token after archiving.**
-   `orchestrator.rs` computed `let successful = !cancelled && copy_stats.errors == 0;`
-   — `cancelled` alone, the value latched *before* step 7. Legacy `exporter.py` line
-   313 computes `successful = not cancelled and not self.cancel_event.is_set() and
-   copy_stats.errors == 0`, deliberately re-checking the token fresh *after* steps 7-8
-   complete. Without the fresh recheck, a cancellation arriving only during manifest
-   writing or archiving would have been recorded as a full success and would have
-   advanced the history snapshot baseline despite the user having cancelled — a real
-   parity gap with data-integrity consequences (invariant I6 adjacent). Fixed to
-   `!cancelled && !cancel.is_cancelled() && copy_stats.errors == 0`, restoring legacy
-   parity exactly; `boundary_7_...` in `tests/cancellation.rs` exercises the fix
-   directly.
-2. **A cancellation race could hard-crash the whole export instead of degrading
-   gracefully.** `codepack_scanner::build_export_plan`/`codepack_diff::
-   resolve_diff_selection`/`codepack_security::scan_project` (S2/S3/S4, already
-   shipped) hard-error on an already-cancelled token rather than cooperating. The
-   orchestrator's own outer gates (`if !cancel.is_cancelled() { ... }`) only checked
-   the token *before* calling into step 1's and step 6's own internal work — a
-   cancellation landing in that narrow window surfaced as a hard `Err` from
-   `run_export`, skipping steps 7-8 (manifest + archiving) entirely and breaking this
-   pipeline's core "steps 7-8 always run" guarantee. This was previously disclosed as
-   an accepted, narrow, step-1-only edge case; this pass's own cancellation battery
-   hit it twice on an ordinary (non-crafted) run, proving it reachable in practice at
-   step 6 too, not merely a theoretical corner. Fixed by adding
-   `crate::error::is_cancellation_error` and matching on it at both call sites
-   (`orchestrator.rs`, steps 1 and 6), falling back to an honestly-empty step result
-   instead of propagating.
+## Не сделано (честно)
 
-## Completion — S9
-
-- [+] `docs/architecture/overview.md` updated (`codepack-engine` moves from
-      placeholder; first real producer/consumer of the progress/log channel)
-- [+] `ROADMAP.md` — S9 `**Status.**` line + §1 table
-- [+] `docs/decisions/open-questions.md` — Q7/Q8/Q9/Q10/Q11 explicitly re-deferred
-      (each re-checked against the real S9 implementation and confirmed still open,
-      not silently dropped); Q13 explicitly narrowed (not fully closed) — S9's own
-      pipeline now checks cancellation inside every step's loop, closing the
-      practical risk, but `codepack-reports::run_reports` itself is unchanged and
-      still only checks between whole reports
-- [+] Independent review pass (`codepack-quality-reviewer`) — found and fixed one
-      real defect: staging cleanup only ran at `run_export`'s function tail, so any
-      of its many earlier `?` error returns (copy/structure/git/text-dump/manifest/
-      archive/storage failures) skipped cleanup and leaked the staging directory.
-      Fixed with an RAII `StagingCleanupGuard` whose `Drop` fires on every exit path
-      (success, early `?` return, or unwinding panic); three new unit tests added.
-      Everything else the review checked (successful-gate fresh recheck, I6
-      structural guarantee in `codepack-storage` wiring, architecture boundaries,
-      secret redaction at all three write sites, cancellation-battery and
-      shape-parity test honesty) was independently re-derived from the code and
-      confirmed correct on the first pass.
-
----
-
-## Completion (both stages, final)
-
-- [+] `docs/architecture/overview.md` and `ROADMAP.md` updated for BOTH S8 and S9
-      together (S8's own completion items above were deferred to this pass)
-- [+/-] Local quality gate green: `cargo fmt --all --check`, `cargo clippy
-      --workspace --all-targets -- -D warnings`, `cargo test --workspace` (all
-      pass; `codepack-engine`'s own non-`#[ignore]` test count is 79 including the
-      3 new `StagingCleanupGuard` tests added by the review fix), `cargo xtask
-      sync-agents --check` all green. `cargo deny check` unavailable in this
-      sandbox (pre-existing, documented gap — same as every prior S8/S9 pass).
-      **CI not triggered by this pass**: `.github/workflows/ci.yml` only runs on
-      `push` to `main` or on a `pull_request` event, neither of which happened —
-      the branch was pushed to `origin` (a WIP branch push, allowed by
-      `.ai/universal/01-workflow.md` without asking) but no PR was opened and
-      `main` was not touched, both of which are separate, visible, harder-to-
-      reverse actions this pass did not take without asking first. Confirmed via
-      the GitHub Actions API: zero runs exist for this branch. A live three-OS
-      confirmation, as every prior stage recorded, requires either opening a PR or
-      merging to `main` — both deferred to the owner's explicit decision below.
-- [ ] Merge into `main` — **not performed**, per `.ai/universal/01-workflow.md`
-      ("merge into `main` only fast-forward and only after the project's full
-      quality gate is green" + explicit owner sign-off). Left for the owner to
-      request explicitly.
-- [+] Commits: checklist first, then S8, then S9 (sequenced by group), then the
-      review-driven staging-cleanup fix, then this completion-documentation pass —
-      separated logically, matches the plan
-- [+] Final report to owner (Russian, per language policy)
-
----
+- [-] **Q7** — константы классификации текст/бинарь по-прежнему продублированы в
+      `codepack-scanner` и `codepack-security`. Владелец решил переносить в
+      `codepack-core` до S10; перенос в эту задачу не вошёл
+- [-] **Q15** — провайдер-сигнатура «AWS Secret (по контексту)» не реализована.
+      Работа была начата и не доведена; требование I9 (precision не падает) делает её
+      неаккуратную реализацию хуже отсутствия
+- [-] Q12 (локализация всего каталога), Q13 (отмена внутри циклов отчётов),
+      Q14 (First-Fit Decreasing) — сознательно отложены, решение владельца записано
 
 ## Next task
 
-Stage **S10 — CLI / headless** (`ROADMAP.md` §3). Start with the orientation ritual
-from `.ai/project/13-progress-tracking.md`.
+Этап **S10 — CLI / headless** (`ROADMAP.md` §3). Перед началом — ритуал ориентации из
+`.ai/project/13-progress-tracking.md`. Там же по решению владельца делается Q6
+(проектный конфиг `.codepack.toml`). До S10 желательно закрыть Q7 и Q15.

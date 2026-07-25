@@ -50,8 +50,8 @@ use codepack_core::{
 use codepack_reports::context::ReportContext;
 use codepack_security::FindingKind;
 use codepack_storage::{
-    Connection, NewArchivePart, NewExportRun, NewFinding, NewRunFile, find_or_create_project,
-    latest_snapshot, record_export_run,
+    Connection, NewArchivePart, NewExportRun, NewFinding, NewRunFile, cleanup_old_runs,
+    find_or_create_project, latest_snapshot, record_export_run,
 };
 
 use crate::analytics::{AnalyticsOutcome, run_analytics};
@@ -163,6 +163,8 @@ fn cancelled_before_planning_outcome(paths: &ExportPaths, config: &Config) -> Pl
             included_count: 0,
             excluded_count: 0,
             estimated_included_bytes: 0,
+            estimated_included_size: codepack_tokens::format_bytes(0),
+            skipped_dirs_count: 0,
         },
     };
 
@@ -179,6 +181,7 @@ fn cancelled_before_planning_outcome(paths: &ExportPaths, config: &Config) -> Pl
         diff_selection,
         ignored_dir_names,
         include_relative_paths: None,
+        dropped_by_budget: 0,
     }
 }
 
@@ -284,6 +287,12 @@ pub fn run_export(
             }
             Err(err) => return Err(err),
         };
+        if plan_outcome.dropped_by_budget > 0 {
+            log(&format!(
+                "token budget of {} dropped {} file(s) from the export",
+                config.token_budget, plan_outcome.dropped_by_budget
+            ));
+        }
         send_step_finished(progress, "1/8: plan");
 
         send_step_started(progress, "2/8: copy");
@@ -303,6 +312,9 @@ pub fn run_export(
     let extra_ignored_vec = extra_ignored_display(&paths.source_root, config);
     let mut cancelled = cancel.is_cancelled();
     let mut text_stats = TextDumpStats::default();
+    // `None` means the text-dump step never ran, which is different from "ran and
+    // redacted nothing" — legacy's own history could not tell those apart.
+    let mut redacted_count: Option<u32> = None;
     let mut analytics_outcome: Option<AnalyticsOutcome> = None;
 
     if !cancelled {
@@ -333,7 +345,7 @@ pub fn run_export(
 
     if !cancelled && !cancel.is_cancelled() {
         send_step_started(progress, "5/8: text dump");
-        text_stats = write_text_dump(
+        let outcome = write_text_dump(
             &paths.project_dir,
             &paths.text_dump,
             config.effective_max_text_file_bytes(),
@@ -342,6 +354,8 @@ pub fn run_export(
             &log,
             cancel,
         )?;
+        text_stats = outcome.stats;
+        redacted_count = Some(outcome.redacted_substitutions);
         send_step_finished(progress, "5/8: text dump");
     }
 
@@ -485,9 +499,7 @@ pub fn run_export(
         files_copied: Some(i64::from(copy_stats.files_copied)),
         bytes_total: Some(bytes_total),
         tokens_est: Some(i64::try_from(token_count).unwrap_or(i64::MAX)),
-        // Legacy's own history JSON never tracked a redacted-secrets count either — an
-        // honest absence, not a gap this pass introduces.
-        redacted_count: None,
+        redacted_count: redacted_count.map(i64::from),
         cancelled,
         result_path: archive_result
             .primary_result()
@@ -570,6 +582,19 @@ pub fn run_export(
         &archive_parts,
         snapshot_arg,
     )?;
+
+    // Retention shipped in S5 but had no caller until now, so history grew without
+    // bound (decision Q10, 2026-07-25). Pruning runs after the row for *this* run is
+    // committed, so `keep_last_n` counts this export among the kept ones. A pruning
+    // failure must not fail an otherwise finished export -- the bundle on disk is
+    // already complete -- so it is logged, not propagated.
+    if config.history_keep_last_n > 0 {
+        match cleanup_old_runs(conn, project_id, config.history_keep_last_n as usize) {
+            Ok(0) => {}
+            Ok(removed) => log(&format!("history retention removed {removed} old run(s)")),
+            Err(err) => log(&format!("history retention failed: {err}")),
+        }
+    }
 
     Ok(ExportOutcome {
         paths,

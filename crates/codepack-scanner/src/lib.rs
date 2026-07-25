@@ -35,6 +35,9 @@ pub use constants::{
 };
 pub use error::{Result, ScannerError};
 pub use ignore::{ExportIgnoreRules, RulesReport, ScanOptions};
-pub use plan::{ExportPlan, PlannedFile, build_export_plan, write_export_plan_files};
+pub use plan::{
+    ExportPlan, PlannedFile, SafetyClassifier, build_export_plan, no_safety_classification,
+    write_export_plan_files,
+};
 pub use stack::{StackInfo, detect_stacks, merged_extra_ignored_dirs, primary_stack};
 pub use walk::{IgnoredDirMatcher, SkippedDir, WalkOutcome, WalkedFile, walk_project};

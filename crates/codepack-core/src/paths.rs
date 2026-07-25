@@ -4,6 +4,8 @@ use crate::error::{CoreError, Result};
 
 const APP_NAME: &str = "codepack";
 const LEGACY_SETTINGS_FILE_NAME: &str = ".project_exporter_desktop.json";
+const LEGACY_PROFILES_FILE_NAME: &str = ".project_exporter_profiles.json";
+const MODEL_LIMITS_FILE_NAME: &str = "model_limits.json";
 const LEGACY_HISTORY_FILE_NAME: &str = ".project_exporter_history.json";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const DB_FILE_NAME: &str = "codepack.db";
@@ -128,6 +130,24 @@ impl AppPaths {
     pub fn db_file(&self) -> PathBuf {
         self.settings_dir.join(DB_FILE_NAME)
     }
+
+    /// Legacy's `USER_EXPORT_PROFILES_FILE` (`export_profiles.py`): the second settings
+    /// file, holding user-defined export profiles. It stays in the home directory
+    /// beside the legacy settings file rather than moving into `settings_dir`, because
+    /// it is the very file existing installations already have — relocating it would
+    /// orphan every profile a user has saved.
+    pub fn user_profiles_file(&self) -> PathBuf {
+        self.home_dir.join(LEGACY_PROFILES_FILE_NAME)
+    }
+
+    /// Optional override for the model context-window table
+    /// ([`codepack_tokens::ModelContextLimits::load_or_default`], BLUEPRINT §B.2). Lives
+    /// in `settings_dir`, not the home directory: it is new, so there is no legacy
+    /// location to stay compatible with, and it is application data rather than
+    /// something the user is expected to find by accident.
+    pub fn model_limits_file(&self) -> PathBuf {
+        self.settings_dir.join(MODEL_LIMITS_FILE_NAME)
+    }
 }
 
 #[cfg(test)]
@@ -230,5 +250,32 @@ mod tests {
         let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
         assert_eq!(paths.db_file().parent(), Some(paths.settings_dir()));
         assert_eq!(paths.db_file().file_name().unwrap(), "codepack.db");
+    }
+
+    #[test]
+    fn user_profiles_file_sits_beside_the_legacy_settings_file() {
+        let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
+        assert_eq!(
+            paths.user_profiles_file().parent(),
+            paths.legacy_settings_file().parent(),
+            "existing installations already have this file in the home directory"
+        );
+        assert_eq!(
+            paths.user_profiles_file().file_name().unwrap(),
+            ".project_exporter_profiles.json"
+        );
+    }
+
+    #[test]
+    fn model_limits_file_lives_under_settings_dir() {
+        let paths = AppPaths::for_root(Path::new("/tmp/codepack-test-root"));
+        assert_eq!(
+            paths.model_limits_file().parent(),
+            Some(paths.settings_dir())
+        );
+        assert_eq!(
+            paths.model_limits_file().file_name().unwrap(),
+            "model_limits.json"
+        );
     }
 }

@@ -79,6 +79,34 @@ pub struct WalkOutcome {
     pub skipped_dirs: Vec<SkippedDir>,
 }
 
+/// Orders sibling entries the way legacy's `os.walk` did on its only supported
+/// platform: every file of a directory before any of its subdirectories, and names
+/// compared by their **uppercased** form. The uppercasing is not cosmetic — it is NTFS's
+/// own collation, and it genuinely reorders names: `MAIN.PY` sorts before `__INIT__.PY`
+/// (`M` is 0x4D, `_` is 0x5F) whereas lowercasing would swap them. Legacy was
+/// Windows-only, so NTFS ordering *is* its real behavior, not a Windows-specific
+/// reading of it.
+///
+/// `walkdir::sort_by_file_name` produced neither property: it compares `OsStr` bytes
+/// (so `README.md` sorted before `package.json`) and interleaves directories with
+/// files (so a subdirectory's contents appeared between two files of the parent).
+/// Both differences were invisible until the artifacts were compared against a real
+/// legacy run — `28_export_plan.json`'s `included_files` is an ordered array, and its
+/// order is part of the artifact contract (invariant I5).
+///
+/// This keeps the output fully deterministic across platforms, which
+/// `sort_by_file_name` was originally chosen for: the comparison never consults the
+/// host filesystem's own ordering.
+fn compare_like_os_walk(a: &walkdir::DirEntry, b: &walkdir::DirEntry) -> std::cmp::Ordering {
+    let a_is_dir = a.file_type().is_dir();
+    let b_is_dir = b.file_type().is_dir();
+    a_is_dir.cmp(&b_is_dir).then_with(|| {
+        let a_name = a.file_name().to_string_lossy().to_uppercase();
+        let b_name = b.file_name().to_string_lossy().to_uppercase();
+        a_name.cmp(&b_name)
+    })
+}
+
 /// Walks `root`, pruning symlinked directories and anything `ignored_dirs` matches
 /// before recursing into them. `extra_dir_filter` is consulted only for directories
 /// that already survived that base check, letting the caller layer
@@ -95,7 +123,7 @@ pub fn walk_project(
 
     let walker = WalkDir::new(root)
         .follow_links(false)
-        .sort_by_file_name()
+        .sort_by(compare_like_os_walk)
         .into_iter()
         .filter_entry(|entry| {
             if entry.depth() == 0 {

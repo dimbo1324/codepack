@@ -1,0 +1,76 @@
+{
+  "diff_export_mode": "all",
+  "excluded_files": [],
+  "included_files": [
+    {
+      "group": "config_and_locks",
+      "reason": "",
+      "relative_path": "docker-compose.yml",
+      "severity": "info",
+      "size": 206,
+      "status": "included"
+    },
+    {
+      "group": "docs",
+      "reason": "",
+      "relative_path": "README.md",
+      "severity": "info",
+      "size": 147,
+      "status": "included"
+    },
+    {
+      "group": "docs",
+      "reason": "",
+      "relative_path": "backend\\requirements.txt",
+      "severity": "info",
+      "size": 33,
+      "status": "included"
+    },
+    {
+      "group": "python_source",
+      "reason": "",
+      "relative_path": "backend\\server.py",
+      "severity": "info",
+      "size": 98,
+      "status": "included"
+    },
+    {
+      "group": "config_and_locks",
+      "reason": "",
+      "relative_path": "frontend\\package.json",
+      "severity": "info",
+      "size": 181,
+      "status": "included"
+    },
+    {
+      "group": "frontend_source",
+      "reason": "",
+      "relative_path": "frontend\\src\\App.jsx",
+      "severity": "info",
+      "size": 109,
+      "status": "included"
+    }
+  ],
+  "incremental_enabled": false,
+  "profile": "full",
+  "project_name": "mixed_stack",
+  "rules": {
+    "always_include_dirs": [],
+    "always_include_files": [],
+    "excluded_dirs": [],
+    "excluded_extensions": [],
+    "excluded_files": [],
+    "loaded_rules": [],
+    "source_file": null
+  },
+  "safe_export_mode": "safe",
+  "skipped_dirs": [],
+  "summary": {
+    "estimated_included_bytes": 774,
+    "estimated_included_size": "774 B",
+    "excluded_count": 0,
+    "included_count": 6,
+    "skipped_dirs_count": 0
+  },
+  "warnings": []
+}

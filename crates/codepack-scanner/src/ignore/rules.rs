@@ -72,6 +72,18 @@ impl ExportIgnoreRules {
         (false, String::new())
     }
 
+    /// Whether the user pinned this file through `always_include_files`/
+    /// `always_include_dirs` (or a per-file override folded into them). Inclusion always
+    /// beats exclusion in this crate; exposing the predicate lets a *later* pipeline
+    /// stage honour the same precedence instead of quietly overruling the user — the
+    /// token-budget pass is the first such caller.
+    pub fn is_pinned_file(&self, relative_path: &Path) -> bool {
+        let rel = normalize_rel(relative_path);
+        let name = basename_lower(relative_path);
+        let parent_rel = normalize_rel(relative_path.parent().unwrap_or(Path::new("")));
+        self.is_always_included_file(&rel, &name) || self.is_inside_always_included_dir(&parent_rel)
+    }
+
     fn is_always_included_file(&self, rel: &str, name: &str) -> bool {
         self.always_include_files
             .iter()

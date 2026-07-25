@@ -9,7 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use codepack_core::CancellationToken;
-use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
+use codepack_scanner::{
+    ExportIgnoreRules, ScanOptions, build_export_plan, no_safety_classification,
+};
 
 #[cfg(unix)]
 fn create_dir_symlink(target: &Path, link: &Path) -> bool {
@@ -44,8 +46,14 @@ fn build_export_plan_never_includes_files_reached_through_a_symlinked_directory(
 
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(project.path(), &options);
-    let plan =
-        build_export_plan(project.path(), &options, &rules, &CancellationToken::new()).unwrap();
+    let plan = build_export_plan(
+        project.path(),
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap();
 
     let all_paths: Vec<&str> = plan
         .included_files

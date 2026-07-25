@@ -1,0 +1,38 @@
+{
+  "findings": [
+    {
+      "confidence": "high",
+      "file": ".\\.env.example",
+      "line": null,
+      "message": "Sensitive-looking filename or suffix.",
+      "rule": "sensitive_filename",
+      "severity": "critical",
+      "type": "sensitive_file"
+    },
+    {
+      "confidence": "high",
+      "file": ".\\.env.example",
+      "line": 1,
+      "message": "API_KEY=<REDACTED>",
+      "rule": "secret_like_line",
+      "severity": "high",
+      "type": "potential_secret"
+    },
+    {
+      "confidence": "medium",
+      "file": ".\\src\\index.js",
+      "line": 5,
+      "message": "const DATABASE_URL=<REDACTED>",
+      "rule": "secret_like_line",
+      "severity": "medium",
+      "type": "potential_secret"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "potential_secrets": 2,
+    "risky_code": 0,
+    "sensitive_files": 1,
+    "total_findings": 3
+  }
+}

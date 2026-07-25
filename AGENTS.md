@@ -412,10 +412,17 @@ cargo xtask deny            # cargo-deny: advisories, bans, licenses, sources
 cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
 cargo xtask sync-agents --check   # verify AGENTS.md is in sync
 cargo xtask doctor          # read-only environment diagnostics
+cargo xtask golden          # regenerate the legacy golden references (needs Python)
 ```
 
 `cargo xtask gate` runs formatting, clippy, tests, `cargo deny check`, and the
 `AGENTS.md` sync check. Prefer it over ad-hoc command sequences.
+
+`cargo xtask golden` runs the archived legacy implementation and rewrites
+`tests/golden/reference/`. It is a developer-machine command: it needs Python 3 on
+`PATH`, and CI never runs it — the references are committed, so the Rust suite compares
+against files. Run it only when legacy's own output should change, never to make a
+failing comparison pass.
 
 `cargo deny check` requires the `cargo-deny` binary (`cargo install cargo-deny`,
 not a `rust-toolchain.toml` component — CI installs it via `taiki-e/install-action`).

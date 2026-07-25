@@ -91,7 +91,11 @@ where
                 snapshot_project(source_root, ignored_dir_names, is_countable_text, cancel)?;
             Ok(diff_against_snapshot(&current, previous_snapshot))
         }
-        "git_ref" => Ok(git_ref_selection(source_root, &options.base_ref)),
+        "git_ref" => Ok(git_ref_selection(
+            source_root,
+            &options.base_ref,
+            &options.target_ref,
+        )),
         "uncommitted" => Ok(uncommitted_selection(source_root)),
         other => Ok(DiffSelection {
             mode: "all".to_string(),
@@ -114,6 +118,7 @@ mod tests {
         DiffOptions {
             mode: mode.to_string(),
             base_ref: "HEAD".to_string(),
+            target_ref: String::new(),
         }
     }
 

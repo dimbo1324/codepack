@@ -5,7 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use codepack_core::CancellationToken;
-use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan, detect_stacks};
+use codepack_scanner::{
+    ExportIgnoreRules, ScanOptions, build_export_plan, detect_stacks, no_safety_classification,
+};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -16,7 +18,14 @@ fn fixture(name: &str) -> PathBuf {
 fn plan_for(root: &Path) -> codepack_scanner::ExportPlan {
     let options = ScanOptions::default();
     let rules = ExportIgnoreRules::from_project_and_config(root, &options);
-    build_export_plan(root, &options, &rules, &CancellationToken::new()).unwrap()
+    build_export_plan(
+        root,
+        &options,
+        &rules,
+        &no_safety_classification,
+        &CancellationToken::new(),
+    )
+    .unwrap()
 }
 
 #[test]

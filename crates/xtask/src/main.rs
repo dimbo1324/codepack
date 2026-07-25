@@ -5,6 +5,7 @@
 // A task runner is expected to write to stdout; the workspace lint targets libraries.
 #![allow(clippy::print_stdout)]
 
+mod golden;
 mod sync_agents;
 
 use std::path::{Path, PathBuf};
@@ -22,6 +23,7 @@ Commands:
   test                    Run workspace tests
   deny                    cargo-deny: advisories, bans, licenses, sources
   sync-agents [--check]   Regenerate AGENTS.md from the .ai/ modules
+  golden                  Regenerate golden references by running legacy (needs Python)
   doctor                  Read-only environment diagnostics
 ";
 
@@ -139,6 +141,7 @@ fn main() -> ExitCode {
         "sync-agents" => {
             sync_agents::run(&root, has("--check")).map_err(|error| format!("sync-agents: {error}"))
         }
+        "golden" => golden::run(&root).map_err(|error| format!("golden: {error}")),
         "doctor" => {
             doctor(&root);
             Ok(())

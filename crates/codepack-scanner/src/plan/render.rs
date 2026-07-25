@@ -184,8 +184,14 @@ mod tests {
         std::fs::write(dir.path().join("main.py"), "print(1)").unwrap();
         let options = ScanOptions::default();
         let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
-        let plan =
-            build_export_plan(dir.path(), &options, &rules, &CancellationToken::new()).unwrap();
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &crate::plan::no_safety_classification,
+            &CancellationToken::new(),
+        )
+        .unwrap();
 
         let json_path = dir.path().join("out/plan.json");
         let md_path = dir.path().join("out/plan.md");

@@ -1,0 +1,55 @@
+{
+  "capabilities": {
+    "has_ci": false,
+    "has_docker": true,
+    "has_env_files": false,
+    "has_git": false,
+    "has_license": false,
+    "has_readme": true,
+    "has_tests": false
+  },
+  "commands": {
+    "run": [
+      "docker compose up --build"
+    ]
+  },
+  "counts": {
+    "files": 6,
+    "folders": 3,
+    "total_size_bytes": 774
+  },
+  "detected_stack": [
+    "Docker Compose"
+  ],
+  "docker_compose_files": [
+    "docker-compose.yml"
+  ],
+  "entrypoints": [],
+  "important_config_files": [
+    ".\\backend\\requirements.txt",
+    ".\\docker-compose.yml",
+    ".\\frontend\\package.json",
+    ".\\README.md"
+  ],
+  "npm_scripts": {},
+  "package_managers": [],
+  "project_name": "mixed_stack",
+  "project_type": "unknown",
+  "risk_level": "medium",
+  "risk_reasons": [
+    "no obvious test files detected",
+    "no GitHub Actions workflow detected"
+  ],
+  "schema_version": 1,
+  "stack_by_group": {
+    "backend": [],
+    "frontend": [],
+    "infrastructure": [
+      "Docker Compose"
+    ],
+    "package_managers": [],
+    "styling": [],
+    "testing": [],
+    "tools": []
+  }
+}

@@ -25,6 +25,7 @@
 //! between steps.
 
 mod analytics;
+mod budget;
 mod copy;
 mod error;
 mod git_report;

@@ -137,6 +137,12 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         "max_text_file_mb",
         "zip_part_limit_mb",
         "ui_zoom",
+        // Added 2026-07-25. `CONFIG_SCHEMA_VERSION`'s own doc states a bump is required
+        // only for a change that is *not* "a new field with a `#[serde(default)]`", and
+        // both of these are exactly that: old config files load unchanged and take the
+        // defaults (50 runs kept, no token budget).
+        "history_keep_last_n",
+        "token_budget",
     ];
     let array_fields = [
         "extra_ignored_dirs",

@@ -37,6 +37,7 @@ fn build_plan(root: &std::path::Path) -> ExportPlan {
         root,
         &ScanOptions::default(),
         &ExportIgnoreRules::default(),
+        &codepack_scanner::no_safety_classification,
         &CancellationToken::new(),
     )
     .unwrap()

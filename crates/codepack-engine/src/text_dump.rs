@@ -179,6 +179,24 @@ fn prepend_developer_context(output_file: &Path, context: &str, log: &dyn Fn(&st
     }
 }
 
+/// What the text-dump step produced. `stats` is the legacy-shaped structure that goes
+/// into `manifest.json`; `redacted_substitutions` is deliberately kept *outside* it so the
+/// artifact's own shape is unchanged (invariant I5) while the export-history row can
+/// still record a real number instead of `NULL`.
+pub struct TextDumpOutcome {
+    pub stats: TextDumpStats,
+    /// How many lines this step rewrote because they matched a redaction keyword.
+    /// Counted from the `<REDACTED>` markers the redaction actually produced, so it
+    /// reflects work done rather than secrets detected — a line with two redacted
+    /// values counts twice, which is the honest reading of "how much was redacted".
+    pub redacted_substitutions: u32,
+}
+
+/// Counts `<REDACTED>` markers, which is how many substitutions the redaction made.
+fn count_redaction_markers(text: &str) -> u32 {
+    u32::try_from(text.matches("<REDACTED>").count()).unwrap_or(u32::MAX)
+}
+
 /// Runs pipeline step 5. `max_bytes_per_file` mirrors
 /// `config.effective_max_text_file_bytes()`; `redact` mirrors `config.redact_secrets`;
 /// `developer_context` mirrors `config.developer_context.trim()` — pass an empty string
@@ -191,8 +209,9 @@ pub fn write_text_dump(
     developer_context: &str,
     log: &dyn Fn(&str),
     cancel: &CancellationToken,
-) -> Result<TextDumpStats> {
+) -> Result<TextDumpOutcome> {
     let mut stats = TextDumpStats::default();
+    let mut redacted_substitutions = 0u32;
     let mut out = String::new();
 
     let root_name = root
@@ -265,7 +284,9 @@ pub fn write_text_dump(
 
         let (text, encoding) = decode_best_effort(&raw);
         let text = if redact {
-            codepack_security::redact_secrets(&text)
+            let redacted = codepack_security::redact_secrets(&text);
+            redacted_substitutions += count_redaction_markers(&redacted);
+            redacted
         } else {
             text
         };
@@ -312,7 +333,10 @@ pub fn write_text_dump(
         prepend_developer_context(output_file, trimmed_context, log);
     }
 
-    Ok(stats)
+    Ok(TextDumpOutcome {
+        stats,
+        redacted_substitutions,
+    })
 }
 
 #[cfg(test)]
@@ -339,7 +363,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         assert_eq!(stats.skipped_binary, 1);
         assert_eq!(stats.written, 0);
@@ -360,7 +385,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         assert_eq!(stats.skipped_large, 1);
         assert_eq!(stats.written, 0);
@@ -381,7 +407,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         assert_eq!(stats.written, 1);
         let content = fs::read_to_string(&output).unwrap();
@@ -406,7 +433,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         assert_eq!(stats.written, 1);
         let content = fs::read_to_string(&output).unwrap();
@@ -424,7 +452,7 @@ mod tests {
         .unwrap();
         let output = dir.path().join("dump.txt");
 
-        write_text_dump(
+        let _ = write_text_dump(
             dir.path(),
             &output,
             None,
@@ -433,7 +461,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         let content = fs::read_to_string(&output).unwrap();
         assert!(!content.contains("super-secret-value-123"));
@@ -445,7 +474,7 @@ mod tests {
         fs::write(dir.path().join("main.py"), "x = 1\n").unwrap();
         let output = dir.path().join("dump.txt");
 
-        write_text_dump(
+        let _ = write_text_dump(
             dir.path(),
             &output,
             None,
@@ -454,7 +483,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         let content = fs::read_to_string(&output).unwrap();
         assert!(content.starts_with("# ═"));
@@ -467,7 +497,7 @@ mod tests {
         fs::write(dir.path().join("main.py"), "x = 1\n").unwrap();
         let output = dir.path().join("dump.txt");
 
-        write_text_dump(
+        let _ = write_text_dump(
             dir.path(),
             &output,
             None,
@@ -476,7 +506,8 @@ mod tests {
             &no_log,
             &CancellationToken::new(),
         )
-        .unwrap();
+        .unwrap()
+        .stats;
 
         let content = fs::read_to_string(&output).unwrap();
         assert!(content.starts_with("=== Text Files Dump ==="));
@@ -492,7 +523,9 @@ mod tests {
         let cancel = CancellationToken::new();
         cancel.cancel();
 
-        let stats = write_text_dump(dir.path(), &output, None, true, "", &no_log, &cancel).unwrap();
+        let stats = write_text_dump(dir.path(), &output, None, true, "", &no_log, &cancel)
+            .unwrap()
+            .stats;
 
         assert_eq!(stats.scanned, 0);
         assert_eq!(stats.written, 0);

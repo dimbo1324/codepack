@@ -13,7 +13,7 @@ mod group;
 mod render;
 mod timestamp;
 
-pub use build::build_export_plan;
+pub use build::{SafetyClassifier, build_export_plan, no_safety_classification};
 pub use render::write_export_plan_files;
 
 use serde::{Deserialize, Serialize};
@@ -55,15 +55,23 @@ pub struct ExportPlan {
     pub summary: PlanSummary,
 }
 
-/// `estimated_included_size` (a formatted-bytes string in legacy) is intentionally
-/// omitted: `codepack-core` has no byte-formatter yet (that lands in S6, BLUEPRINT
-/// §B.2/§E). `skipped_dirs_count` is likewise omitted — it is already available as
-/// `skipped_dirs.len()` at the plan's top level, so this stage does not duplicate it.
+/// Field-for-field with legacy's own `write_export_plan_files` summary block.
+///
+/// `estimated_included_size` and `skipped_dirs_count` were originally omitted with the
+/// reasoning "`codepack-core` has no byte-formatter yet (that lands in S6)" and
+/// "already available as `skipped_dirs.len()`". S6 shipped
+/// [`codepack_tokens::format_bytes`] and the reason expired, but the fields were never
+/// restored — a real break of invariant I5 (`28_export_plan.json` is a named artifact
+/// contract), found by the golden suite on 2026-07-25. Restoring them needs no
+/// `schema_version` bump: it returns the format to the contract it was never supposed
+/// to leave.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanSummary {
     pub included_count: usize,
     pub excluded_count: usize,
     pub estimated_included_bytes: u64,
+    pub estimated_included_size: String,
+    pub skipped_dirs_count: usize,
 }
 
 impl ExportPlan {

@@ -22,6 +22,8 @@
 
 use std::path::PathBuf;
 
+use std::path::Path;
+
 use codepack_core::config::Config;
 use codepack_core::{CancellationToken, ExportPaths};
 use codepack_diff::DiffSelection;
@@ -29,6 +31,8 @@ use codepack_reports::context::{Inventory, ReportContext};
 use codepack_reports::{ReportJob, RunSummary};
 use codepack_scanner::{ExportIgnoreRules, ExportPlan, ScanOptions, build_export_plan};
 use codepack_security::{ScanResult, SecurityOptions, scan_project};
+
+use codepack_security::should_skip_file_for_safety;
 
 use crate::error::Result;
 use crate::relpath::to_relative_path;
@@ -46,8 +50,11 @@ pub struct AnalyticsOutcome {
 }
 
 fn full_job_catalog() -> Vec<ReportJob> {
-    codepack_reports::group_a_jobs()
-        .into_iter()
+    // Legacy's job #0 leads the catalog, so `REPORT_PLUGINS.json` lists it first and
+    // `reports/insights/00_project_profile.json` exists before any later report can
+    // reference it.
+    std::iter::once(codepack_reports::project_profile::JOB)
+        .chain(codepack_reports::group_a_jobs())
         .chain(codepack_reports::group_b_jobs())
         .chain(codepack_reports::group_c_jobs())
         .chain(codepack_reports::group_d_jobs())
@@ -75,7 +82,23 @@ pub fn run_analytics(
     let scan_options = ScanOptions::from(config);
     let export_rules =
         ExportIgnoreRules::from_project_and_config(&paths.project_dir, &scan_options);
-    let replan = build_export_plan(&paths.project_dir, &scan_options, &export_rules, cancel)?;
+    // The copy step already applied the same safe-mode policy, so nothing here can be
+    // newly excluded — the classifier is passed anyway so this re-plan and the step-1
+    // plan are produced by identical rules rather than by two subtly different ones.
+    let safe_mode = config.normalized_safe_export_mode().to_string();
+    let safety = move |relative_path: &Path| {
+        let decision = should_skip_file_for_safety(relative_path, &safe_mode);
+        decision
+            .skip
+            .then_some((decision.reason, decision.severity))
+    };
+    let replan = build_export_plan(
+        &paths.project_dir,
+        &scan_options,
+        &export_rules,
+        &safety,
+        cancel,
+    )?;
 
     let relative_files: Vec<PathBuf> = replan
         .included_files
@@ -109,9 +132,30 @@ pub fn run_analytics(
     let jobs = full_job_catalog();
 
     codepack_reports::write_report_plugins_json(&jobs, &paths.insights_dir)?;
-    codepack_reports::write_project_profile_json(&ctx, &paths.project_profile_file)?;
 
     let run_summary = codepack_reports::run_reports(&jobs, &ctx, &paths.insights_dir);
+
+    // Legacy's `project_profile_job` writes the catalog file and then copies it to the
+    // bundle root (`shutil.copyfile`), rather than building the profile twice.
+    let profile_in_catalog = paths.insights_dir.join("00_project_profile.json");
+    if !profile_in_catalog.is_file() {
+        // `run_reports` is fault tolerant: a failing job writes ERROR_<name>.txt and the
+        // run continues, and cancellation stops the catalog before any job runs. Either
+        // way `PROJECT_PROFILE.json` — an artifact named in invariant I5 — is simply
+        // absent from the bundle. Legacy was equally quiet about it; being quiet about a
+        // missing contract artifact is not something to reproduce.
+        log(
+            "PROJECT_PROFILE.json not written: report job 00_project_profile.json produced no file",
+        );
+    }
+    if profile_in_catalog.is_file() {
+        std::fs::copy(&profile_in_catalog, &paths.project_profile_file).map_err(|source| {
+            crate::error::EngineError::Io {
+                path: paths.project_profile_file.clone(),
+                source,
+            }
+        })?;
+    }
     log(&format!(
         "analytics: {} report(s) succeeded, {} failed, {} skipped{}",
         run_summary.succeeded.len(),
