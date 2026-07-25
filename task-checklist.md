@@ -65,7 +65,7 @@
 ## Verification
 
 - [+] `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
-- [+] `cargo test --workspace` — 891 против baseline 820
+- [+] `cargo test --workspace` — 890 против baseline 820
 - [+] `pnpm --filter @codepack/ui typecheck` (102 файла, 0 ошибок, 0 предупреждений),
       `pnpm --filter @codepack/ui lint` (чисто), `build` (87 КБ)
 - [+] Тесты Tauri-команд (вызов функций напрямую) — 61 модульный
@@ -103,6 +103,13 @@
 - [+] **`PreviewTree.svelte`**: устаревший `<svelte:self>` и нереактивное чтение
       `depth`. Второе на самом деле корректно (каждый узел — свой инстанс), теперь
       сказано явно через `untrack()`, а не оставлено предупреждением, похожим на баг
+- [+] **Коллизия имён бинарей — дефект, внесённый мной же.** Я назвал бинарь
+      десктопа `codepack`, как и у `codepack-cli`; обе цели писали
+      `target/debug/codepack.exe`. Cargo это предупреждает и обещает сделать
+      жёсткой ошибкой, а на практике `cargo test --workspace` падал с
+      «Access is denied», когда две сборки гонялись за один файл. Бинарь
+      переименован в `codepack-desktop`; имя, которое видит пользователь, задаётся
+      `productName` в `tauri.conf.json` и осталось прежним
 
 ## Completion
 

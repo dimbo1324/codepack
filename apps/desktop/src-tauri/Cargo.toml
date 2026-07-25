@@ -7,10 +7,17 @@ rust-version.workspace = true
 repository.workspace = true
 publish.workspace = true
 
-# The binary is named after the product, not the crate: this is what the user sees in
-# their task manager and their applications menu.
+# The binary keeps the crate's own name, **not** the product name.
+#
+# `codepack-cli` already produces a binary called `codepack`, and two targets writing the
+# same `target/debug/codepack.exe` is a real collision: cargo warns about it today, says
+# it may become a hard error, and in practice makes `cargo test --workspace` fail
+# intermittently as the two builds race to replace the same file.
+#
+# The user-facing name is unaffected: what appears in the applications menu and the task
+# manager comes from `productName` in `tauri.conf.json`, which is still `codepack`.
 [[bin]]
-name = "codepack"
+name = "codepack-desktop"
 path = "src/main.rs"
 
 # The command layer is also a library so the tests can call each `#[tauri::command]`
