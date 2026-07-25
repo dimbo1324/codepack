@@ -201,3 +201,31 @@ fn full_mode_strictly_improves_recall_without_regressing_precision() {
         full.precision
     );
 }
+
+/// Invariant I9's **absolute** floor, distinct from the relative comparison above.
+///
+/// The relative assertions can all hold while both modes degrade together: if a change
+/// halved precision in parity *and* full mode, `full.precision >= parity.precision`
+/// would still be satisfied and the suite would stay green. I9 is not a relative
+/// statement — it fixes precision at 1.000, on the reasoning that a secret scanner
+/// which cries wolf is worse than one that stays quiet. Asserting the number itself is
+/// what makes the invariant testable rather than merely stated.
+///
+/// A failure here is a defect to report, never a reason to lower the threshold
+/// (`.ai/universal/08-rules-evolution.md`: never weaken a rule to make a task pass).
+#[test]
+fn precision_stays_at_one_in_both_modes() {
+    let parity = measure(parity_detect);
+    let full = measure(full_detect);
+
+    assert_eq!(
+        parity.precision, 1.0,
+        "parity-mode precision fell to {:.3}: the keyword cascade started reporting          something that is not a secret",
+        parity.precision
+    );
+    assert_eq!(
+        full.precision, 1.0,
+        "full-mode precision fell to {:.3}: a provider signature or the entropy          detector started reporting something that is not a secret",
+        full.precision
+    );
+}
