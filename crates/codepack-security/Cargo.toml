@@ -12,12 +12,17 @@ codepack-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-regex.workspace = true
 aho-corasick.workspace = true
 
 [dev-dependencies]
 walkdir.workspace = true
 tempfile.workspace = true
+# Test-only. Every detector in this crate is a hand-written string scan; `regex` is kept
+# as the independent reference those scans are checked against, so equivalence with the
+# patterns they replaced is proven rather than asserted. Shipping it would mean carrying
+# a parser and its transitive tree into a security-critical crate that no longer needs
+# one at run time.
+regex.workspace = true
 
 [lints]
 workspace = true

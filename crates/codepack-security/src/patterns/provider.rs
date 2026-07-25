@@ -1,128 +1,140 @@
 //! Provider-specific secret signatures (BLUEPRINT §B.1, 🎯 new capability — legacy has
 //! only the PEM-header rule, reused here as `pem-private-key`). High-precision,
-//! low-false-positive patterns anchored to a known vendor token format. **No network
-//! calls**: every rule is a pure regex match against text already in memory (invariant
-//! I1 — this is exactly why AWS/GitHub/etc. keys are recognised by shape, never
-//! validated against the provider's API).
+//! low-false-positive rules anchored to a known vendor token format. **No network
+//! calls**: every rule is a pure, local shape match against text already in memory
+//! (invariant I1 — this is exactly why AWS/GitHub/etc. keys are recognised by shape,
+//! never validated against the provider's API).
 //!
-//! Four patterns (AWS, Google, Slack, JWT) are given verbatim in `BLUEPRINT.md` §B.1;
-//! the rest are authored from each provider's publicly documented token format, not
-//! ported from legacy or verified against any live account.
+//! Four formats (AWS, Google, Slack, JWT) are given verbatim in `BLUEPRINT.md` §B.1; the
+//! rest are authored from each provider's publicly documented token format, not ported
+//! from legacy or verified against any live account.
+//!
+//! The shapes themselves live in [`crate::patterns::token_scan`] as data rather than
+//! regexes — see that module for why, and for the differential tests proving the two
+//! agree.
 
 use std::sync::LazyLock;
 
-use regex::Regex;
+use crate::patterns::token_scan::{self, CharClass, TokenPattern, prefixed};
 
-use crate::patterns::keyword::PRIVATE_KEY_RE;
-
+/// A named secret signature: one token shape plus the identity and severity a match
+/// reports.
 pub struct ProviderRule {
     pub rule_id: &'static str,
     pub confidence: &'static str,
-    pub regex: Regex,
-    /// Capture group holding the secret itself, when the pattern has to match
-    /// surrounding context to be precise enough. `None` means the whole match *is* the
-    /// secret, which is the case for every prefix-anchored vendor format.
-    ///
-    /// This is what the reported span covers, and the span is what gets masked before a
-    /// message is built. Reporting the whole match instead would blank the very
-    /// identifier that tells the user which key was found — the same defect Q16 fixed
-    /// on the keyword path.
-    pub value_group: Option<usize>,
+    pub(crate) pattern: TokenPattern,
 }
 
-/// Order is load-bearing: `anthropic-api-key` (`sk-ant-…`) is checked strictly before
-/// `openai-api-key` (`sk-…`) so an Anthropic-shaped key is never reclassified — see
-/// [`find_provider_matches`].
+impl ProviderRule {
+    /// One rule per prefix, for vendors whose shapes differ only in that prefix. Keeps
+    /// each vendor's accepted spellings in exactly one list.
+    fn per_prefix(
+        rule_id: &'static str,
+        confidence: &'static str,
+        prefixes: &'static [&'static str],
+        class: CharClass,
+        min: usize,
+        max: usize,
+    ) -> impl Iterator<Item = Self> {
+        prefixes.iter().map(move |prefix| Self {
+            rule_id,
+            confidence,
+            pattern: prefixed(prefix, class, min, max),
+        })
+    }
+
+    /// A rule wrapping one of the fixed formats declared in [`token_scan`].
+    const fn new(rule_id: &'static str, confidence: &'static str, pattern: TokenPattern) -> Self {
+        Self {
+            rule_id,
+            confidence,
+            pattern,
+        }
+    }
+}
+
+/// Every provider signature, in priority order.
+///
+/// Order is load-bearing in two places. `anthropic-api-key` (`sk-ant-…`) is checked
+/// strictly before `openai-api-key` (`sk-…`) so an Anthropic-shaped key is never
+/// reclassified as OpenAI's; and the AWS secret rule's two registrations (with and
+/// without the `aws` word) sit together so the longer, more specific spelling is tried
+/// first. [`find_provider_matches`] drops any match overlapping an already-accepted one,
+/// which is what makes the ordering decisive.
 pub static PROVIDER_PATTERNS: LazyLock<Vec<ProviderRule>> = LazyLock::new(|| {
-    vec![
-        ProviderRule {
-            rule_id: "aws-access-key-id",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"AKIA[0-9A-Z]{16}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "aws-secret-access-key",
-            confidence: "critical",
-            // BLUEPRINT §B.1 asks for "AWS Secret (по контексту)" — by context, because
-            // unlike every other rule here the value has no distinguishing prefix: it is
-            // 40 characters of base64 alphabet, a shape that matches ordinary hashes,
-            // build IDs and minified tokens. Matching it bare would trade this crate's
-            // precision (invariant I9 holds it at 1.000) for recall, which is the wrong
-            // trade for a tool whose whole promise is not crying wolf.
-            //
-            // `{40,}` rather than `{40}`: the run is unanchored, so a longer value would
-            // otherwise report a span covering only its first 40 characters and leave the
-            // tail unmasked in the message.
-            //
-            // The context required is AWS's own field name, in the spellings the SDKs
-            // and the CLI actually use: aws_secret_access_key (CLI credentials file),
-            // AWS_SECRET_ACCESS_KEY (environment), secretAccessKey (JS SDK), plus the
-            // separator variants. `aws` is optional only because `secretAccessKey` is
-            // itself an AWS SDK field name, not a generic phrase.
-            value_group: Some(1),
-            regex: Regex::new(
-                r#"(?i)(?:aws[_.\-]?)?secret[_.\-]?access[_.\-]?key["']?\s*[:=]\s*["']?([A-Za-z0-9/+=]{40,})"#,
-            )
-            .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "github-token",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"gh[pous]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "google-api-key",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"AIza[0-9A-Za-z\-_]{35}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "slack-token",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"xox[baprs]-[0-9A-Za-z-]{10,72}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "stripe-key",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"(sk|rk)_live_[0-9A-Za-z]{24,}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "anthropic-api-key",
-            confidence: "critical",
-            value_group: None,
-            regex: Regex::new(r"sk-ant-[A-Za-z0-9_-]{20,}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "openai-api-key",
-            confidence: "high",
-            value_group: None,
-            regex: Regex::new(r"sk-[A-Za-z0-9]{20,}")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "jwt",
-            confidence: "high",
-            value_group: None,
-            regex: Regex::new(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
-                .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
-        },
-        ProviderRule {
-            rule_id: "pem-private-key",
-            confidence: "critical",
-            value_group: None,
-            regex: PRIVATE_KEY_RE.clone(),
-        },
-    ]
+    let mut rules = vec![
+        ProviderRule::new(
+            "aws-access-key-id",
+            "critical",
+            token_scan::AWS_ACCESS_KEY_ID,
+        ),
+        // Two registrations of one rule: the field name may or may not carry the `aws`
+        // word, and an optional literal is deliberately outside this matcher's grammar.
+        ProviderRule::new(
+            "aws-secret-access-key",
+            "critical",
+            token_scan::AWS_SECRET_WITH_PREFIX,
+        ),
+        ProviderRule::new(
+            "aws-secret-access-key",
+            "critical",
+            token_scan::AWS_SECRET_BARE,
+        ),
+    ];
+
+    // `gh[pous]_[A-Za-z0-9]{36}` — the classic personal/OAuth/user/server shapes.
+    rules.extend(ProviderRule::per_prefix(
+        "github-token",
+        "critical",
+        &token_scan::GITHUB_TOKEN_PREFIXES,
+        CharClass::Alnum,
+        36,
+        36,
+    ));
+    rules.push(ProviderRule::new(
+        "github-token",
+        "critical",
+        token_scan::GITHUB_FINE_GRAINED_TOKEN,
+    ));
+    rules.push(ProviderRule::new(
+        "google-api-key",
+        "critical",
+        token_scan::GOOGLE_API_KEY,
+    ));
+
+    // `xox[baprs]-[0-9A-Za-z-]{10,72}`
+    rules.extend(ProviderRule::per_prefix(
+        "slack-token",
+        "critical",
+        &token_scan::SLACK_TOKEN_PREFIXES,
+        CharClass::AlnumDash,
+        10,
+        72,
+    ));
+
+    // `(sk|rk)_live_[0-9A-Za-z]{24,}`
+    rules.extend(ProviderRule::per_prefix(
+        "stripe-key",
+        "critical",
+        &token_scan::STRIPE_KEY_PREFIXES,
+        CharClass::Alnum,
+        24,
+        usize::MAX,
+    ));
+
+    rules.extend([
+        // Strictly before `openai-api-key`: both start with `sk-`.
+        ProviderRule::new(
+            "anthropic-api-key",
+            "critical",
+            token_scan::ANTHROPIC_API_KEY,
+        ),
+        ProviderRule::new("openai-api-key", "high", token_scan::OPENAI_API_KEY),
+        ProviderRule::new("jwt", "high", token_scan::JWT),
+        ProviderRule::new("pem-private-key", "critical", token_scan::PEM_PRIVATE_KEY),
+    ]);
+
+    rules
 });
 
 /// `telegram-bot-token` is scanned separately from [`PROVIDER_PATTERNS`] — see
@@ -132,9 +144,7 @@ pub static PROVIDER_PATTERNS: LazyLock<Vec<ProviderRule>> = LazyLock::new(|| {
 pub static TELEGRAM_BOT_TOKEN_RULE: LazyLock<ProviderRule> = LazyLock::new(|| ProviderRule {
     rule_id: "telegram-bot-token",
     confidence: "critical",
-    value_group: None,
-    regex: Regex::new(r"\d{8,10}:[A-Za-z0-9_-]{35}")
-        .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
+    pattern: token_scan::TELEGRAM_BOT_TOKEN,
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,28 +159,23 @@ fn ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) ->
     a_start < b_end && b_start < a_end
 }
 
-/// Runs every rule in [`PROVIDER_PATTERNS`] over `line`, in priority order. A match
-/// whose span overlaps an already-accepted match from a higher-priority rule is
-/// dropped — this is what keeps `openai-api-key` from ever double-claiming a span
-/// already claimed by `anthropic-api-key` (both start with `sk-`).
-pub fn find_provider_matches(line: &str) -> Vec<ProviderMatch> {
+/// Collects matches of `rules` over `line`, dropping any whose span overlaps a match
+/// already accepted from an earlier (higher-priority) rule.
+fn collect_matches<'r>(
+    line: &str,
+    rules: impl Iterator<Item = &'r ProviderRule>,
+) -> Vec<ProviderMatch> {
     let mut matches: Vec<ProviderMatch> = Vec::new();
-    for rule in PROVIDER_PATTERNS.iter() {
-        for captures in rule.regex.captures_iter(line) {
-            // A context-anchored rule reports only its value group, so masking the span
-            // never erases the identifier that names the finding.
-            let span = match rule.value_group {
-                Some(group) => match captures.get(group) {
-                    Some(found) => found,
-                    None => continue,
-                },
-                None => match captures.get(0) {
-                    Some(found) => found,
-                    None => continue,
-                },
-            };
+
+    for rule in rules {
+        for found in token_scan::find_matches(line, &rule.pattern) {
             let overlaps = matches.iter().any(|existing| {
-                ranges_overlap(existing.start, existing.end, span.start(), span.end())
+                ranges_overlap(
+                    existing.start,
+                    existing.end,
+                    found.value_start,
+                    found.value_end,
+                )
             });
             if overlaps {
                 continue;
@@ -178,31 +183,38 @@ pub fn find_provider_matches(line: &str) -> Vec<ProviderMatch> {
             matches.push(ProviderMatch {
                 rule_id: rule.rule_id,
                 confidence: rule.confidence,
-                start: span.start(),
-                end: span.end(),
+                start: found.value_start,
+                end: found.value_end,
             });
         }
     }
+
     matches
+}
+
+/// Runs every rule in [`PROVIDER_PATTERNS`] over `line`, in priority order. A match
+/// whose span overlaps an already-accepted match from a higher-priority rule is
+/// dropped — this is what keeps `openai-api-key` from ever double-claiming a span
+/// already claimed by `anthropic-api-key` (both start with `sk-`).
+pub fn find_provider_matches(line: &str) -> Vec<ProviderMatch> {
+    collect_matches(line, PROVIDER_PATTERNS.iter())
 }
 
 /// See [`TELEGRAM_BOT_TOKEN_RULE`] — always run, never gated by the prefilter.
 pub fn find_telegram_matches(line: &str) -> Vec<ProviderMatch> {
-    TELEGRAM_BOT_TOKEN_RULE
-        .regex
-        .find_iter(line)
-        .map(|found| ProviderMatch {
-            rule_id: TELEGRAM_BOT_TOKEN_RULE.rule_id,
-            confidence: TELEGRAM_BOT_TOKEN_RULE.confidence,
-            start: found.start(),
-            end: found.end(),
-        })
-        .collect()
+    collect_matches(line, std::iter::once(&*TELEGRAM_BOT_TOKEN_RULE))
+}
+
+/// The PEM-header shape, shared with the keyword cascade's `critical` tier (same shape,
+/// two rule identities).
+pub(crate) fn is_pem_private_key(line: &str) -> bool {
+    token_scan::is_match(line, &token_scan::PEM_PRIVATE_KEY)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     fn rule_ids(line: &str) -> Vec<&'static str> {
         find_provider_matches(line)
@@ -212,22 +224,30 @@ mod tests {
     }
 
     #[test]
-    fn eleven_provider_rules_total_including_telegram() {
-        // Ten signatures from BLUEPRINT §B.1 plus `aws-secret-access-key` (Q15, 2026-07-25).
-        assert_eq!(PROVIDER_PATTERNS.len() + 1, 11);
+    fn eleven_distinct_provider_rules_including_telegram() {
+        // Ten signatures from BLUEPRINT §B.1 plus `aws-secret-access-key` (Q15).
+        // Counted by distinct rule id, since several vendors need more than one shape
+        // (GitHub's four classic prefixes plus its fine-grained one, Slack's five).
+        let distinct: BTreeSet<&str> = PROVIDER_PATTERNS
+            .iter()
+            .map(|rule| rule.rule_id)
+            .chain(std::iter::once(TELEGRAM_BOT_TOKEN_RULE.rule_id))
+            .collect();
+        assert_eq!(distinct.len(), 11, "rule ids: {distinct:?}");
     }
 
     #[test]
-    fn every_declared_value_group_exists_in_its_own_pattern() {
-        // `find_provider_matches` skips a capture it cannot resolve, so a mistyped index
-        // would silently switch the rule off rather than fail loudly.
+    fn every_rule_declaring_a_value_segment_has_one() {
+        // `find_matches` falls back to the whole match when a declared value segment is
+        // absent, so a mistyped index would silently widen the reported span instead of
+        // failing loudly.
         for rule in PROVIDER_PATTERNS.iter() {
-            if let Some(group) = rule.value_group {
+            if let Some(index) = rule.pattern.value_segment {
                 assert!(
-                    group < rule.regex.captures_len(),
-                    "{} declares value_group {group} but its pattern has {} groups",
+                    index < rule.pattern.segments.len(),
+                    "{} declares value_segment {index} but has {} segments",
                     rule.rule_id,
-                    rule.regex.captures_len()
+                    rule.pattern.segments.len()
                 );
             }
         }
@@ -277,7 +297,8 @@ mod tests {
         assert_eq!(
             &line[found[0].start..found[0].end],
             value,
-            "the reported span must cover the secret alone, so masking it leaves the \n             field name that identifies the finding"
+            "the reported span must cover the secret alone, so masking it leaves the \
+             field name that identifies the finding"
         );
     }
 
@@ -288,10 +309,22 @@ mod tests {
 
     #[test]
     fn github_token_variants_match() {
-        let ghp = "ghp_".to_string() + &"a".repeat(36);
-        assert_eq!(rule_ids(&ghp), vec!["github-token"]);
+        for prefix in token_scan::GITHUB_TOKEN_PREFIXES {
+            let token = prefix.to_string() + &"a".repeat(36);
+            assert_eq!(rule_ids(&token), vec!["github-token"], "prefix {prefix}");
+        }
         let pat = "github_pat_".to_string() + &"b".repeat(82);
         assert_eq!(rule_ids(&pat), vec!["github-token"]);
+    }
+
+    #[test]
+    fn github_fine_grained_token_rejects_dashes_which_its_alphabet_excludes() {
+        // `[A-Za-z0-9_]` has no dash. An earlier draft used the URL-safe class here and
+        // matched a run of dashes GitHub never issues.
+        let dashes = "github_pat_".to_string() + &"-".repeat(82);
+        assert!(rule_ids(&dashes).is_empty());
+        let underscores = "github_pat_".to_string() + &"_".repeat(82);
+        assert_eq!(rule_ids(&underscores), vec!["github-token"]);
     }
 
     #[test]
@@ -301,15 +334,19 @@ mod tests {
     }
 
     #[test]
-    fn slack_token_matches() {
-        let token = "xoxb-".to_string() + &"1".repeat(20);
-        assert_eq!(rule_ids(&token), vec!["slack-token"]);
+    fn slack_token_matches_every_documented_prefix() {
+        for prefix in token_scan::SLACK_TOKEN_PREFIXES {
+            let token = prefix.to_string() + &"1".repeat(20);
+            assert_eq!(rule_ids(&token), vec!["slack-token"], "prefix {prefix}");
+        }
     }
 
     #[test]
-    fn stripe_key_matches() {
-        let key = "sk_live_".to_string() + &"a".repeat(24);
-        assert_eq!(rule_ids(&key), vec!["stripe-key"]);
+    fn stripe_key_matches_both_live_prefixes() {
+        for prefix in token_scan::STRIPE_KEY_PREFIXES {
+            let key = prefix.to_string() + &"a".repeat(24);
+            assert_eq!(rule_ids(&key), vec!["stripe-key"], "prefix {prefix}");
+        }
     }
 
     #[test]
@@ -339,6 +376,8 @@ mod tests {
             rule_ids("-----BEGIN RSA PRIVATE KEY-----"),
             vec!["pem-private-key"]
         );
+        assert!(is_pem_private_key("-----BEGIN RSA PRIVATE KEY-----"));
+        assert!(!is_pem_private_key("-----BEGIN CERTIFICATE-----"));
     }
 
     #[test]
@@ -357,5 +396,15 @@ mod tests {
     #[test]
     fn no_match_on_plain_text() {
         assert!(find_provider_matches("just an ordinary line of code").is_empty());
+    }
+
+    #[test]
+    fn overlapping_rules_report_the_higher_priority_one_only() {
+        // A single line carrying several distinct secrets still reports each once.
+        let aws = "AKIA".to_string() + &"A".repeat(16);
+        let google = "AIza".to_string() + &"b".repeat(35);
+        let line = format!("{aws} {google}");
+        let ids = rule_ids(&line);
+        assert_eq!(ids, vec!["aws-access-key-id", "google-api-key"]);
     }
 }
