@@ -42,3 +42,6 @@ __pycache__/
 
 # --- Legacy archive is tracked on purpose ---
 # docs/__arch__/ stays in git: it is the behavioral reference for the rewrite.
+
+# Tauri writes its generated permission/capability schemas here at build time.
+apps/desktop/src-tauri/gen/

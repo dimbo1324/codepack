@@ -1,6 +1,10 @@
 <script lang="ts">
+  import { untrack } from "svelte";
+
   import type { TreeNode } from "$lib/api/types";
   import { t } from "$lib/i18n/index.svelte";
+  // Self-import rather than `<svelte:self>`, which Svelte 5 deprecated.
+  import PreviewTree from "./PreviewTree.svelte";
 
   interface Props {
     node: TreeNode;
@@ -11,7 +15,14 @@
 
   const { node, overrides, onOverride, depth = 0 }: Props = $props();
 
-  let expanded = $state(depth < 1);
+  // Only the root level starts expanded: a deep tree opened all the way is unreadable,
+  // and the interesting nodes are surfaced by the parent's aggregated status anyway.
+  //
+  // `untrack` states the intent explicitly. Each node renders its own component
+  // instance, so `depth` never changes for a given instance — capturing it once is
+  // correct here, not a missed reactive dependency, and without `untrack` Svelte cannot
+  // tell those two cases apart.
+  let expanded = $state(untrack(() => depth) < 1);
 
   const override = $derived(node.is_dir ? undefined : overrides[node.path]);
 </script>
@@ -61,7 +72,7 @@
 
   {#if node.is_dir && expanded && node.children}
     {#each node.children as child (child.path)}
-      <svelte:self node={child} {overrides} {onOverride} depth={depth + 1} />
+      <PreviewTree node={child} {overrides} {onOverride} depth={depth + 1} />
     {/each}
   {/if}
 </div>

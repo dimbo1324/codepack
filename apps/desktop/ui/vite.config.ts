@@ -24,7 +24,11 @@ export default defineConfig(async () => ({
   envPrefix: ["VITE_", "TAURI_"],
   build: {
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
-    minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
+    // `true` rather than a named minifier: Vite 8 bundles Oxc and no longer ships
+    // esbuild, so naming `"esbuild"` (as the create-tauri-app template did, written
+    // against Vite 5/6) sends the build down a deprecated path that fails outright.
+    // Letting Vite pick its own default keeps this working across the next change too.
+    minify: !process.env.TAURI_ENV_DEBUG,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },
 }));
