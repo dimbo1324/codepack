@@ -77,6 +77,20 @@ const CORPUS: &[(&str, bool)] = &[
         true,
     ),
     ("123456789:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
+    // AWS secret access key (Q15). Unlike every other provider signature the value has
+    // no prefix — it is 40 base64 characters — so the rule is anchored on AWS's own
+    // field name. Split with `concat!` for the same push-protection reason as Stripe.
+    (
+        concat!(
+            "aws_secret_access_key = ",
+            "aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde"
+        ),
+        true,
+    ),
+    (
+        r#"  secretAccessKey: "aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde","#,
+        true,
+    ),
     (r#"signature = "zX3kQ9mPv7wR2tY8bN4cJ6hF3sD0aE9gU8i""#, true),
     ("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4", true),
     // --- Negatives: ordinary code/text that must not be flagged by either mode. ---
@@ -97,6 +111,11 @@ const CORPUS: &[(&str, bool)] = &[
     ("func Add(a int, b int) int { return a + b }", false),
     ("const MAX_RETRIES = 5;", false),
     (r#"fn main() { println!("hello"); }"#, false),
+    // The same 40-character shape without AWS context. These are what a bare
+    // 40-base64-character rule would have flagged, and they are why Q15 is anchored on
+    // context: flagging them would drop precision below 1.000 (invariant I9).
+    ("build_id = aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde", false),
+    ("sha256sum: aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde", false),
 ];
 
 struct Metrics {
