@@ -8,6 +8,7 @@ use crate::error::ReportError;
 use crate::paths::to_native_path;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::{SOURCE_CODE_EXTENSIONS, section_rule};
 use crate::text::read_text_lossy;
 
 pub const JOB: ReportJob = ReportJob {
@@ -16,13 +17,6 @@ pub const JOB: ReportJob = ReportJob {
     description: "LOC, comment ratio, files over 500/1000 lines.",
     run: write_code_metrics_report,
 };
-
-/// Legacy `SOURCE_CODE_EXTENSIONS` (`constants.py`).
-const SOURCE_CODE_EXTENSIONS: &[&str] = &[
-    "astro", "c", "cc", "cpp", "cs", "css", "cxx", "dart", "go", "h", "hpp", "html", "htm", "java",
-    "js", "jsx", "kt", "kts", "less", "mjs", "php", "py", "pyi", "pyw", "rb", "rs", "sass", "scss",
-    "sh", "sql", "svelte", "ts", "tsx", "vue",
-];
 
 fn comment_like_line(stripped: &str, extension: &str) -> bool {
     if stripped.is_empty() {
@@ -113,7 +107,7 @@ fn write_code_metrics_report(
     out.push_str("=== Code Metrics ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
     out.push_str("Line classification is heuristic.\n");
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str(&format!(

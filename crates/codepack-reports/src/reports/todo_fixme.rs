@@ -8,6 +8,7 @@ use crate::error::ReportError;
 use crate::paths::to_native_path;
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 use crate::text::read_text_lossy;
 use crate::wordscan::{CODE_MARKERS, find_word};
 
@@ -66,7 +67,7 @@ fn write_todo_fixme_report(ctx: &ReportContext<'_>, output_file: &Path) -> Resul
     let mut out = String::new();
     out.push_str("=== TODO / FIXME / Technical Debt Report ===\n");
     out.push_str(&format!("Generated: {}\n", ctx.plan.generated_at));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str("--- Summary ---\n");

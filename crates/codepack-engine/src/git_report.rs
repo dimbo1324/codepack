@@ -48,6 +48,7 @@ use codepack_core::CancellationToken;
 use crate::error::{EngineError, Result};
 use codepack_core::time::UtcDateTime;
 
+use crate::layout::section_rule;
 use crate::timestamp::human_now_utc;
 
 fn current_branch_name(repo: &Repository) -> Option<String> {
@@ -320,7 +321,7 @@ fn write_section(out: &mut String, command: &str, lines: &[String], redact: bool
         }
     }
     out.push('\n');
-    out.push_str(&"-".repeat(100));
+    out.push_str(&section_rule('-'));
     out.push_str("\n\n");
 }
 
@@ -358,7 +359,7 @@ pub fn write_git_report(
     } else {
         "Secret redaction is disabled.\n"
     });
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     let Ok(repo) = Repository::discover(source_root) else {

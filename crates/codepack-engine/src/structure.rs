@@ -17,6 +17,7 @@ use codepack_core::CancellationToken;
 use codepack_core::time::{UtcDateTime, unix_seconds_of};
 
 use crate::error::{EngineError, Result};
+use crate::layout::section_rule;
 use crate::timestamp::human_now_utc;
 
 /// Abbreviated English month names, in PowerShell's `Get-ChildItem` rendering order.
@@ -191,7 +192,7 @@ pub fn write_structure_report(
     out.push_str(&format!("Project copy root name: {root_name}\n"));
     out.push_str(&format!("Generated: {}\n", human_now_utc()));
     out.push_str(&format!("Ignored directories: {ignored_display}\n"));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     let mut groups_written = 0u32;

@@ -50,6 +50,7 @@ use codepack_core::{CancellationToken, TextDumpStats};
 use codepack_scanner::{BINARY_SAMPLE_BYTES, looks_binary, should_consider_text_file};
 
 use crate::error::{EngineError, Result};
+use crate::layout::{file_banner_rule, section_rule};
 use crate::timestamp::{human_from_system_time, human_now_utc};
 
 /// Legacy `f"{size:,}"`: groups digits into runs of three, separated by `,`.
@@ -233,7 +234,7 @@ pub fn write_text_dump(
         if redact { "enabled" } else { "disabled" }
     ));
     out.push_str("Only readable text-like files are included.\n");
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     for path in collect_files(root) {
@@ -297,7 +298,7 @@ pub fn write_text_dump(
         let display = rel_display(&path, root);
 
         out.push('\n');
-        out.push_str(&"=".repeat(120));
+        out.push_str(&file_banner_rule());
         out.push('\n');
         out.push_str(&format!("File: {display}\n"));
         out.push_str(&format!(
@@ -312,7 +313,7 @@ pub fn write_text_dump(
         ));
         out.push_str(&format!("Modified: {modified}\n"));
         out.push_str(&format!("Encoding: {encoding}\n"));
-        out.push_str(&"=".repeat(120));
+        out.push_str(&file_banner_rule());
         out.push_str("\n\n");
         out.push_str(&text);
         if !text.ends_with('\n') {

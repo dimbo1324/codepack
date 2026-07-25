@@ -17,6 +17,7 @@ use crate::i18n::Language;
 use crate::paths::{file_name_of, looks_like_test_path};
 use crate::plugin::ReportJob;
 use crate::profile;
+use crate::reports::layout::section_rule;
 
 pub const JOB: ReportJob = ReportJob {
     filename: "01_summary.txt",
@@ -112,7 +113,7 @@ fn render_summary_report(ctx: &ReportContext<'_>, language: Language) -> String 
         language.pick("Generated", "Сформировано"),
         ctx.plan.generated_at
     ));
-    out.push_str(&"=".repeat(100));
+    out.push_str(&section_rule('='));
     out.push_str("\n\n");
 
     out.push_str(&format!(
