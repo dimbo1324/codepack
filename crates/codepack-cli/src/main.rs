@@ -29,7 +29,16 @@ fn main() -> std::process::ExitCode {
         Ok(cli) => cli,
         Err(error) => {
             let _ = error.print();
-            return std::process::ExitCode::from(exit::BAD_ARGUMENTS as u8);
+            // `--help` and `--version` arrive here as "errors" too, and asking for help
+            // is not a usage error: a script running `codepack --help` to check the
+            // binary works must see 0.
+            let code = match error.kind() {
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                    exit::SUCCESS
+                }
+                _ => exit::BAD_ARGUMENTS,
+            };
+            return std::process::ExitCode::from(code as u8);
         }
     };
     let format = Format::from_flag(cli.json);

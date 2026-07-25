@@ -136,6 +136,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "toml",
+ "zip",
 ]
 
 [[package]]

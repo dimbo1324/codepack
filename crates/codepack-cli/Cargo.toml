@@ -26,6 +26,8 @@ codepack-tokens.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# End-to-end tests open the produced bundle to prove a secret never entered it.
+zip.workspace = true
 
 [lints]
 workspace = true
