@@ -6,7 +6,7 @@
 > Обновляется каждый раз, когда меняется форма системы: новый крейт, новый слой,
 > новая операционная задача.
 
-**Дата последней ревизии:** 2026-07-25
+**Дата последней ревизии:** 2026-07-25 (вторая ревизия)
 **Состояние:** этапы S0–S9 завершены (S6+S7 и S8+S9 — каждая пара выполнена в одной
 ветке/задаче по явному указанию владельца). Все девять крейтов транша «Ядро»
 (`codepack-core`, `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`,
@@ -27,9 +27,9 @@ S5/S6 без единого вызывающего (`fit_to_budget`, `cleanup_ol
 | Область | Состояние |
 |---|---|
 | Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
-| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). **2026-07-25**: `profiles/` — второй legacy-файл настроек (`~/.project_exporter_profiles.json`, Q8): загрузка/сохранение, слияние с встроенными профилями, применение переопределений; `Config` получил `history_keep_last_n` и `token_budget`; `AppPaths` — `user_profiles_file()`/`model_limits_file()`. 72 юнит- + 6 интеграционных тестов |
+| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). **2026-07-25**: `profiles/` — второй legacy-файл настроек (`~/.project_exporter_profiles.json`, Q8): загрузка/сохранение, слияние с встроенными профилями, применение переопределений; `Config` получил `history_keep_last_n` и `token_budget`; `AppPaths` — `user_profiles_file()`/`model_limits_file()`; `classify.rs` — единственное определение `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`TEXT_FILENAMES_WITHOUT_EXTENSION`/`should_consider_text_file`/`looks_binary` (Q7, дубль из `-scanner`/`-security` устранён). 78 юнит- + 6 интеграционных тестов |
 | `codepack-scanner` | **готов (S2 + закалка 2026-07-25)**: базовое+стековое игнорирование директорий (`walk.rs`, `IgnoredDirMatcher`, `walkdir` без следования симлинкам), `.exportignore`/кастомные правила (`ignore/`, ручной `fnmatch`-эквивалент на `regex`), детектор 12 стеков (`stack.rs`), классификация текст/бинарь (`classify.rs`), `build_export_plan()`/`write_export_plan_files()` (`plan/`, JSON+Markdown, порядок полей — контракт I5). **2026-07-25**: план применяет safe-export-mode через предикат вызывающей стороны (`SafetyClassifier`, без зависимости на `codepack-security`); `PlanSummary` вернул `estimated_included_size`/`skipped_dirs_count`; порядок обхода воспроизводит `os.walk` + NTFS-коллацию. 85 юнит- + 13 интеграционных тестов |
-| `codepack-security` | **готов (S3)**: три safe-режима (`policy/`), редактирование секретов с безбэкреференсным переписыванием legacy-регекса (`redact.rs`), эвристический сканер v3 (`scan/`) — sensitive-файлы, secret-каскад (4 уровня уверенности), 9 risky-code правил, плюс новое из BLUEPRINT §B.1: 10 провайдер-сигнатур, энтропия Шеннона, `aho-corasick`-предфильтр (`patterns/`). Выходы `.txt`/`.json`/SARIF 2.1.0 (`scan/write/`). Корпус-baseline (I9): parity P=1.000/R=0.312/F1=0.476, full P=1.000/R=1.000/F1=1.000. 111 юнит- + 7 интеграционных тестов |
+| `codepack-security` | **готов (S3)**: три safe-режима (`policy/`), редактирование секретов с безбэкреференсным переписыванием legacy-регекса (`redact.rs`), эвристический сканер v3 (`scan/`) — sensitive-файлы, secret-каскад (4 уровня уверенности), 9 risky-code правил, плюс новое из BLUEPRINT §B.1: 11 провайдер-сигнатур (включая контекстную `aws-secret-access-key`, Q15), энтропия Шеннона, `aho-corasick`-предфильтр (`patterns/`). Выходы `.txt`/`.json`/SARIF 2.1.0 (`scan/write/`). Корпус-baseline (I9): parity P=1.000/R=0.312/F1=0.476, full P=1.000/R=1.000/F1=1.000. 111 юнит- + 7 интеграционных тестов |
 | `codepack-diff` | **готов (S4)**: 4 режима diff (`all`/`last_export`/`git_ref`/`uncommitted`) через `git2` (только чтение, никогда сеть; с 2026-07-25 `git_ref` сравнивает `base..target`, а не только `base..HEAD` — Q9), снапшот проекта с потоковым SHA-256 (`snapshot/`), `last_export` берёт предыдущий снапшот аргументом (без хранилища — это S5), отчёт `29_export_comparison_report.md`. Первая C-зависимость воркспейса (`libgit2-sys`, vendored, без `https`/`ssh`/`cred`-фич). 42 теста |
 | `codepack-storage` | **готов (S5)**: SQLite-схема из 7 таблиц + `schema_version` (BLUEPRINT §D.2/§D.3), `rusqlite` (bundled, вторая C-зависимость воркспейса после `git2`), встроенные пронумерованные миграции, `record_export_run()` — единственная точка записи (снапшот только вставляется, никогда не обновляется — структурная гарантия инварианта I6), `import_legacy_history()` (явный opt-in, воспроизводит найденный legacy-баг с «отравленным» пустым снапшотом как есть), per-project ретеншн (`cleanup_old_runs`, `ON DELETE CASCADE`). Крейт не имеет ни одной рантайм-зависимости от `codepack-core` — принимает путь к БД параметром. 22 теста (включая WAL/конкурентный доступ на реальных файлах) |
 | `codepack-tokens` | **готов (S6)**: `format_bytes` (порт 1:1, инвариант I4), `estimate_tokens_fallback` (`max(1, round(B/3.5))` — легаси использует `round`, не `ceil`, как упрощает BLUEPRINT §E.1) и калиброванный `estimate_tokens_refined` (ASCII/кириллица-UTF8), обе публичны и не подменяют друг друга. `ModelContextLimits` (4 записи legacy + `load_or_default` — слияние с файлом-переопределением, битый файл = ошибка; потребитель таблицы — S11, legacy использовал её только в GUI). `fit_to_budget` — детерминированный жадный отбор по плотности ценности, `importance` — параметр вызывающей стороны (движок передаёт ранжирование из `16_key_files_report`). Чистый крейт без зависимости от `codepack-core` или любого другого `codepack-*`. 22 теста |
@@ -70,16 +70,18 @@ S5/S6 без единого вызывающего (`fit_to_budget`, `cleanup_ol
 
 ## Известный незакрытый долг ядра
 
-- **Q7** — `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`should_consider_text_file`/`looks_binary`
-  по-прежнему продублированы в `codepack-scanner` и `codepack-security`. Владелец решил
-  переносить их в `codepack-core` до S10; перенос не выполнен.
-- **Q15** — провайдер-сигнатура «AWS Secret (по контексту)» (BLUEPRINT §B.1) не
-  реализована: есть только Access Key ID (`AKIA…`).
+Q7, Q15 и Q16 закрыты 2026-07-25 отдельной задачей после закалки: константы
+классификации текст/бинарь переехали в `codepack-core::classify` (дубля больше нет),
+добавлена контекстная сигнатура `aws-secret-access-key`, и закрыта унаследованная от
+legacy утечка I3, когда секрет содержит `=`. Осталось:
+
 - **Q13** — `codepack-reports` проверяет отмену только между отчётами, не внутри цикла по
-  файлам каждого отчёта. На уровне пайплайна риск закрыт (движок проверяет отмену внутри
-  циклов своих шагов), внутри крейта — нет.
-- **Q12** — локализация артефактов остаётся пилотом на одном отчёте.
+  файлам каждого отчёта. Закрыт как **разрешённое отклонение** (решение владельца
+  2026-07-25): на уровне пайплайна риск снят, переделка ~19 модулей не оправдана.
+- **Q12** — локализация артефактов остаётся пилотом на одном отчёте (до S11).
 - **Q14** — разбиение архива использует First-Fit, а не First-Fit Decreasing.
+- **Q17** — правило «одна находка на строку» применяется только когда сработал
+  keyword-каскад; на строке без keyword провайдер и энтропия могут дать две находки.
 - `cargo deny check` не запускался локально с S8: бинарь `cargo-deny` отсутствует в
   песочнице разработки. В CI он ставится и выполняется.
 
