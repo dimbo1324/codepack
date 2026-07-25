@@ -174,7 +174,11 @@ fn resolve_output_root(
     let resolved = commands::canonicalize_existing(&path)?;
     if resolved.starts_with(source_root) {
         return Err(CliError::message(format!(
-            "refusing to write the bundle into the project being exported ({}): the              export never writes inside the source folder. Choose an --out outside it.",
+            concat!(
+                "refusing to write the bundle into {}: it is inside the project being ",
+                "exported, and the export never writes into the source folder. ",
+                "Choose a directory outside it."
+            ),
             resolved.display()
         )));
     }
