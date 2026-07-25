@@ -58,11 +58,30 @@ fn bar(score: i64) -> String {
     "█".repeat(filled) + &"░".repeat(10 - filled)
 }
 
-struct Scores {
-    areas: Vec<(&'static str, i64, Vec<String>)>,
+/// One scored area (Architecture, Security, ...): name, clamped 0-100 score, and the
+/// heuristic signals that produced it.
+pub(crate) struct AreaScore {
+    pub name: &'static str,
+    pub score: i64,
+    pub reasons: Vec<String>,
 }
 
-fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
+pub(crate) struct Scores {
+    pub areas: Vec<AreaScore>,
+}
+
+impl Scores {
+    /// The report's own "Overall score" line: the mean of every area, rounded.
+    /// Exposed so [`crate::reports::overview`] shows the identical number rather than
+    /// re-deriving it — two "the score" values that could silently disagree would be
+    /// worse than one computation reused twice.
+    pub(crate) fn overall(&self) -> i64 {
+        let total: i64 = self.areas.iter().map(|area| area.score).sum();
+        (total as f64 / self.areas.len().max(1) as f64).round() as i64
+    }
+}
+
+pub(crate) fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
     let inventory = ctx.inventory;
     let stack = crate::context::detect_stack(&ctx.staging_root, inventory);
 
@@ -114,7 +133,7 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
         .filter(|file| LOCKFILE_NAMES.contains(&file_name_of(&file.relative_path)))
         .collect();
 
-    let mut areas: Vec<(&'static str, i64, Vec<String>)> = Vec::new();
+    let mut areas: Vec<AreaScore> = Vec::new();
 
     let mut architecture = 62i64;
     let mut architecture_reasons = Vec::new();
@@ -147,7 +166,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
         architecture -= 8;
         architecture_reasons.push("several large source files need decomposition".to_string());
     }
-    areas.push(("Architecture", architecture, architecture_reasons));
+    areas.push(AreaScore {
+        name: "Architecture",
+        score: architecture,
+        reasons: architecture_reasons,
+    });
 
     let mut security = 82i64;
     let mut security_reasons = Vec::new();
@@ -165,7 +188,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
         security += 3;
         security_reasons.push("dependency lockfile(s) detected".to_string());
     }
-    areas.push(("Security", security, security_reasons));
+    areas.push(AreaScore {
+        name: "Security",
+        score: security,
+        reasons: security_reasons,
+    });
 
     let mut maintainability = 64i64;
     let mut maintainability_reasons = Vec::new();
@@ -181,7 +208,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
     if !large_files.is_empty() {
         maintainability_reasons.push(format!("{} files are relatively large", large_files.len()));
     }
-    areas.push(("Maintainability", maintainability, maintainability_reasons));
+    areas.push(AreaScore {
+        name: "Maintainability",
+        score: maintainability,
+        reasons: maintainability_reasons,
+    });
 
     let mut testing = 30 + (test_files.len() as i64 * 6).min(42);
     let mut testing_reasons = Vec::new();
@@ -194,7 +225,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
     } else {
         testing_reasons.push("no test-like files detected".to_string());
     }
-    areas.push(("Testing", testing, testing_reasons));
+    areas.push(AreaScore {
+        name: "Testing",
+        score: testing,
+        reasons: testing_reasons,
+    });
 
     let mut documentation = 30 + (docs.len() as i64 * 8).min(48);
     let mut documentation_reasons = Vec::new();
@@ -209,7 +244,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
     if docs.is_empty() {
         documentation_reasons.push("documentation is minimal or absent".to_string());
     }
-    areas.push(("Documentation", documentation, documentation_reasons));
+    areas.push(AreaScore {
+        name: "Documentation",
+        score: documentation,
+        reasons: documentation_reasons,
+    });
 
     let mut dep_hygiene = 62i64;
     let mut dep_hygiene_reasons = Vec::new();
@@ -226,7 +265,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
         dep_hygiene_reasons
             .push("multiple package managers may increase maintenance cost".to_string());
     }
-    areas.push(("Dependency Hygiene", dep_hygiene, dep_hygiene_reasons));
+    areas.push(AreaScore {
+        name: "Dependency Hygiene",
+        score: dep_hygiene,
+        reasons: dep_hygiene_reasons,
+    });
 
     let mut ai_readiness = 78i64;
     let mut ai_readiness_reasons = Vec::new();
@@ -243,7 +286,11 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
         ai_readiness_reasons
             .push("sensitive-looking files reduce safe sharing readiness".to_string());
     }
-    areas.push(("AI Readiness", ai_readiness, ai_readiness_reasons));
+    areas.push(AreaScore {
+        name: "AI Readiness",
+        score: ai_readiness,
+        reasons: ai_readiness_reasons,
+    });
 
     let mut export_safety = 92i64;
     let mut export_safety_reasons = Vec::new();
@@ -253,11 +300,19 @@ fn compute_scores(ctx: &ReportContext<'_>) -> Scores {
     } else {
         export_safety_reasons.push("exported copy appears safe by filename heuristics".to_string());
     }
-    areas.push(("Export Safety", export_safety, export_safety_reasons));
+    areas.push(AreaScore {
+        name: "Export Safety",
+        score: export_safety,
+        reasons: export_safety_reasons,
+    });
 
-    let areas: Vec<(&'static str, i64, Vec<String>)> = areas
+    let areas: Vec<AreaScore> = areas
         .into_iter()
-        .map(|(name, score, reasons)| (name, clamp(score), reasons))
+        .map(|area| AreaScore {
+            name: area.name,
+            score: clamp(area.score),
+            reasons: area.reasons,
+        })
         .collect();
 
     Scores { areas }
@@ -268,10 +323,7 @@ fn write_project_health_report(
     output_file: &Path,
 ) -> Result<(), ReportError> {
     let scores = compute_scores(ctx);
-    let overall = {
-        let total: i64 = scores.areas.iter().map(|(_, score, _)| *score).sum();
-        (total as f64 / scores.areas.len() as f64).round() as i64
-    };
+    let overall = scores.overall();
 
     let mut out = String::new();
     out.push_str("# Project Health Report\n\n");
@@ -279,17 +331,22 @@ fn write_project_health_report(
     out.push_str(&format!("Overall score: **{overall}/100**\n\n"));
     out.push_str("| Area | Score | Signal |\n");
     out.push_str("|---|---:|---|\n");
-    for (name, score, _) in &scores.areas {
-        out.push_str(&format!("| {name} | {score}/100 | `{}` |\n", bar(*score)));
+    for area in &scores.areas {
+        out.push_str(&format!(
+            "| {} | {}/100 | `{}` |\n",
+            area.name,
+            area.score,
+            bar(area.score)
+        ));
     }
 
     out.push_str("\n## Why these scores\n\n");
-    for (name, score, reasons) in &scores.areas {
-        out.push_str(&format!("### {name}: {score}/100\n\n"));
-        if reasons.is_empty() {
+    for area in &scores.areas {
+        out.push_str(&format!("### {}: {}/100\n\n", area.name, area.score));
+        if area.reasons.is_empty() {
             out.push_str("- No specific signal.\n");
         } else {
-            for reason in reasons {
+            for reason in &area.reasons {
                 out.push_str(&format!("- {reason}\n"));
             }
         }

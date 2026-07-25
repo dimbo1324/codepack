@@ -185,7 +185,15 @@ pub fn importance_ranking(ctx: &ReportContext<'_>) -> std::collections::BTreeMap
         .collect()
 }
 
-fn write_key_files_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
+/// Every file with a positive score, ranked highest-first (ties broken by path,
+/// case-insensitively) — the same order `16_key_files_report.md` renders in.
+///
+/// Shared with [`crate::reports::onboarding`], which needs "the top N files to read
+/// first" and must agree with the report a reader can open to see the full ranking;
+/// two independently-scored top-N lists could silently disagree.
+pub(crate) fn ranked_key_files<'a>(
+    ctx: &ReportContext<'a>,
+) -> Vec<(i64, &'a InventoryFile, Vec<String>)> {
     let graph = collect(ctx);
     let imported_by = graph.in_degree();
     let max_bytes = ctx.config.effective_max_text_file_bytes();
@@ -206,6 +214,11 @@ fn write_key_files_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result
                 .cmp(&b.1.relative_path.to_lowercase())
         })
     });
+    scored
+}
+
+fn write_key_files_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
+    let scored = ranked_key_files(ctx);
 
     let project_name = ctx
         .staging_root
