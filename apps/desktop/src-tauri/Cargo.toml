@@ -41,6 +41,9 @@ thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Test-only: builds a real archive so the bundle-extraction path is exercised against
+# an actual ZIP rather than a pre-extracted directory.
+zip.workspace = true
 
 [lints]
 workspace = true

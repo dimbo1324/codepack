@@ -40,10 +40,21 @@ cargo build --workspace
 pnpm install --frozen-lockfile
 pnpm --filter @codepack/ui typecheck
 pnpm --filter @codepack/ui lint
+pnpm --filter @codepack/ui build
 ```
 
 Frontend commands require `pnpm install` once. The frontend lives in
-`apps/desktop/ui`; the Tauri shell arrives in stage S11.
+`apps/desktop/ui`; the Tauri shell is `apps/desktop/src-tauri` (crate
+`codepack-desktop`), a normal member of the cargo workspace — `cargo xtask gate` builds
+and tests it like any other crate.
+
+Running the app in development needs both halves, which the Tauri CLI starts together:
+
+```powershell
+pnpm --filter @codepack/ui exec tauri dev
+```
+
+Producing a native installer (`tauri build`) is stage S14, not S11.
 
 ## Gate policy
 

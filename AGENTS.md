@@ -350,8 +350,14 @@ Rust workspace under `crates/`:
 
 Other areas:
 
-- `apps/desktop/ui` — TypeScript frontend (pnpm workspace).
-  `apps/desktop/src-tauri` is added in stage S11; it does not exist yet.
+- `apps/desktop/ui` — Svelte + Vite + TypeScript frontend (pnpm workspace).
+- `apps/desktop/src-tauri` — the Tauri shell (crate `codepack-desktop`, binary
+  `codepack`). It is a member of the same cargo workspace as `crates/*`, and it calls
+  `codepack-engine` directly rather than shelling out to `codepack-cli`: the two front
+  ends sit side by side over the engine (BLUEPRINT §C.2), not in a chain.
+  The webview holds **no filesystem permission** (`capabilities/default.json`); every
+  file operation is a `#[tauri::command]`, and the frontend's only route to the backend
+  is `ui/src/lib/api/client.ts`.
 - `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
 - `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
@@ -438,10 +444,21 @@ cargo build --workspace
 pnpm install --frozen-lockfile
 pnpm --filter @codepack/ui typecheck
 pnpm --filter @codepack/ui lint
+pnpm --filter @codepack/ui build
 ```
 
 Frontend commands require `pnpm install` once. The frontend lives in
-`apps/desktop/ui`; the Tauri shell arrives in stage S11.
+`apps/desktop/ui`; the Tauri shell is `apps/desktop/src-tauri` (crate
+`codepack-desktop`), a normal member of the cargo workspace — `cargo xtask gate` builds
+and tests it like any other crate.
+
+Running the app in development needs both halves, which the Tauri CLI starts together:
+
+```powershell
+pnpm --filter @codepack/ui exec tauri dev
+```
+
+Producing a native installer (`tauri build`) is stage S14, not S11.
 
 ## Gate policy
 

@@ -100,14 +100,17 @@ pub fn start_export(
     });
 
     std::thread::spawn(move || {
-        let outcome = run_to_completion(
-            &root,
-            &output_root,
-            &config,
-            &file_overrides,
-            &sender,
-            &cancel,
-        );
+        let outcome = open_database().and_then(|mut connection| {
+            run_to_completion(
+                &mut connection,
+                &root,
+                &output_root,
+                &config,
+                &file_overrides,
+                &sender,
+                &cancel,
+            )
+        });
         // Dropping the sender ends the forwarding thread's loop.
         drop(sender);
 
@@ -134,7 +137,16 @@ pub fn start_export(
 }
 
 /// The export itself, on the background thread.
-fn run_to_completion(
+///
+/// Takes the database connection as a parameter rather than opening it: that is what
+/// lets the tests drive a whole export against a temporary database instead of the
+/// user's real history file, and an export is far too consequential to have its only
+/// coverage be a mocked one.
+///
+/// `pub` rather than `pub(crate)` so the integration tests in `tests/` can reach it —
+/// that is the whole reason this crate has a `[lib]` target alongside its binary.
+pub fn run_to_completion(
+    connection: &mut codepack_storage::Connection,
     root: &std::path::Path,
     output_root: &std::path::Path,
     config: &Config,
@@ -142,9 +154,8 @@ fn run_to_completion(
     sender: &codepack_core::ProgressSender,
     cancel: &codepack_core::CancellationToken,
 ) -> CommandResult<ExportReport> {
-    let mut connection = open_database()?;
     let outcome = codepack_engine::run_export(
-        &mut connection,
+        connection,
         root,
         output_root,
         config,
@@ -204,31 +215,96 @@ pub fn cancel_export(state: State<'_, AppState>, run_id: String) -> CommandResul
     Ok(())
 }
 
+/// Where an export's reports actually live, once the run has finished.
+///
+/// The bundle is written into a **staging directory that the pipeline then deletes** —
+/// the surviving artifact is the archive. So neither `PROJECT_PROFILE.json` nor
+/// `REPORT_DASHBOARD.html` exists as a loose file next to the result, and reading them
+/// means extracting first. (A run with `keep_staging_folder` left staging in place, but
+/// relying on that would make Analytics work only for users who enabled a debugging
+/// setting.)
+///
+/// Extraction goes to a per-bundle directory beside the archive rather than a temporary
+/// one, so the dashboard's relative links to the other reports keep resolving after this
+/// call returns and the user can browse them. Extracting again over an existing
+/// directory is harmless and keeps the copy current.
+fn extracted_bundle_dir(result_path: &str) -> CommandResult<std::path::PathBuf> {
+    let path = std::path::Path::new(result_path);
+
+    // A split export hands back the archive-set *directory*; a single-ZIP export hands
+    // back the file.
+    if path.is_dir() {
+        if path.join("ARCHIVE_SET_MANIFEST.json").is_file() {
+            let destination = path.join("_extracted");
+            codepack_archive::restore_archive_set(path, &destination).map_err(CommandError::new)?;
+            return Ok(destination);
+        }
+        // Already-extracted content, or a kept staging directory.
+        return Ok(path.to_path_buf());
+    }
+
+    if !path.is_file() {
+        return Err(CommandError::new(format!(
+            "the export result is no longer where it was recorded: {result_path}"
+        )));
+    }
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| CommandError::new("the result path has no parent directory"))?;
+    let stem = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "bundle".to_string());
+    let destination = parent.join(format!("{stem}_extracted"));
+
+    // `extract_zip_safely` validates every entry against path traversal before writing
+    // (`codepack-archive`'s own dual check), which matters here because the archive may
+    // have been moved or replaced since the export wrote it.
+    codepack_archive::extract_zip_safely(path, &destination).map_err(CommandError::new)?;
+    Ok(destination)
+}
+
+/// Finds a bundle file by name, checking the layouts an export can produce.
+fn find_in_bundle(bundle_dir: &std::path::Path, relative: &[&str]) -> Option<std::path::PathBuf> {
+    // Reports live under `reports/insights/`; the manifest and project profile sit at the
+    // bundle root. A bundle whose project directory was included nests everything one
+    // level down under the project name, so the root's single subdirectory is tried too.
+    let mut roots = vec![bundle_dir.to_path_buf()];
+    if let Ok(entries) = std::fs::read_dir(bundle_dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                roots.push(entry.path());
+            }
+        }
+    }
+
+    for root in roots {
+        for candidate in relative {
+            let path = root.join(candidate);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
 /// Reads back the `PROJECT_PROFILE.json` a past export wrote, for the Analytics page.
 ///
-/// `result_path` is an archive the user picked from history. The profile lives beside
-/// it in the bundle, so this looks in the archive's own directory rather than asking the
-/// frontend for a second path it would have to construct.
+/// `result_path` is whatever the run recorded — an archive, or an archive-set directory.
+/// The profile is read from inside it; see [`extracted_bundle_dir`] for why extraction is
+/// necessary rather than looking beside the file.
 #[tauri::command]
 pub fn read_project_profile(
     result_path: String,
 ) -> CommandResult<crate::dto::ProjectProfileSummary> {
-    let path = std::path::Path::new(&result_path);
-    let bundle_dir = if path.is_dir() {
-        path.to_path_buf()
-    } else {
-        path.parent()
-            .ok_or_else(|| CommandError::new("the result path has no parent directory"))?
-            .to_path_buf()
-    };
-
-    let profile_file = bundle_dir.join("PROJECT_PROFILE.json");
-    if !profile_file.is_file() {
-        return Err(CommandError::new(
-            "this export has no PROJECT_PROFILE.json beside it; it may have been moved, \
-             or the run was cancelled before analytics ran",
-        ));
-    }
+    let bundle_dir = extracted_bundle_dir(&result_path)?;
+    let profile_file = find_in_bundle(&bundle_dir, &["PROJECT_PROFILE.json"]).ok_or_else(|| {
+        CommandError::new(
+            "this export contains no PROJECT_PROFILE.json; the run may have been cancelled              before its analytics step ran",
+        )
+    })?;
 
     let text = std::fs::read_to_string(&profile_file)?;
     let value: serde_json::Value = serde_json::from_str(&text)?;
@@ -236,25 +312,9 @@ pub fn read_project_profile(
 
     Ok(crate::dto::ProjectProfileSummary {
         project_type: string_at(&value, "project_type"),
-        detected_stack: value["detected_stack"]
-            .as_array()
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| item.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        detected_stack: string_array_at(&value, "detected_stack"),
         risk_level: string_at(&value, "risk_level"),
-        risk_reasons: value["risk_reasons"]
-            .as_array()
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| item.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        risk_reasons: string_array_at(&value, "risk_reasons"),
         files: counts["files"].as_u64().unwrap_or(0) as usize,
         folders: counts["folders"].as_u64().unwrap_or(0) as usize,
         total_size_bytes: counts["total_size_bytes"].as_u64().unwrap_or(0),
@@ -265,39 +325,37 @@ fn string_at(value: &serde_json::Value, key: &str) -> String {
     value[key].as_str().unwrap_or_default().to_string()
 }
 
-/// Opens the bundle's HTML dashboard with the OS's default handler.
+fn string_array_at(value: &serde_json::Value, key: &str) -> Vec<String> {
+    value[key]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Extracts the bundle and opens its HTML dashboard with the OS's default handler.
 ///
-/// The dashboard links to the other reports by relative path, so it is opened from the
-/// directory it was written into — opening a copy elsewhere would give a page whose
-/// links all break.
+/// Opened from the extracted directory, not a temporary copy, so the page's relative
+/// links to the other reports resolve and the user can actually browse them.
 #[tauri::command]
 pub fn open_dashboard(result_path: String) -> CommandResult<()> {
-    let path = std::path::Path::new(&result_path);
-    let bundle_dir = if path.is_dir() {
-        path.to_path_buf()
-    } else {
-        path.parent()
-            .ok_or_else(|| CommandError::new("the result path has no parent directory"))?
-            .to_path_buf()
-    };
-
-    let dashboard = bundle_dir
-        .join("reports")
-        .join("insights")
-        .join("REPORT_DASHBOARD.html");
-    let dashboard = if dashboard.is_file() {
-        dashboard
-    } else {
-        // Bundles built with a flat report layout keep it beside the manifest.
-        bundle_dir.join("REPORT_DASHBOARD.html")
-    };
-
-    if !dashboard.is_file() {
-        return Err(CommandError::new(
-            "this export has no REPORT_DASHBOARD.html; the run may have been cancelled \
-             before its reports were written",
-        ));
-    }
+    let bundle_dir = extracted_bundle_dir(&result_path)?;
+    let dashboard = find_in_bundle(
+        &bundle_dir,
+        &[
+            "reports/insights/REPORT_DASHBOARD.html",
+            "REPORT_DASHBOARD.html",
+        ],
+    )
+    .ok_or_else(|| {
+        CommandError::new(
+            "this export contains no REPORT_DASHBOARD.html; the run may have been cancelled              before its reports were written",
+        )
+    })?;
 
     tauri_plugin_opener::open_path(dashboard.display().to_string(), None::<&str>)
         .map_err(CommandError::new)
@@ -307,11 +365,11 @@ pub fn open_dashboard(result_path: String) -> CommandResult<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn reading_a_profile_from_a_bundle_directory_returns_its_summary() {
-        let dir = tempfile::tempdir().unwrap();
+    /// A bundle directory as it looks once extracted: profile at the root, dashboard
+    /// under the reports tree.
+    fn extracted_bundle(dir: &std::path::Path) {
         std::fs::write(
-            dir.path().join("PROJECT_PROFILE.json"),
+            dir.join("PROJECT_PROFILE.json"),
             r#"{
                 "project_type": "fullstack",
                 "detected_stack": ["Rust", "TypeScript"],
@@ -321,35 +379,40 @@ mod tests {
             }"#,
         )
         .unwrap();
+        let reports = dir.join("reports").join("insights");
+        std::fs::create_dir_all(&reports).unwrap();
+        std::fs::write(reports.join("REPORT_DASHBOARD.html"), "<html></html>").unwrap();
+    }
+
+    #[test]
+    fn a_profile_is_read_from_an_already_extracted_bundle_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        extracted_bundle(dir.path());
 
         let summary = read_project_profile(dir.path().display().to_string()).unwrap();
         assert_eq!(summary.project_type, "fullstack");
         assert_eq!(summary.detected_stack, vec!["Rust", "TypeScript"]);
         assert_eq!(summary.risk_level, "medium");
+        assert_eq!(summary.risk_reasons, vec!["secrets found"]);
         assert_eq!(summary.files, 42);
         assert_eq!(summary.folders, 7);
         assert_eq!(summary.total_size_bytes, 1024);
     }
 
     #[test]
-    fn a_profile_is_found_beside_an_archive_file_not_only_in_a_directory() {
-        // History hands back the archive path, not the bundle directory.
+    fn a_bundle_that_nests_everything_under_the_project_name_is_still_searched() {
+        // An export with `include_project_in_zip` puts the reports one level down.
         let dir = tempfile::tempdir().unwrap();
-        let archive = dir.path().join("demo_export.zip");
-        std::fs::write(&archive, b"not really a zip").unwrap();
-        std::fs::write(
-            dir.path().join("PROJECT_PROFILE.json"),
-            r#"{"project_type":"library","detected_stack":[],"risk_level":"low",
-                "risk_reasons":[],"counts":{"files":1,"folders":1,"total_size_bytes":2}}"#,
-        )
-        .unwrap();
+        let nested = dir.path().join("demo_export");
+        std::fs::create_dir_all(&nested).unwrap();
+        extracted_bundle(&nested);
 
-        let summary = read_project_profile(archive.display().to_string()).unwrap();
-        assert_eq!(summary.project_type, "library");
+        let summary = read_project_profile(dir.path().display().to_string()).unwrap();
+        assert_eq!(summary.project_type, "fullstack");
     }
 
     #[test]
-    fn a_missing_profile_explains_itself_rather_than_failing_opaquely() {
+    fn a_bundle_with_no_profile_explains_itself_rather_than_failing_opaquely() {
         let dir = tempfile::tempdir().unwrap();
         let error = read_project_profile(dir.path().display().to_string()).unwrap_err();
         assert!(
@@ -372,12 +435,68 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_dashboard_explains_itself() {
+    fn a_result_path_that_no_longer_exists_says_so() {
+        // Archives get moved and deleted; history still remembers them.
         let dir = tempfile::tempdir().unwrap();
-        // `open_dashboard` needs an AppHandle, so only the lookup half is exercised
-        // here; the error path is reached before the handle is used.
-        let bundle = dir.path().join("bundle");
-        std::fs::create_dir_all(&bundle).unwrap();
-        assert!(!bundle.join("REPORT_DASHBOARD.html").exists());
+        let missing = dir.path().join("gone.zip");
+        let error = read_project_profile(missing.display().to_string()).unwrap_err();
+        assert!(
+            error.message.contains("no longer where it was recorded"),
+            "unhelpful message: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_real_archive_is_extracted_and_read_from_the_inside() {
+        // The case the loose-file version of this command could never handle: the
+        // pipeline deletes staging, so the profile exists only inside the ZIP.
+        let source = tempfile::tempdir().unwrap();
+        extracted_bundle(source.path());
+
+        let out = tempfile::tempdir().unwrap();
+        let archive_path = out.path().join("demo_export.zip");
+        let file = std::fs::File::create(&archive_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        for relative in [
+            "PROJECT_PROFILE.json",
+            "reports/insights/REPORT_DASHBOARD.html",
+        ] {
+            writer.start_file(relative, options).unwrap();
+            let native = source
+                .path()
+                .join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
+            let bytes = std::fs::read(native).unwrap();
+            std::io::Write::write_all(&mut writer, &bytes).unwrap();
+        }
+        writer.finish().unwrap();
+
+        let summary = read_project_profile(archive_path.display().to_string()).unwrap();
+        assert_eq!(summary.project_type, "fullstack");
+        assert_eq!(summary.files, 42);
+
+        // The extraction lands beside the archive, so the dashboard's relative links
+        // still resolve for the user afterwards.
+        assert!(out.path().join("demo_export_extracted").is_dir());
+    }
+
+    #[test]
+    fn the_dashboard_is_found_under_the_reports_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        extracted_bundle(dir.path());
+        assert!(find_in_bundle(dir.path(), &["reports/insights/REPORT_DASHBOARD.html"]).is_some());
+    }
+
+    #[test]
+    fn a_bundle_with_no_dashboard_is_reported_rather_than_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
+        let error = open_dashboard(dir.path().display().to_string()).unwrap_err();
+        assert!(
+            error.message.contains("REPORT_DASHBOARD.html"),
+            "unhelpful message: {}",
+            error.message
+        );
     }
 }
