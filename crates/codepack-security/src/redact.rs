@@ -40,12 +40,19 @@ use regex::Captures;
 use crate::patterns::keyword::SECRET_PATTERNS;
 
 fn replace_match(matched: &str) -> String {
+    // The retained key name goes through the same sanitizer as the scan-report path
+    // (Q16). This pass rewrites *exported file content* and the clipboard, so a secret
+    // surviving here is handed to whoever receives the bundle — strictly worse than the
+    // finding-message leak Q16 was opened for, and the identical split-on-first-`=`
+    // cause. `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
+    // `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
+    use crate::patterns::keyword::sanitize_key_prefix as sanitize;
     if let Some(eq_pos) = matched.find('=') {
-        let key = &matched[..eq_pos];
+        let key = sanitize(&matched[..eq_pos]);
         return format!("{key}=<REDACTED>");
     }
     if let Some(colon_pos) = matched.find(':') {
-        let key = &matched[..colon_pos];
+        let key = sanitize(&matched[..colon_pos]);
         return format!("{key}: <REDACTED>");
     }
     "<REDACTED_SECRET>".to_string()
@@ -73,6 +80,18 @@ pub fn redact_secrets(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_secret_containing_an_equals_sign_does_not_survive_into_exported_content() {
+        // This pass rewrites exported file content and the clipboard, so a survivor here
+        // is handed to whoever receives the bundle. `dXNlcjpwYXNzd29yZA==` decodes to
+        // `user:password`.
+        let redacted = redact_secrets(r#"SECRET: "dXNlcjpwYXNzd29yZA==""#);
+        assert!(
+            !redacted.contains("dXNlcjpwYXNzd29yZA"),
+            "secret leaked into exported content: {redacted}"
+        );
+    }
 
     #[test]
     fn redacts_double_quoted_value() {

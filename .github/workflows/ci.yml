@@ -10,7 +10,10 @@ on:
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # `head_ref` is set only for pull_request, `ref` only otherwise, so a branch and its
+  # open PR share one group. Without this, enabling push on every branch would run the
+  # full three-OS matrix twice for every push to a branch that has a PR open.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:

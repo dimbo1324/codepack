@@ -114,72 +114,71 @@ pub fn redacted_line(line: &str) -> String {
     let redacted = crate::redact::redact_secrets(line);
     if SECRET_KEY_PATTERN.is_match(&redacted) {
         if let Some(pos) = redacted.find('=') {
-            let key = redacted[..pos].trim();
-            if looks_like_key_name(key) {
-                return format!("{key}=<REDACTED>");
-            }
-            return "<REDACTED_SECRET_LINE>".to_string();
+            let key = sanitize_key_prefix(redacted[..pos].trim());
+            return format!("{key}=<REDACTED>");
         }
         if let Some(pos) = redacted.find(':') {
-            let key = redacted[..pos].trim();
-            if looks_like_key_name(key) {
-                return format!("{key}: <REDACTED>");
-            }
-            return "<REDACTED_SECRET_LINE>".to_string();
+            let key = sanitize_key_prefix(redacted[..pos].trim());
+            return format!("{key}: <REDACTED>");
         }
         return "<REDACTED_SECRET_LINE>".to_string();
     }
     redacted.trim().to_string()
 }
 
-/// Length at which an unbroken alphanumeric run stops looking like something a person
-/// typed as a name. Real key names of this length are `_`-separated or camelCase, so
-/// they break into shorter runs; encoded blobs do not.
-const ENCODED_RUN_MIN_LEN: usize = 16;
+/// Length at which an unbroken alphanumeric run stops being plausible as a word a
+/// person typed. Real key names break at `_`, `-`, `.` and spaces, so their runs are
+/// short; encoded values do not break at all.
+///
+/// Set to 12 rather than something larger because the run only has to be long enough to
+/// carry a secret: base64 of an 11-byte password is 16 characters, and the first version
+/// of this fix used a 16-character threshold that a 15-character run walked straight
+/// through. The cost of being wrong in this direction is a masked word in a message; the
+/// cost of being wrong in the other direction is a leaked credential.
+const ENCODED_RUN_MIN_LEN: usize = 12;
 
-/// Whether the text before the separator can be shown as a key name.
+/// Masks anything in the retained key-name text that could itself be a secret.
 ///
 /// **Q16 (owner decision 2026-07-25).** Legacy splits on the first `=`/`:` and keeps
-/// everything before it, which silently assumes the separator belongs to a `key=value`
-/// pair. When the separator is *inside* the secret — base64 padding, an
-/// `Authorization: Basic ...` header, a connection string — the "key name" is the secret
-/// itself, and it travelled into the finding message, the JSON, the SARIF, the database
-/// row and the log. That is a direct breach of invariant I3, which is absolute.
+/// everything before it, which assumes the separator belongs to a `key=value` pair. When
+/// the separator sits *inside* the secret — base64 padding, an `Authorization: Basic …`
+/// header — the "key name" is the secret itself, and it travelled into the finding
+/// message, the JSON, the SARIF, the database row and the log. That breaches invariant
+/// I3, which is absolute.
 ///
-/// The check is deliberately narrow rather than a rewrite of the redaction: a prefix is
-/// rejected only when it contains a run of at least [`ENCODED_RUN_MIN_LEN`] alphanumeric
-/// (or `+`/`/`) characters that mixes upper case, lower case **and** digits. Encoded
-/// secrets look like that; key names do not, because `_`, `-`, `.` and spaces break them
-/// into short runs, and long camelCase identifiers rarely carry digits. Requiring all
-/// three properties is what keeps ordinary names — `SECRET_TOKEN`, `JWT_SECRET`,
-/// `AWS_ACCESS_KEY_ID` — accepted, so the golden references are unaffected.
+/// This masks rather than rejects, because rejecting the whole line throws away the
+/// identifier the message exists to carry. A run of at least [`ENCODED_RUN_MIN_LEN`]
+/// alphanumeric characters that is **not purely alphabetic** is replaced; anything else
+/// is kept verbatim. Purely alphabetic is the right exemption: `Authorization`,
+/// `postgres` and `SECRET` survive, while base64, hex digests and random tokens — none
+/// of which are all-letters at that length — do not.
 ///
-/// A rejected prefix falls back to `<REDACTED_SECRET_LINE>`, the same output legacy
-/// already produced for a keyword line with no separator at all.
-fn looks_like_key_name(prefix: &str) -> bool {
-    let mut run_len = 0usize;
-    let mut has_upper = false;
-    let mut has_lower = false;
-    let mut has_digit = false;
+/// The rule deliberately over-masks rather than under-masks. `oauth2ClientSecret` is a
+/// legitimate identifier that carries a digit and will be masked; the result is a less
+/// informative message, never an exposed credential.
+pub(crate) fn sanitize_key_prefix(prefix: &str) -> String {
+    let mut out = String::with_capacity(prefix.len());
+    let mut run = String::new();
 
-    for ch in prefix.chars().chain(std::iter::once(' ')) {
-        let in_run = ch.is_ascii_alphanumeric() || ch == '+' || ch == '/';
-        if in_run {
-            run_len += 1;
-            has_upper |= ch.is_ascii_uppercase();
-            has_lower |= ch.is_ascii_lowercase();
-            has_digit |= ch.is_ascii_digit();
-            continue;
+    let flush = |run: &mut String, out: &mut String| {
+        if run.len() >= ENCODED_RUN_MIN_LEN && !run.chars().all(|c| c.is_ascii_alphabetic()) {
+            out.push_str("<REDACTED>");
+        } else {
+            out.push_str(run);
         }
-        if run_len >= ENCODED_RUN_MIN_LEN && has_upper && has_lower && has_digit {
-            return false;
+        run.clear();
+    };
+
+    for ch in prefix.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '+' || ch == '/' {
+            run.push(ch);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(ch);
         }
-        run_len = 0;
-        has_upper = false;
-        has_lower = false;
-        has_digit = false;
     }
-    true
+    flush(&mut run, &mut out);
+    out
 }
 
 #[cfg(test)]
@@ -201,13 +200,53 @@ mod tests {
     }
 
     #[test]
-    fn a_connection_string_password_does_not_survive_as_the_key_name() {
-        let line = "DATABASE_URL=postgres://admin:s3cr3tP4ss@db.internal:5432/app";
-        let message = redacted_line(line);
+    fn a_short_encoded_secret_is_masked_too_not_just_a_long_one() {
+        // The first version of this fix used a 16-character threshold, which base64 of
+        // an 11-byte password (16 chars) cleared and a 15-character run walked straight
+        // through. `aHVudGVyMnBhc3M=` decodes to `hunter2pass`.
+        let message = redacted_line("curl -H 'Authorization: Basic aHVudGVyMnBhc3M=' # token");
         assert!(
-            !message.contains("s3cr3tP4ss"),
-            "the password leaked into the message: {message}"
+            !message.contains("aHVudGVyMnBhc3M"),
+            "short encoded secret leaked: {message}"
         );
+    }
+
+    #[test]
+    fn a_hex_digest_is_masked_although_it_has_no_uppercase() {
+        // An earlier rule required upper case, lower case *and* digits together, which
+        // let lowercase hex digests through.
+        let message = redacted_line("hash = d41d8cd98f00b204e9800998ecf8427e # token");
+        assert!(
+            !message.contains("d41d8cd98f00b204"),
+            "hex digest leaked: {message}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_key_name_survives_verbatim() {
+        // The masking must not eat the identifier the message exists to carry; these two
+        // shapes are what the golden references contain.
+        assert_eq!(
+            redacted_line("      - JWT_SECRET=fixture-placeholder-value"),
+            "- JWT_SECRET=<REDACTED>"
+        );
+        assert_eq!(
+            redacted_line(r#"SECRET_TOKEN = "placeholder-token-for-fixture-only""#),
+            "SECRET_TOKEN=<REDACTED>"
+        );
+    }
+
+    #[test]
+    fn sanitizer_keeps_words_and_masks_encoded_runs() {
+        assert_eq!(sanitize_key_prefix("- JWT_SECRET"), "- JWT_SECRET");
+        assert_eq!(sanitize_key_prefix("Authorization"), "Authorization");
+        assert_eq!(
+            sanitize_key_prefix("Basic aHVudGVyMnBhc3M"),
+            "Basic <REDACTED>"
+        );
+        // Documented over-masking: a legitimate identifier carrying a digit is masked
+        // rather than risked. Information loss, never exposure.
+        assert_eq!(sanitize_key_prefix("oauth2ClientSecret"), "<REDACTED>");
     }
 
     #[test]

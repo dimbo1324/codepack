@@ -52,6 +52,10 @@ pub static PROVIDER_PATTERNS: LazyLock<Vec<ProviderRule>> = LazyLock::new(|| {
             // precision (invariant I9 holds it at 1.000) for recall, which is the wrong
             // trade for a tool whose whole promise is not crying wolf.
             //
+            // `{40,}` rather than `{40}`: the run is unanchored, so a longer value would
+            // otherwise report a span covering only its first 40 characters and leave the
+            // tail unmasked in the message.
+            //
             // The context required is AWS's own field name, in the spellings the SDKs
             // and the CLI actually use: aws_secret_access_key (CLI credentials file),
             // AWS_SECRET_ACCESS_KEY (environment), secretAccessKey (JS SDK), plus the
@@ -59,7 +63,7 @@ pub static PROVIDER_PATTERNS: LazyLock<Vec<ProviderRule>> = LazyLock::new(|| {
             // itself an AWS SDK field name, not a generic phrase.
             value_group: Some(1),
             regex: Regex::new(
-                r#"(?i)(?:aws[_.\-]?)?secret[_.\-]?access[_.\-]?key["']?\s*[:=]\s*["']?([A-Za-z0-9/+=]{40})"#,
+                r#"(?i)(?:aws[_.\-]?)?secret[_.\-]?access[_.\-]?key["']?\s*[:=]\s*["']?([A-Za-z0-9/+=]{40,})"#,
             )
             .expect("hand-written pattern literal is a valid regex, proven by test coverage"),
         },
@@ -214,6 +218,31 @@ mod tests {
     }
 
     #[test]
+    fn every_declared_value_group_exists_in_its_own_pattern() {
+        // `find_provider_matches` skips a capture it cannot resolve, so a mistyped index
+        // would silently switch the rule off rather than fail loudly.
+        for rule in PROVIDER_PATTERNS.iter() {
+            if let Some(group) = rule.value_group {
+                assert!(
+                    group < rule.regex.captures_len(),
+                    "{} declares value_group {group} but its pattern has {} groups",
+                    rule.rule_id,
+                    rule.regex.captures_len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_longer_than_forty_character_value_is_covered_completely() {
+        let value = "a".repeat(20) + &"B7c".repeat(8) + "de";
+        assert!(value.len() > 40);
+        let line = format!("aws_secret_access_key={value}");
+        let found = find_provider_matches(&line);
+        assert_eq!(&line[found[0].start..found[0].end], value);
+    }
+
+    #[test]
     fn aws_secret_access_key_matches_only_with_its_context() {
         let value = "a".repeat(20) + &"B7c".repeat(6) + "de";
         assert_eq!(value.len(), 40);
@@ -248,7 +277,7 @@ mod tests {
         assert_eq!(
             &line[found[0].start..found[0].end],
             value,
-            "the reported span must cover the secret alone, so masking it leaves the              field name that identifies the finding"
+            "the reported span must cover the secret alone, so masking it leaves the \n             field name that identifies the finding"
         );
     }
 

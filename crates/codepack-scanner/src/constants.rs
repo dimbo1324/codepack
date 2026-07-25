@@ -6,12 +6,12 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-/// Directory basenames pruned during the walk, matched case-insensitively. 18 entries.
 // Re-exported, not redefined: the three classification sets moved to `codepack-core`
 // when Q7 was closed. Keeping the names reachable here preserves every existing
 // `codepack_scanner::TEXT_EXTENSIONS` import.
 pub use codepack_core::{BINARY_EXTENSIONS, TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION};
 
+/// Directory basenames pruned during the walk, matched case-insensitively. 18 entries.
 pub const IGNORED_DIR_NAMES: &[&str] = &[
     ".git",
     "node_modules",
