@@ -12,6 +12,20 @@ name = "codepack"
 path = "src/main.rs"
 
 [dependencies]
+clap.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+codepack-core.workspace = true
+codepack-engine.workspace = true
+codepack-scanner.workspace = true
+codepack-security.workspace = true
+codepack-storage.workspace = true
+codepack-tokens.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
