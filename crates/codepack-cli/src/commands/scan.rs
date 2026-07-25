@@ -92,6 +92,13 @@ fn build(context: &ProjectContext) -> Result<ScanReport> {
         // The budget drops low-value files, which has nothing to do with whether they
         // hold credentials.
         token_budget: 0,
+        // The text-file size limit makes `SecurityOptions` skip a file whole rather
+        // than truncate it, and the skip is invisible in the report. Two of the five
+        // presets enable it (1 MB and 2 MB), so `scan --preset chatgpt` would answer
+        // "No findings" for a credential sitting in a large file. A size limit is a
+        // statement about what is worth *shipping*, never about what is worth looking
+        // at.
+        text_file_size_limit_enabled: false,
         ..context.config.clone()
     };
 
@@ -203,5 +210,52 @@ fn print_human(report: &ScanReport) {
             "  [{}] {} ({}) — {}",
             finding.severity, location, finding.rule, finding.message
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::ResolutionTrace;
+
+    fn context_with(root: &std::path::Path, config: Config) -> ProjectContext {
+        ProjectContext {
+            root: root.to_path_buf(),
+            config,
+            trace: ResolutionTrace::default(),
+        }
+    }
+
+    #[test]
+    fn a_text_file_size_limit_does_not_hide_a_secret_from_the_scan() {
+        // Reachable through `--preset chatgpt`, a user profile, or `.codepack.toml`.
+        // The scanner skips an over-limit file entirely, so without the override this
+        // reported "No findings" for a file that plainly holds a credential — a silent
+        // false negative in the command a CI gate runs.
+        let dir = tempfile::tempdir().unwrap();
+        let mut contents = "# padding
+"
+        .repeat(120_000);
+        contents.push_str(
+            "AWS_SECRET_ACCESS_KEY = \"wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY\"
+",
+        );
+        std::fs::write(dir.path().join("big.py"), &contents).unwrap();
+        assert!(
+            contents.len() > 1024 * 1024,
+            "the file must exceed the limit"
+        );
+
+        let config = Config {
+            text_file_size_limit_enabled: true,
+            max_text_file_mb: 1,
+            ..Config::default()
+        };
+        let report = build(&context_with(dir.path(), config)).unwrap();
+
+        assert!(
+            report.summary.total_findings > 0,
+            "the credential must be reported despite the size limit"
+        );
     }
 }

@@ -51,8 +51,12 @@ jobs:
           cargo build --release -p codepack-cli || exit 1
           mkdir -p "$RUNNER_TEMP/bundle"
 
-          ./target/release/codepack export . --out "$RUNNER_TEMP/bundle" --safe-mode safe --json > "$RUNNER_TEMP/export.json"
-          exported=$?
+          # `|| exported=$?` rather than a bare call followed by `$?`: the shell
+          # GitHub runs this with has `errexit` on, so an unguarded non-zero exit would
+          # abort the step before the code below ever got to look at it -- which is
+          # exactly what happens on 3, the case this step exists to tolerate.
+          exported=0
+          ./target/release/codepack export . --out "$RUNNER_TEMP/bundle" --safe-mode safe --json > "$RUNNER_TEMP/export.json" || exported=$?
 
           # 0 and 3 both mean the export itself worked; 3 additionally reports that the
           # bundle contains critical findings. This repository trips that on purpose --
@@ -78,17 +82,17 @@ jobs:
           printf 'print(1)\n' > "$fixture/main.py"
           printf 'API_KEY=%s\n' 'totally-fake-value-0001' > "$fixture/.env"
 
-          ./target/release/codepack scan "$fixture" > /dev/null 2>&1
-          found=$?
+          found=0
+          ./target/release/codepack scan "$fixture" > /dev/null 2>&1 || found=$?
           if [ "$found" -ne 3 ]; then
             echo "expected exit 3 for a project carrying a credential, got $found" >&2
             exit 1
           fi
 
-          ./target/release/codepack scan "$RUNNER_TEMP/definitely-absent" > /dev/null 2>&1
-          missing=$?
+          missing=0
+          ./target/release/codepack scan "$RUNNER_TEMP/definitely-absent" > /dev/null 2>&1 || missing=$?
           if [ "$missing" -ne 1 ]; then
             echo "expected exit 1 for a missing project, got $missing" >&2
             exit 1
           fi
-          echo "exit code contract ok: 3 for findings, 1 for failure\"
+          echo "exit code contract ok: 3 for findings, 1 for failure"

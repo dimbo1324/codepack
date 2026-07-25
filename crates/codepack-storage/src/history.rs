@@ -96,12 +96,12 @@ mod tests {
     use crate::run::record_export_run;
     use crate::types::{NewExportRun, NewSnapshot, NewSnapshotFile};
 
-    fn memory_db() -> Connection {
+    /// The directory is returned, not leaked: dropping it is what deletes the database
+    /// file when the test ends.
+    fn temp_db() -> (tempfile::TempDir, Connection) {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("codepack.db");
-        let conn = open(&path).unwrap();
-        std::mem::forget(dir);
-        conn
+        let conn = open(&dir.path().join("codepack.db")).unwrap();
+        (dir, conn)
     }
 
     fn run(project_id: i64, started_at: i64) -> NewExportRun {
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn lists_newest_first_and_respects_the_limit() {
-        let mut conn = memory_db();
+        let (_dir, mut conn) = temp_db();
         let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
         for started_at in [10, 20, 30] {
             record_export_run(&mut conn, run(project, started_at), &[], &[], &[], None).unwrap();
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn filters_by_project_and_carries_the_project_name() {
-        let mut conn = memory_db();
+        let (_dir, mut conn) = temp_db();
         let a = find_or_create_project(&conn, "/tmp/a", "alpha", None).unwrap();
         let b = find_or_create_project(&conn, "/tmp/b", "beta", None).unwrap();
         record_export_run(&mut conn, run(a, 10), &[], &[], &[], None).unwrap();
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn produced_snapshot_distinguishes_a_successful_run_from_a_failed_one() {
-        let mut conn = memory_db();
+        let (_dir, mut conn) = temp_db();
         let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
 
         // A run that failed on copy errors: not cancelled, but no baseline recorded.
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn an_empty_database_lists_nothing_rather_than_erroring() {
-        let conn = memory_db();
+        let (_dir, conn) = temp_db();
         assert!(list_export_runs(&conn, None, 10).unwrap().is_empty());
     }
 }
