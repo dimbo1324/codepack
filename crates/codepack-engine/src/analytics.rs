@@ -60,6 +60,7 @@ fn full_job_catalog() -> Vec<ReportJob> {
         .chain(codepack_reports::group_d_jobs())
         .chain(codepack_reports::group_e_jobs())
         .chain(codepack_reports::group_f_jobs())
+        .chain(codepack_reports::group_h_human_jobs())
         .chain(codepack_reports::group_g_finish_jobs())
         .collect()
 }

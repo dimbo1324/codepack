@@ -48,9 +48,7 @@ fn render(summary: &PlainLanguageSummary) -> String {
     };
 
     let security_line = match (summary.total_findings, summary.potential_secrets) {
-        (Some(total), Some(_secrets)) if total == 0 => {
-            "The security scan found nothing to flag.".to_string()
-        }
+        (Some(0), Some(_secrets)) => "The security scan found nothing to flag.".to_string(),
         (Some(total), Some(secrets)) => format!(
             "The security scan flagged {total} item(s), including {secrets} potential secret(s) — all redacted in the full security report."
         ),
@@ -170,7 +168,7 @@ code {{ background: rgba(127, 127, 127, 0.15); padding: 1px 5px; border-radius: 
 <body>
 <main>
 <h1>{project_name}</h1>
-<p class="meta">{project_type} &middot; {stack_line}</p>
+<p class="meta">{project_type} &middot; {stack_line} &middot; <span class="badge {risk_level}">{risk_level} risk</span></p>
 
 <section class="card">
 <h2 style="margin-top:0">Health</h2>
@@ -208,6 +206,7 @@ code {{ background: rgba(127, 127, 127, 0.15); padding: 1px 5px; border-radius: 
         project_name = escape_html(&summary.project_name),
         project_type = escape_html(&summary.project_type),
         stack_line = escape_html(&stack_line),
+        risk_level = escape_html(&summary.risk_level),
         score = summary.health_score.clamp(0, 100),
         score_sentence = escape_html(&score_sentence(summary.health_score)),
         risks_html = risks_html,

@@ -115,6 +115,16 @@ pub fn group_f_jobs() -> [ReportJob; 4] {
     ]
 }
 
+/// Group H (stage S12, BLUEPRINT §B.9): human-oriented artifacts with no legacy
+/// equivalent. Each reads only already-computed, already-redacted data
+/// ([`overview`]/[`onboarding`] via [`crate::humanize`] and
+/// [`key_files::ranked_key_files`]; [`review_checklist`] via `ctx.diff`) — none of them
+/// depend on another Group H/G job's output, so unlike [`dashboard::JOB`] this group has
+/// no ordering requirement relative to the rest of the catalog.
+pub fn group_h_human_jobs() -> [ReportJob; 3] {
+    [overview::JOB, onboarding::JOB, review_checklist::JOB]
+}
+
 /// Group G-finish's report-writer half: `REPORT_DASHBOARD.html`. Must run after every
 /// other job that writes into the same output directory (it reads `22_project_health_
 /// report.md`/`06_security_scan.json` as already-written siblings) — callers assembling

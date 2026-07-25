@@ -303,6 +303,19 @@ fn run_one_fixture(fixture_name: &str) {
     let reference = read_json(&reference_dir.join("27_archive_plan.subset.json"));
     reports.extend(compare("27_archive_plan.subset.json", &ours, &reference));
 
+    // Stage S12 (BLUEPRINT §B.9) added three artifacts legacy has no equivalent of at
+    // all: PROJECT_OVERVIEW.html, ONBOARDING_GUIDE.md, REVIEW_CHECKLIST.md. They are
+    // intended, additive new capability, the same class of difference the
+    // REPORT_PLUGINS.json comparison already carves out for AI_CONTEXT/AI_PROMPTS/
+    // REPORT_DASHBOARD.html (see tests/golden/generate_reference.py's own spec
+    // comment) — excluded here for the same reason, not because the comparison is
+    // wrong to be strict about everything else.
+    const S12_ADDITIVE_ARTIFACTS: &[&str] = &[
+        "reports/insights/PROJECT_OVERVIEW.html",
+        "reports/insights/ONBOARDING_GUIDE.md",
+        "reports/insights/REVIEW_CHECKLIST.md",
+    ];
+
     let mut names: Vec<String> = zip_entry_names(zip)
         .into_iter()
         .map(|name| {
@@ -312,6 +325,7 @@ fn run_one_fixture(fixture_name: &str) {
                 None => normalized,
             }
         })
+        .filter(|name| !S12_ADDITIVE_ARTIFACTS.contains(&name.as_str()))
         .collect();
     names.sort();
     let ours = serde_json::to_value(&names).unwrap();

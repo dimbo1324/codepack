@@ -13,7 +13,10 @@
 //! accurate manifest/index, exactly as legacy's own `REPORT_DESCRIPTIONS` lists
 //! reports produced outside `reports/insights/` too.
 
-use crate::reports::{ai_context_folder, ai_context_pack, ai_prompts, dashboard, runbook};
+use crate::reports::{
+    ai_context_folder, ai_context_pack, ai_prompts, dashboard, onboarding, overview,
+    review_checklist, runbook,
+};
 use crate::reports::{
     api_surface, architecture, architecture_map, backend, code_metrics, code_quality, config,
     dependencies, dependency_graph, dependency_intelligence, docker, file_statistics, frontend,
@@ -104,6 +107,12 @@ pub fn full_report_catalog() -> Vec<(&'static str, &'static str)> {
         (dashboard::JOB.filename, dashboard::JOB.description),
         ("AI_CONTEXT/", ai_context_folder::JOB.description),
         ("AI_PROMPTS/", ai_prompts::JOB.description),
+        (overview::JOB.filename, overview::JOB.description),
+        (onboarding::JOB.filename, onboarding::JOB.description),
+        (
+            review_checklist::JOB.filename,
+            review_checklist::JOB.description,
+        ),
     ]
 }
 
@@ -136,6 +145,9 @@ mod tests {
             "REPORT_DASHBOARD.html",
             "AI_CONTEXT/",
             "AI_PROMPTS/",
+            "PROJECT_OVERVIEW.html",
+            "ONBOARDING_GUIDE.md",
+            "REVIEW_CHECKLIST.md",
         ] {
             assert!(
                 names.contains(&expected),

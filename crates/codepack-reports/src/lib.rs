@@ -78,5 +78,5 @@ pub use plugins_json::write_report_plugins_json;
 pub use project_profile::{ProjectProfile, build_project_profile, write_project_profile_json};
 pub use reports::{
     group_a_jobs, group_b_jobs, group_c_jobs, group_d_jobs, group_e_jobs, group_f_jobs,
-    group_g_finish_jobs,
+    group_g_finish_jobs, group_h_human_jobs,
 };

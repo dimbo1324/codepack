@@ -52,7 +52,14 @@ Per-artifact rules:
   `limit_bytes`, `target_bytes`); every other number in it measures our own bundle.
 * `artifact_names.json` -- the sorted list of entry names in the produced ZIP, with the
   copied-project subdirectory renamed to a fixed placeholder. Compared in full: a
-  missing or extra artifact is precisely the class of regression this catches.
+  missing or extra artifact is precisely the class of regression this catches --
+  except three stage-S12 additions with no legacy equivalent at all
+  (`PROJECT_OVERVIEW.html`, `ONBOARDING_GUIDE.md`, `REVIEW_CHECKLIST.md`, BLUEPRINT
+  §B.9), which the Rust comparison (`crates/codepack-engine/tests/golden.rs`) excludes
+  by name for the same reason `REPORT_PLUGINS.json`'s own comparison already excludes
+  `AI_CONTEXT`/`AI_PROMPTS`/`REPORT_DASHBOARD.html`: additive new capability, not
+  drift. This reference generator does not need its own change for that -- legacy's
+  ZIP simply never contained them, so nothing here has to filter anything out.
 """
 
 from __future__ import annotations
