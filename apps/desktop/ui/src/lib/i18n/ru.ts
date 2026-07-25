@@ -79,6 +79,9 @@ export const ru: Record<TranslationKey, string> = {
   "result.criticalFindings": "Критических находок в бандле: {count}",
   "result.openFolder": "Открыть папку с результатом",
   "result.openDashboard": "Открыть дашборд отчётов",
+  "result.openOverview": "Открыть обзор простыми словами",
+  "result.openOnboarding": "Открыть маршрут онбординга",
+  "result.openReviewChecklist": "Открыть чек-лист ревьюера",
   "result.viewHistory": "Смотреть историю экспортов",
 
   "history.empty": "Экспортов пока нет.",

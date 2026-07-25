@@ -116,6 +116,22 @@ export function openDashboard(resultPath: string): Promise<void> {
   return invoke("open_dashboard", { resultPath });
 }
 
+/** Same extraction, but for `PROJECT_OVERVIEW.html` — the plain-language overview
+ * (stage S12, BLUEPRINT §B.9). */
+export function openProjectOverview(resultPath: string): Promise<void> {
+  return invoke("open_project_overview", { resultPath });
+}
+
+/** Same extraction, but for `ONBOARDING_GUIDE.md` (stage S12). */
+export function openOnboardingGuide(resultPath: string): Promise<void> {
+  return invoke("open_onboarding_guide", { resultPath });
+}
+
+/** Same extraction, but for `REVIEW_CHECKLIST.md` (stage S12). */
+export function openReviewChecklist(resultPath: string): Promise<void> {
+  return invoke("open_review_checklist", { resultPath });
+}
+
 export function openResultLocation(resultPath: string): Promise<void> {
   return revealItemInDir(resultPath);
 }

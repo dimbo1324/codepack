@@ -302,7 +302,8 @@ pub fn read_project_profile(
     let bundle_dir = extracted_bundle_dir(&result_path)?;
     let profile_file = find_in_bundle(&bundle_dir, &["PROJECT_PROFILE.json"]).ok_or_else(|| {
         CommandError::new(
-            "this export contains no PROJECT_PROFILE.json; the run may have been cancelled              before its analytics step ran",
+            "this export contains no PROJECT_PROFILE.json; the run may have been cancelled \
+             before its analytics step ran",
         )
     })?;
 
@@ -337,28 +338,81 @@ fn string_array_at(value: &serde_json::Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Extracts the bundle and opens its HTML dashboard with the OS's default handler.
+/// Extracts the bundle and opens one report from it with the OS's default handler.
 ///
-/// Opened from the extracted directory, not a temporary copy, so the page's relative
-/// links to the other reports resolve and the user can actually browse them.
+/// Opened from the extracted directory, not a temporary copy, so an HTML page's
+/// relative links to the other reports resolve and the user can actually browse them.
+/// Shared by [`open_dashboard`] and the three S12 report-opening commands below —
+/// each of those is a one-line wrapper naming its own file and its own "not generated"
+/// message, rather than a fourth copy of extraction, bundle-layout lookup, and
+/// OS-handler dispatch.
+fn open_bundle_report(
+    result_path: &str,
+    candidates: &[&str],
+    not_found_message: &str,
+) -> CommandResult<()> {
+    let bundle_dir = extracted_bundle_dir(result_path)?;
+    let file = find_in_bundle(&bundle_dir, candidates)
+        .ok_or_else(|| CommandError::new(not_found_message.to_string()))?;
+    tauri_plugin_opener::open_path(file.display().to_string(), None::<&str>)
+        .map_err(CommandError::new)
+}
+
+/// Opens `REPORT_DASHBOARD.html`.
 #[tauri::command]
 pub fn open_dashboard(result_path: String) -> CommandResult<()> {
-    let bundle_dir = extracted_bundle_dir(&result_path)?;
-    let dashboard = find_in_bundle(
-        &bundle_dir,
+    open_bundle_report(
+        &result_path,
         &[
             "reports/insights/REPORT_DASHBOARD.html",
             "REPORT_DASHBOARD.html",
         ],
+        "this export contains no REPORT_DASHBOARD.html; the run may have been cancelled \
+         before its reports were written",
     )
-    .ok_or_else(|| {
-        CommandError::new(
-            "this export contains no REPORT_DASHBOARD.html; the run may have been cancelled              before its reports were written",
-        )
-    })?;
+}
 
-    tauri_plugin_opener::open_path(dashboard.display().to_string(), None::<&str>)
-        .map_err(CommandError::new)
+/// Opens `PROJECT_OVERVIEW.html` (stage S12, BLUEPRINT §B.9): the plain-language
+/// overview for a reader with no code access.
+#[tauri::command]
+pub fn open_project_overview(result_path: String) -> CommandResult<()> {
+    open_bundle_report(
+        &result_path,
+        &[
+            "reports/insights/PROJECT_OVERVIEW.html",
+            "PROJECT_OVERVIEW.html",
+        ],
+        "this export contains no PROJECT_OVERVIEW.html; the run may have been cancelled \
+         before its reports were written",
+    )
+}
+
+/// Opens `ONBOARDING_GUIDE.md` (stage S12).
+#[tauri::command]
+pub fn open_onboarding_guide(result_path: String) -> CommandResult<()> {
+    open_bundle_report(
+        &result_path,
+        &[
+            "reports/insights/ONBOARDING_GUIDE.md",
+            "ONBOARDING_GUIDE.md",
+        ],
+        "this export contains no ONBOARDING_GUIDE.md; the run may have been cancelled \
+         before its reports were written",
+    )
+}
+
+/// Opens `REVIEW_CHECKLIST.md` (stage S12).
+#[tauri::command]
+pub fn open_review_checklist(result_path: String) -> CommandResult<()> {
+    open_bundle_report(
+        &result_path,
+        &[
+            "reports/insights/REVIEW_CHECKLIST.md",
+            "REVIEW_CHECKLIST.md",
+        ],
+        "this export contains no REVIEW_CHECKLIST.md; the run may have been cancelled \
+         before its reports were written",
+    )
 }
 
 #[cfg(test)]
@@ -497,6 +551,92 @@ mod tests {
             error.message.contains("REPORT_DASHBOARD.html"),
             "unhelpful message: {}",
             error.message
+        );
+    }
+
+    /// One test per S12 report-opening command, each pinning that it looks for its
+    /// own filename rather than accidentally reusing another command's message (the
+    /// risk `open_bundle_report`'s shared body introduces, that four separate
+    /// hand-written functions would not have had).
+    #[test]
+    fn a_bundle_with_no_overview_is_reported_rather_than_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
+        let error = open_project_overview(dir.path().display().to_string()).unwrap_err();
+        assert!(
+            error.message.contains("PROJECT_OVERVIEW.html"),
+            "unhelpful message: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_bundle_with_no_onboarding_guide_is_reported_rather_than_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
+        let error = open_onboarding_guide(dir.path().display().to_string()).unwrap_err();
+        assert!(
+            error.message.contains("ONBOARDING_GUIDE.md"),
+            "unhelpful message: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_bundle_with_no_review_checklist_is_reported_rather_than_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
+        let error = open_review_checklist(dir.path().display().to_string()).unwrap_err();
+        assert!(
+            error.message.contains("REVIEW_CHECKLIST.md"),
+            "unhelpful message: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn each_s12_command_finds_its_own_file_in_an_extracted_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        let reports = dir.path().join("reports").join("insights");
+        std::fs::create_dir_all(&reports).unwrap();
+        std::fs::write(reports.join("PROJECT_OVERVIEW.html"), "<html></html>").unwrap();
+        std::fs::write(reports.join("ONBOARDING_GUIDE.md"), "# guide\n").unwrap();
+        std::fs::write(reports.join("REVIEW_CHECKLIST.md"), "# checklist\n").unwrap();
+
+        // Only the lookup is exercised here, not the OS-handler dispatch (which
+        // open_dashboard's own tests do not exercise either, for the same reason:
+        // it would launch a real application in the test process). A file found by
+        // find_in_bundle is exactly the input open_bundle_report hands to the opener.
+        let bundle_dir = dir.path();
+        assert!(
+            find_in_bundle(
+                bundle_dir,
+                &[
+                    "reports/insights/PROJECT_OVERVIEW.html",
+                    "PROJECT_OVERVIEW.html"
+                ]
+            )
+            .is_some()
+        );
+        assert!(
+            find_in_bundle(
+                bundle_dir,
+                &[
+                    "reports/insights/ONBOARDING_GUIDE.md",
+                    "ONBOARDING_GUIDE.md"
+                ]
+            )
+            .is_some()
+        );
+        assert!(
+            find_in_bundle(
+                bundle_dir,
+                &[
+                    "reports/insights/REVIEW_CHECKLIST.md",
+                    "REVIEW_CHECKLIST.md"
+                ]
+            )
+            .is_some()
         );
     }
 }

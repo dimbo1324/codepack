@@ -6,7 +6,13 @@
   // always writes a manifest and always archives what it collected. Saying so plainly
   // matters more than hiding it: an incomplete bundle that looks complete is the one
   // outcome a tool about safe handoff must never produce.
-  import { openDashboard, openResultLocation } from "$lib/api/client";
+  import {
+    openDashboard,
+    openOnboardingGuide,
+    openProjectOverview,
+    openResultLocation,
+    openReviewChecklist,
+  } from "$lib/api/client";
   import { t } from "$lib/i18n/index.svelte";
   import { goTo, wizard } from "$lib/stores/wizard.svelte";
 
@@ -21,10 +27,13 @@
     }
   }
 
-  async function showDashboard(path: string): Promise<void> {
+  /** One handler shared by all four "open a report" buttons: each just names which
+   * extraction-and-open call to make, matching how the backend collapses the same
+   * four commands onto one shared helper (`open_bundle_report`). */
+  async function openReport(open: (path: string) => Promise<void>, path: string): Promise<void> {
     error = null;
     try {
-      await openDashboard(path);
+      await open(path);
     } catch (err) {
       error = String(err);
     }
@@ -69,8 +78,17 @@
         <button class="primary" onclick={() => reveal(path)}>
           {t("result.openFolder")}
         </button>
-        <button onclick={() => showDashboard(path)}>
+        <button onclick={() => openReport(openDashboard, path)}>
           {t("result.openDashboard")}
+        </button>
+        <button onclick={() => openReport(openProjectOverview, path)}>
+          {t("result.openOverview")}
+        </button>
+        <button onclick={() => openReport(openOnboardingGuide, path)}>
+          {t("result.openOnboarding")}
+        </button>
+        <button onclick={() => openReport(openReviewChecklist, path)}>
+          {t("result.openReviewChecklist")}
         </button>
       {/if}
       <button onclick={() => goTo("history")}>{t("result.viewHistory")}</button>

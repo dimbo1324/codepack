@@ -78,6 +78,9 @@ export const en = {
   "result.criticalFindings": "{count} critical finding(s) in the bundle",
   "result.openFolder": "Open containing folder",
   "result.openDashboard": "Open the report dashboard",
+  "result.openOverview": "Open the plain-language overview",
+  "result.openOnboarding": "Open the onboarding guide",
+  "result.openReviewChecklist": "Open the review checklist",
   "result.viewHistory": "View export history",
 
   "history.empty": "No exports recorded yet.",
