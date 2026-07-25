@@ -36,6 +36,15 @@ pub const FRONTEND_REPORT_MD: &[&str] = &["full", "ai_review"];
 pub const BACKEND_REPORT_MD: &[&str] = &["full", "ai_review"];
 pub const GIT_TIMELINE_REPORT_MD: &[&str] = &["full", "ai_review", "security"];
 pub const PROJECT_HEALTH_REPORT_MD: &[&str] = ALL_PROFILES;
+// New in S12 (BLUEPRINT B.9): every profile benefits from a plain-language overview,
+// same reasoning ALL_PROFILES already applies to PROJECT_PROFILE_JSON/SUMMARY_TXT.
+pub const PROJECT_OVERVIEW_HTML: &[&str] = ALL_PROFILES;
+pub const ONBOARDING_GUIDE_MD: &[&str] = ALL_PROFILES;
+// Narrower: a review checklist is only useful to the review/ai_review workflow and to
+// a full export; a "quick" glance or a "minimal"/"security"-scoped bundle has no room
+// for it and legacy's own five profiles never had a review-mode concept to borrow a
+// precedent from, so this is a fresh, deliberate choice, not a ported one.
+pub const REVIEW_CHECKLIST_MD: &[&str] = &["full", "ai_review"];
 pub const REFACTORING_OPPORTUNITIES_MD: &[&str] = &["quick", "full", "ai_review", "security"];
 pub const ARCHITECTURE_MAP_MD: &[&str] = &["quick", "full", "ai_review", "minimal"];
 pub const LARGE_FILES_REPORT_MD: &[&str] = &["quick", "full", "ai_review", "security"];

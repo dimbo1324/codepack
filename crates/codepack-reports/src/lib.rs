@@ -55,6 +55,7 @@ pub mod context;
 mod error;
 mod git_support;
 pub mod graph;
+mod html;
 mod humanize;
 pub mod i18n;
 pub mod metadata;

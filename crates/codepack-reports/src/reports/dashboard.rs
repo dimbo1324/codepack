@@ -20,6 +20,7 @@ use std::path::Path;
 
 use crate::context::ReportContext;
 use crate::error::ReportError;
+use crate::html::escape_html;
 use crate::plugin::ReportJob;
 use crate::profile;
 
@@ -81,21 +82,6 @@ fn extract_security_summary(security_json: &Path) -> (String, String) {
         .map(|v| v.to_string())
         .unwrap_or_else(|| "n/a".to_string());
     (total, secrets)
-}
-
-fn escape_html(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    for ch in input.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 fn write_html_dashboard(_ctx: &ReportContext<'_>, output_file: &Path) -> Result<(), ReportError> {
