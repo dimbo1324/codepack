@@ -1,0 +1,8 @@
+{
+  "name": "codepack-workspace",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

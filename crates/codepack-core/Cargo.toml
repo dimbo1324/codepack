@@ -8,6 +8,10 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# S11: `.codepack.toml` moved here from `codepack-cli` when the desktop shell became a
+# second reader of it. A per-project format read by two front ends is a contract, and
+# two copies of the field list would silently disagree.
+toml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

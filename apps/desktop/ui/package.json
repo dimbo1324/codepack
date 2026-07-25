@@ -1,0 +1,33 @@
+{
+  "name": "@codepack/ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --check ."
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/plugin-opener": "2.5.4",
+    "@tauri-apps/plugin-clipboard-manager": "2.3.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.2.0",
+    "@tauri-apps/cli": "2.11.4",
+    "@tsconfig/svelte": "5.0.8",
+    "eslint": "10.8.0",
+    "eslint-plugin-svelte": "3.22.0",
+    "prettier": "3.9.6",
+    "svelte": "5.56.8",
+    "svelte-check": "4.7.3",
+    "typescript": "7.0.2",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5"
+  }
+}

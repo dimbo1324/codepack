@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "2.0.0-dev"
@@ -97,6 +97,21 @@ clap = { version = "4.5", default-features = false, features = ["derive", "std",
 toml = "0.9"
 # S10 (codepack-cli): the orchestrator this binary is a front end for.
 codepack-engine = { path = "crates/codepack-engine" }
+# S11 (apps/desktop/src-tauri): the desktop shell. Tauri rather than Electron because it
+# uses the OS webview instead of bundling Chromium (BLUEPRINT §C.1), which is the whole
+# reason the rewrite targets it. `tray-icon` is the only non-default feature enabled —
+# ROADMAP §3 lists a system tray among S11's acceptance criteria.
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-build = { version = "2", features = [] }
+# S11: the native folder picker and "reveal in file manager"/"open with default app"
+# actions. Both are plugins rather than hand-rolled platform code, and both are what
+# keeps the webview itself from ever needing filesystem permissions — the UI asks the
+# OS through these, never `fs`.
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+# S11: watch mode (BLUEPRINT §A.10). Cross-platform filesystem notifications with no
+# network capability; the same crate `cargo watch` and `rust-analyzer` use.
+notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1,0 +1,46 @@
+[package]
+name = "codepack-desktop"
+description = "Tauri desktop shell for codepack."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The binary is named after the product, not the crate: this is what the user sees in
+# their task manager and their applications menu.
+[[bin]]
+name = "codepack"
+path = "src/main.rs"
+
+# The command layer is also a library so the tests can call each `#[tauri::command]`
+# function directly, without standing up a webview. ROADMAP §3's acceptance criteria
+# are about what the commands do, not about how a browser renders them.
+[lib]
+name = "codepack_desktop"
+path = "src/lib.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+codepack-core.workspace = true
+codepack-engine.workspace = true
+codepack-scanner.workspace = true
+codepack-security.workspace = true
+codepack-storage.workspace = true
+codepack-tokens.workspace = true
+codepack-archive.workspace = true
+notify.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-opener.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

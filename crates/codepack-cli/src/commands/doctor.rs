@@ -91,7 +91,7 @@ fn build() -> Result<DoctorReport> {
             })
             .collect(),
         profiles,
-        project_config_file: crate::project_config::PROJECT_CONFIG_FILE_NAME,
+        project_config_file: codepack_core::config::PROJECT_CONFIG_FILE_NAME,
         network_access: "never; all analysis is local",
     })
 }

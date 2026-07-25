@@ -20,7 +20,7 @@ use std::path::Path;
 use codepack_core::config::{AiPreset, Config, ai_presets};
 
 use crate::error::{CliError, Result};
-use crate::project_config::ProjectConfig;
+use codepack_core::config::{ProjectConfig, ProjectConfigError};
 
 /// Where each setting ended up coming from, for `--json` consumers and for the human
 /// summary. Without this a user cannot tell why an export used `safe` mode.
@@ -54,7 +54,7 @@ pub(crate) fn resolve(
     let mut config = base;
     let mut trace = ResolutionTrace::default();
 
-    if let Some((path, project)) = ProjectConfig::load(project_root)? {
+    if let Some((path, project)) = ProjectConfig::load(project_root).map_err(to_cli_error)? {
         project.apply_to(&mut config);
         trace.project_config = Some(path.display().to_string());
     }
@@ -96,6 +96,26 @@ pub(crate) fn resolve(
     }
 
     Ok((config, trace))
+}
+
+/// Re-renders the shared parser's failure in this binary's own error idiom.
+///
+/// The diagnosis (which file, where, what) is produced once in `codepack-core`; the
+/// CLI keeps its own variant because its rendering is deliberate — see the comment on
+/// [`CliError::ProjectConfigSyntax`] about never echoing the file's text.
+fn to_cli_error(error: ProjectConfigError) -> CliError {
+    match error {
+        ProjectConfigError::Read { path, source } => CliError::Read { path, source },
+        ProjectConfigError::Syntax {
+            path,
+            span,
+            message,
+        } => CliError::ProjectConfigSyntax {
+            path,
+            span,
+            message,
+        },
+    }
 }
 
 fn known_profile_names(user_profiles: &codepack_core::profiles::UserProfilesFile) -> Vec<String> {
@@ -203,7 +223,7 @@ mod tests {
         let dir = empty_project();
         std::fs::write(
             dir.path()
-                .join(crate::project_config::PROJECT_CONFIG_FILE_NAME),
+                .join(codepack_core::config::PROJECT_CONFIG_FILE_NAME),
             "safe_export_mode = \"full\"\n",
         )
         .unwrap();
@@ -229,7 +249,7 @@ mod tests {
         let dir = empty_project();
         std::fs::write(
             dir.path()
-                .join(crate::project_config::PROJECT_CONFIG_FILE_NAME),
+                .join(codepack_core::config::PROJECT_CONFIG_FILE_NAME),
             "safe_export_mode = \"safe\"\n",
         )
         .unwrap();

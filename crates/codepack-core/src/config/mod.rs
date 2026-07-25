@@ -15,11 +15,13 @@ mod io;
 mod legacy;
 mod normalize;
 mod presets;
+mod project;
 mod valid_sets;
 
 pub use legacy::migrate_legacy_settings;
 pub use normalize::{DEFAULT_UI_ZOOM, UI_ZOOM_MAX, UI_ZOOM_MIN};
 pub use presets::{AiPreset, ai_presets};
+pub use project::{PROJECT_CONFIG_FILE_NAME, ProjectConfig, ProjectConfigError};
 pub use valid_sets::{
     DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE, DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE,
     DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES, SAFE_EXPORT_MODES, THEMES,

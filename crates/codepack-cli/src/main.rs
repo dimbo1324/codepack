@@ -12,7 +12,6 @@ mod commands;
 mod error;
 mod exit;
 mod output;
-mod project_config;
 mod settings;
 
 use clap::Parser;
