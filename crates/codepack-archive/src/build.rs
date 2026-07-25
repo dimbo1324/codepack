@@ -18,8 +18,8 @@ use crate::options::ArchiveOptions;
 use crate::plan::{
     ArchivePlan, plan_archive, plan_logical_parts, predicted_result_for_plan, sort_entries,
 };
-use crate::report::format_bytes;
 use codepack_core::time::now_human_utc;
+use codepack_tokens::format_bytes;
 
 fn file_size_or_zero(path: &Path) -> u64 {
     std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)

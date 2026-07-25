@@ -9,6 +9,10 @@ publish.workspace = true
 
 [dependencies]
 codepack-core.workspace = true
+# Byte-size formatting for the archive plan's human-readable columns. Depending on
+# codepack-tokens rather than carrying a private copy of format_bytes follows the
+# precedent codepack-scanner already set for the identical need.
+codepack-tokens.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

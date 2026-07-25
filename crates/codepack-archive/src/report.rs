@@ -5,29 +5,11 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use codepack_core::time::now_human_utc;
+use codepack_tokens::format_bytes;
+
 use crate::error::{ArchiveError, Result};
 use crate::plan::ArchivePlan;
-use codepack_core::time::now_human_utc;
-
-/// Duplicated from `codepack_tokens::format_bytes` for the same reason as
-/// `crate::timestamp`: this crate's scope boundary (`ROADMAP.md` S8) is
-/// `codepack-core` only, so it cannot depend on `codepack-tokens` for a single
-/// formatting helper used in this report's and `build::write_restore_files`'s text.
-pub(crate) fn format_bytes(size: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    let last_index = UNITS.len() - 1;
-    let mut value = size as f64;
-    for (index, unit) in UNITS.into_iter().enumerate() {
-        if value < 1024.0 || index == last_index {
-            if unit == "B" {
-                return format!("{} {unit}", value as u64);
-            }
-            return format!("{value:.2} {unit}");
-        }
-        value /= 1024.0;
-    }
-    unreachable!("\"TB\" is the last unit and its branch always returns from the loop")
-}
 
 #[derive(Serialize)]
 struct ArchivePlanPartJson {

@@ -113,15 +113,13 @@ pub fn secret_confidence(line: &str) -> Option<&'static str> {
 pub fn redacted_line(line: &str) -> String {
     let redacted = crate::redact::redact_secrets(line);
     if SECRET_KEY_PATTERN.is_match(&redacted) {
-        if let Some(pos) = redacted.find('=') {
-            let key = sanitize_key_prefix(redacted[..pos].trim());
-            return format!("{key}=<REDACTED>");
-        }
-        if let Some(pos) = redacted.find(':') {
-            let key = sanitize_key_prefix(redacted[..pos].trim());
-            return format!("{key}: <REDACTED>");
-        }
-        return "<REDACTED_SECRET_LINE>".to_string();
+        return redact_value_after_separator(
+            &redacted,
+            KeySpacing::Trim,
+            // No separator on the line means there is no key name worth keeping, so the
+            // whole line collapses rather than leaking an unidentifiable fragment.
+            "<REDACTED_SECRET_LINE>",
+        );
     }
     redacted.trim().to_string()
 }
@@ -156,6 +154,57 @@ const ENCODED_RUN_MIN_LEN: usize = 12;
 /// The rule deliberately over-masks rather than under-masks. `oauth2ClientSecret` is a
 /// legitimate identifier that carries a digit and will be masked; the result is a less
 /// informative message, never an exposed credential.
+/// Whether the retained key name keeps the whitespace it had in the original text.
+///
+/// The two redaction paths genuinely differ here and both behaviors are pinned by
+/// tests, so the difference is a parameter rather than a silent divergence between two
+/// copies of the same logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeySpacing {
+    /// Keep the text exactly as it appeared. Content redaction matches a span that
+    /// already starts at the keyword, and legacy preserved any space sitting before the
+    /// separator — `API_KEY = x` yields `API_KEY =<REDACTED>`, stray space included.
+    /// Golden references contain that spelling, so it is parity, not sloppiness.
+    Preserve,
+    /// Trim first. Scan-report messages redact a whole source line, so the key name
+    /// would otherwise carry the line's indentation into the finding.
+    Trim,
+}
+
+/// Splits `text` at its first `=` (else its first `:`), keeps the left side as the key
+/// name, and replaces everything after the separator with `<REDACTED>`.
+///
+/// This is the single implementation of legacy's split-on-first-separator redaction
+/// shape. It backs both redaction paths — exported file content
+/// ([`crate::redact::redact_secrets`]) and scan-report finding messages
+/// ([`redacted_line`]) — which previously carried separate, subtly divergent copies.
+/// That mattered: when Q16 fixed the leak on the message path, the content path kept
+/// the bug, and content redaction is the more dangerous of the two because its output
+/// is handed to whoever receives the bundle.
+///
+/// `fallback` is returned when the text holds neither separator, so the caller can
+/// distinguish "a matched value with no key" from "a whole line collapsed".
+pub(crate) fn redact_value_after_separator(
+    text: &str,
+    spacing: KeySpacing,
+    fallback: &str,
+) -> String {
+    // `=` is probed before `:` so that `key=value:with:colons` keeps `key`, matching
+    // legacy's ordering.
+    for (separator, joiner) in [('=', "="), (':', ": ")] {
+        let Some(position) = text.find(separator) else {
+            continue;
+        };
+        let raw_key = &text[..position];
+        let key = match spacing {
+            KeySpacing::Preserve => raw_key,
+            KeySpacing::Trim => raw_key.trim(),
+        };
+        return format!("{}{joiner}<REDACTED>", sanitize_key_prefix(key));
+    }
+    fallback.to_string()
+}
+
 pub(crate) fn sanitize_key_prefix(prefix: &str) -> String {
     let mut out = String::with_capacity(prefix.len());
     let mut run = String::new();
@@ -247,6 +296,64 @@ mod tests {
         // Documented over-masking: a legitimate identifier carrying a digit is masked
         // rather than risked. Information loss, never exposure.
         assert_eq!(sanitize_key_prefix("oauth2ClientSecret"), "<REDACTED>");
+    }
+
+    #[test]
+    fn separator_redaction_splits_on_equals_before_colon() {
+        // `=` wins so that a value containing colons still yields the real key name.
+        assert_eq!(
+            redact_value_after_separator("key=host:5432", KeySpacing::Trim, "fallback"),
+            "key=<REDACTED>"
+        );
+        assert_eq!(
+            redact_value_after_separator("key: value", KeySpacing::Trim, "fallback"),
+            "key: <REDACTED>"
+        );
+    }
+
+    #[test]
+    fn separator_redaction_returns_the_fallback_when_no_separator_exists() {
+        assert_eq!(
+            redact_value_after_separator(
+                "BEARER abcdef",
+                KeySpacing::Preserve,
+                "<REDACTED_SECRET>"
+            ),
+            "<REDACTED_SECRET>"
+        );
+    }
+
+    #[test]
+    fn the_two_spacing_modes_differ_exactly_as_their_call_sites_require() {
+        // Preserve is what content redaction needs: legacy kept the space before the
+        // separator and the golden references contain that spelling. Trim is what a
+        // scan message needs, since it redacts a whole indented source line. Pinning
+        // both here is what stops the two paths drifting apart again.
+        assert_eq!(
+            redact_value_after_separator("  API_KEY = x", KeySpacing::Preserve, "f"),
+            "  API_KEY =<REDACTED>"
+        );
+        assert_eq!(
+            redact_value_after_separator("  API_KEY = x", KeySpacing::Trim, "f"),
+            "API_KEY=<REDACTED>"
+        );
+    }
+
+    #[test]
+    fn separator_redaction_masks_an_encoded_key_name_in_both_modes() {
+        // The sanitizer runs on the retained prefix regardless of spacing mode, so
+        // neither redaction path can leak a secret that happens to precede a separator.
+        for spacing in [KeySpacing::Preserve, KeySpacing::Trim] {
+            let out = redact_value_after_separator(
+                "Basic dXNlcjpwYXNzd29yZA==",
+                spacing,
+                "<REDACTED_SECRET>",
+            );
+            assert!(
+                !out.contains("dXNlcjpwYXNzd29yZA"),
+                "secret survived in {spacing:?} mode: {out}"
+            );
+        }
     }
 
     #[test]

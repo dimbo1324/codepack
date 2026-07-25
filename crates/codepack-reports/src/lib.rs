@@ -66,6 +66,7 @@ pub mod reports;
 #[cfg(test)]
 mod test_support;
 mod text;
+mod wordscan;
 
 pub use context::ReportContext;
 pub use error::{ReportError, Result};

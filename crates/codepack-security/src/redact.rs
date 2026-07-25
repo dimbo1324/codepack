@@ -37,25 +37,24 @@
 
 use regex::Captures;
 
-use crate::patterns::keyword::SECRET_PATTERNS;
+use crate::patterns::keyword::{KeySpacing, SECRET_PATTERNS, redact_value_after_separator};
 
+/// Rewrites one matched `KEY: value` / `KEY=value` / `BEARER <token>` span.
+///
+/// Shares [`redact_value_after_separator`] with the scan-report path (Q16). Keeping two
+/// copies is what let the content path — the more dangerous of the two, since its output
+/// is handed to whoever receives the bundle — retain the leak after the message path was
+/// fixed: `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
+/// `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
 fn replace_match(matched: &str) -> String {
-    // The retained key name goes through the same sanitizer as the scan-report path
-    // (Q16). This pass rewrites *exported file content* and the clipboard, so a secret
-    // surviving here is handed to whoever receives the bundle — strictly worse than the
-    // finding-message leak Q16 was opened for, and the identical split-on-first-`=`
-    // cause. `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
-    // `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
-    use crate::patterns::keyword::sanitize_key_prefix as sanitize;
-    if let Some(eq_pos) = matched.find('=') {
-        let key = sanitize(&matched[..eq_pos]);
-        return format!("{key}=<REDACTED>");
-    }
-    if let Some(colon_pos) = matched.find(':') {
-        let key = sanitize(&matched[..colon_pos]);
-        return format!("{key}: <REDACTED>");
-    }
-    "<REDACTED_SECRET>".to_string()
+    redact_value_after_separator(
+        matched,
+        // The match span starts at the keyword itself, and legacy preserved any space
+        // before the separator; golden references contain that spelling.
+        KeySpacing::Preserve,
+        // A `BEARER <token>` span carries no key at all, so there is nothing to name.
+        "<REDACTED_SECRET>",
+    )
 }
 
 fn whole_match<'a>(caps: &Captures<'a>) -> &'a str {
