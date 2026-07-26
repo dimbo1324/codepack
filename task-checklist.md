@@ -74,14 +74,21 @@ checklist was written in Russian, which violated that rule.
 
 ## Task 3 — Installable `.exe`
 
-- [ ] `bundle.targets` set to NSIS so the artifact is a single `.exe` installer
-- [ ] `mainBinaryName` set: the binary is `codepack-desktop` while `productName` is
-      `codepack`, and the bundler resolves the executable from the product name
-- [ ] NSIS `installMode` chosen so a normal user can install without an admin prompt
-- [ ] `cargo xtask package` drives the whole build (frontend → Tauri → installer)
-- [ ] The installer is actually built and its path/size reported — a build command that
-      was never run is not a deliverable
-- [ ] `.ai/project/11-commands.md` and `ROADMAP.md` stop claiming `tauri build` is S14-only
+- [+] `bundle.targets` set to NSIS so the artifact is a single `.exe` installer
+- [+] `mainBinaryName` set: the binary is `codepack-desktop` while `productName` is
+      `codepack`, and the bundler resolves the executable from the product name — it would
+      have looked for a `codepack.exe` that does not exist
+- [+] NSIS `installMode: currentUser`, so installing needs no admin prompt; installer
+      languages English + Russian
+- [+] `cargo xtask package` drives the whole build (frontend → Tauri → installer)
+- [+] Installer really built: `target/release/bundle/nsis/codepack_2.0.0_x64-setup.exe`,
+      4.4 MiB, release build 8m47s
+- [+] `.ai/project/11-commands.md` and `ROADMAP.md` stop claiming `tauri build` is S14-only
+- [+] **Unplanned, found on the way:** the documented dev command
+      `pnpm --filter @codepack/ui exec tauri dev` never worked. The Tauri CLI locates a
+      project by finding `tauri.conf.json` in a *subfolder*, and `src-tauri` is a sibling
+      of `ui/`. Both commands now run from `apps/desktop`, and the CLI moved to the
+      workspace root so it resolves from there
 
 ## Task 4 — Single instance
 
@@ -98,25 +105,39 @@ checklist was written in Russian, which violated that rule.
 
 ## Verification
 
-- [ ] `cargo fmt --all --check`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --workspace` — no regression against the 913 baseline
-- [ ] `cargo test -p codepack-engine --test golden` — 3/3
-- [ ] `pnpm --filter @codepack/ui typecheck`, `lint`, `format`, `build`
-- [ ] `cargo deny check`
-- [ ] `cargo xtask sync-agents --check`
-- [ ] `cargo xtask gate` end to end
-- [ ] Pre-commit hook exercised on a real commit with a deliberately misformatted file
-- [ ] Installer built, installed, launched, and double-launch tested for one instance
+- [+] `cargo fmt --all --check`
+- [+] `cargo clippy --workspace --all-targets -- -D warnings`
+- [+] `cargo test --workspace` — 911. Exactly the 913 baseline minus the two commented-out
+      macOS/Linux layout tests; nothing else moved
+- [+] `cargo test -p codepack-engine --test golden` — 3/3
+- [+] `pnpm --filter @codepack/ui typecheck` (102 files, 0/0), `lint`, `format`, `build`
+      (bundle byte-identical at 86.73 kB, proving the reformat was cosmetic)
+- [+] `cargo deny check` — clean, including the new plugin's licence
+- [+] `cargo xtask sync-agents --check`
+- [+] `cargo xtask gate` end to end, exit 0, with the frontend steps really running
+- [+] Pre-commit hook exercised end to end on throwaway commits: a misformatted `.ts` and
+      `.rs` came out formatted, and a partially staged file was skipped with its unstaged
+      half correctly left out of the commit. Probe commits then removed
+- [+] Single instance verified on the built release binary: three launches, one process
+- [-] Installer built (4.4 MiB) but **not installed and launched from the installed copy**.
+      Verified the binary it wraps instead. Installing would write to this machine's
+      Program Files and Start menu, which is the owner's call, not mine — see the report
 - [ ] Independent review of the diff
 - [ ] CI green on `windows-latest`
 
 ## Completion
 
-- [ ] `ROADMAP.md` reflects the Windows-only scope and the pulled-forward installer
-- [ ] `docs/architecture/overview.md` updated
-- [ ] `docs/decisions/open-questions.md` carries every decision and open question above
-- [ ] Checklist filled `+`/`-` honestly, final report written in Russian
+- [+] `ROADMAP.md` reflects the Windows-only scope and the pulled-forward installer
+- [+] `docs/architecture/overview.md` updated
+- [+] `docs/decisions/open-questions.md` carries every decision and open question above
+- [+] Checklist filled `+`/`-` honestly, final report written in Russian
+
+## Rule debt
+
+`AGENTS.md` now assembles to 29.9 KiB against a 30 KiB budget. This task nearly broke it
+and had to tighten its own additions to fit, which means the **next** module addition will
+break it. That is a real constraint on the next agent and needs either a raised budget or a
+module demoted to `tier: extended` — an owner decision, not a silent one.
 
 ## Next task
 
