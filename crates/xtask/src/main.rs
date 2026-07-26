@@ -5,7 +5,9 @@
 // A task runner is expected to write to stdout; the workspace lint targets libraries.
 #![allow(clippy::print_stdout)]
 
+mod frontend;
 mod golden;
+mod hooks;
 mod sync_agents;
 
 use std::path::{Path, PathBuf};
@@ -18,11 +20,13 @@ Usage: cargo xtask <command> [options]
 
 Commands:
   gate [--quick]          Full quality gate; --quick skips the test run
-  fmt                     Format Rust sources
+  fmt                     Format Rust and frontend sources in place
   lint                    Clippy across the workspace with warnings denied
   test                    Run workspace tests
   deny                    cargo-deny: advisories, bans, licenses, sources
   sync-agents [--check]   Regenerate AGENTS.md from the .ai/ modules
+  install-hooks           Install the formatting pre-commit hook
+  package                 Build the Windows NSIS installer
   golden                  Regenerate golden references by running legacy (needs Python)
   doctor                  Read-only environment diagnostics
 ";
@@ -75,6 +79,12 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
         step(root, "tests", "cargo", &["test", "--workspace"])?;
     }
     step(root, "deny", "cargo", &["deny", "check"])?;
+    println!("\n=== frontend ===");
+    if frontend::dependencies_installed(root) {
+        frontend::gate_checks(root)?;
+    } else {
+        frontend::skip_notice();
+    }
     println!("\n=== agents sync ===");
     sync_agents::run(root, true).map_err(|error| format!("sync-agents: {error}"))?;
     Ok(())
@@ -122,7 +132,15 @@ fn main() -> ExitCode {
 
     let outcome = match command.as_str() {
         "gate" => gate(&root, has("--quick")),
-        "fmt" => step(&root, "format", "cargo", &["fmt", "--all"]),
+        "fmt" => step(&root, "format", "cargo", &["fmt", "--all"]).and_then(|()| {
+            println!("\n=== frontend format ===");
+            if frontend::dependencies_installed(&root) {
+                frontend::format_write(&root)
+            } else {
+                frontend::skip_notice();
+                Ok(())
+            }
+        }),
         "lint" => step(
             &root,
             "clippy",
@@ -141,6 +159,8 @@ fn main() -> ExitCode {
         "sync-agents" => {
             sync_agents::run(&root, has("--check")).map_err(|error| format!("sync-agents: {error}"))
         }
+        "install-hooks" => hooks::install(&root).map_err(|error| format!("install-hooks: {error}")),
+        "package" => frontend::package(&root).map_err(|error| format!("package: {error}")),
         "golden" => golden::run(&root).map_err(|error| format!("golden: {error}")),
         "doctor" => {
             doctor(&root);

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+#
+# Formats staged files and re-stages them, so what lands in a commit is already
+# formatted. Installed by `cargo xtask install-hooks`, which points `core.hooksPath` here.
+#
+# Two rules shape this script:
+#
+#   1. It touches **only staged files**. Running `cargo fmt --all` would reformat files
+#      you left dirty on purpose, and re-staging those would pull unrelated work into the
+#      commit.
+#   2. It refuses to touch a file that is *partially* staged — one with both staged and
+#      unstaged changes. Formatting the working copy and re-adding it would silently
+#      promote the unstaged half into the commit, which is a data-loss-shaped surprise:
+#      you would commit code you never staged and could not see in the diff you reviewed.
+#      Those files are named and skipped instead, and the gate catches them later.
+#
+# Bypass once with `git commit --no-verify`.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# ACMR: added, copied, modified, renamed. Deletions have nothing to format.
+mapfile -d '' -t staged < <(git diff --cached --name-only --diff-filter=ACMR -z)
+[ ${#staged[@]} -gt 0 ] || exit 0
+
+mapfile -d '' -t unstaged < <(git diff --name-only --diff-filter=ACMR -z)
+
+is_partially_staged() {
+  local candidate=$1 other
+  for other in ${unstaged[@]+"${unstaged[@]}"}; do
+    [ "$candidate" = "$other" ] && return 0
+  done
+  return 1
+}
+
+rust=()
+other=()
+partial=()
+for file in "${staged[@]}"; do
+  # A rename can leave the old path in the list; only format what is actually there.
+  [ -f "$file" ] || continue
+  if is_partially_staged "$file"; then
+    partial+=("$file")
+    continue
+  fi
+  case "$file" in
+  *.rs) rust+=("$file") ;;
+  *) other+=("$file") ;;
+  esac
+done
+
+formatted=()
+
+if [ ${#rust[@]} -gt 0 ]; then
+  # `rustfmt` directly rather than `cargo fmt`, which has no way to take a file list.
+  # It finds `rustfmt.toml` by walking up from each file; `--edition` is passed anyway
+  # because without it rustfmt assumes 2015 and misparses current syntax.
+  rustfmt --edition 2024 "${rust[@]}"
+  formatted+=("${rust[@]}")
+fi
+
+if [ ${#other[@]} -gt 0 ]; then
+  if [ -d node_modules ]; then
+    # `--ignore-unknown` skips file types Prettier has no parser for, so the list can be
+    # passed as-is. `.prettierignore` still applies to explicitly named files, which is
+    # what keeps the golden references and test fixtures out of reach.
+    pnpm exec prettier --write --ignore-unknown --log-level warn "${other[@]}"
+    formatted+=("${other[@]}")
+  else
+    echo "pre-commit: node_modules missing, skipping Prettier (run 'pnpm install')" >&2
+  fi
+fi
+
+if [ ${#formatted[@]} -gt 0 ]; then
+  git add -- "${formatted[@]}"
+fi
+
+if [ ${#partial[@]} -gt 0 ]; then
+  echo "pre-commit: left these partially staged files alone, format them yourself:" >&2
+  printf '  %s\n' "${partial[@]}" >&2
+fi
