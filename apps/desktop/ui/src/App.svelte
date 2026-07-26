@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import { getAppInfo, loadGlobalSettings, onExportFinished, onExportProgress } from "$lib/api/client";
+  import {
+    getAppInfo,
+    loadGlobalSettings,
+    onExportFinished,
+    onExportProgress,
+  } from "$lib/api/client";
   import type { AppInfo } from "$lib/api/types";
   import Nav from "$lib/components/Nav.svelte";
   import { setLanguage } from "$lib/i18n/index.svelte";

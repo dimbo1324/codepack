@@ -17,9 +17,7 @@ let media: MediaQueryList | null = null;
 
 function applyResolved(): void {
   const value =
-    theme.preference === "system"
-      ? (media?.matches ? "dark" : "light")
-      : theme.preference;
+    theme.preference === "system" ? (media?.matches ? "dark" : "light") : theme.preference;
   theme.resolved = value;
   document.documentElement.dataset.theme = value;
 }

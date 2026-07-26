@@ -39,7 +39,9 @@
     let value = size;
     for (let index = 0; index < units.length; index += 1) {
       if (value < 1024 || index === units.length - 1) {
-        return index === 0 ? `${Math.trunc(value)} ${units[index]}` : `${value.toFixed(2)} ${units[index]}`;
+        return index === 0
+          ? `${Math.trunc(value)} ${units[index]}`
+          : `${value.toFixed(2)} ${units[index]}`;
       }
       value /= 1024;
     }

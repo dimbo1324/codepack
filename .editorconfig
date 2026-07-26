@@ -8,7 +8,12 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-[*.{js,ts,tsx,json,jsonc,yml,yaml,html,css,md}]
+# `.svelte`, `.mjs`, and `.cjs` were missing here until 2026-07-26. Nothing enforced this
+# file before, so those sources were hand-written with two spaces and drifted from the
+# four-space `[*]` default without anyone noticing. Prettier reads `.editorconfig` as a
+# fallback for options it is not given, so leaving them out would have had it reindent
+# every Svelte component on its first run.
+[*.{js,mjs,cjs,ts,tsx,svelte,json,jsonc,yml,yaml,html,css,md}]
 indent_size = 2
 
 [*.md]

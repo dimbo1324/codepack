@@ -6,7 +6,7 @@ on:
     # so work was only ever verified after it had already been merged. The
     # concurrency group below keys on the ref, so pushing repeatedly to one branch
     # cancels its own superseded runs instead of queueing them.
-    branches: ['**']
+    branches: ["**"]
   pull_request:
 
 concurrency:

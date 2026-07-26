@@ -116,10 +116,7 @@
 
     <label>
       {t("settings.theme")}
-      <select
-        bind:value={config.theme}
-        onchange={() => setThemePreference(config.theme)}
-      >
+      <select bind:value={config.theme} onchange={() => setThemePreference(config.theme)}>
         <option value="light">{t("settings.theme.light")}</option>
         <option value="dark">{t("settings.theme.dark")}</option>
         <option value="system">{t("settings.theme.system")}</option>
@@ -128,10 +125,7 @@
 
     <label>
       {t("settings.language")}
-      <select
-        bind:value={config.language}
-        onchange={() => setLanguage(config.language)}
-      >
+      <select bind:value={config.language} onchange={() => setLanguage(config.language)}>
         <option value="en">English</option>
         <option value="ru">Русский</option>
       </select>
