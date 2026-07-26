@@ -25,24 +25,16 @@ command sequences.
 
 ## Formatting
 
-Two formatters, one command. `rustfmt` owns `.rs` (config in `rustfmt.toml`); Prettier
-owns the frontend and the repository's own `.md`/`.json`/`.yml` (config in
-`.prettierrc`, exclusions in `.prettierignore`).
+`rustfmt` owns `.rs` (`rustfmt.toml`); Prettier owns the frontend and config files
+(`prettier.config.mjs`, exclusions in `.prettierignore` — which protects `tests/golden/`,
+test fixtures, and the generated `AGENTS.md`). `cargo xtask fmt` runs both.
 
-```powershell
-cargo xtask fmt             # write mode, both toolchains
-cargo xtask install-hooks   # once per clone
-```
-
-`install-hooks` points `core.hooksPath` at the tracked `.githooks/` directory, so the hook
-is versioned with the repository instead of living in an untracked `.git/hooks`. The
-`pre-commit` hook formats **only the files that are staged** and re-stages them, which
-keeps a commit from quietly absorbing unrelated reformatting of files you left dirty on
-purpose. If `node_modules` is missing it formats the Rust half and prints a notice rather
-than blocking the commit.
-
-To commit without the hook once: `git commit --no-verify`. The gate still catches
-formatting afterwards, so this delays the check rather than skipping it.
+Run `cargo xtask install-hooks` once per clone. It points `core.hooksPath` at the tracked
+`.githooks/`, so the hook is versioned rather than living in an untracked `.git/hooks`.
+The `pre-commit` hook formats **only staged files** and re-stages them; it skips a
+partially staged file rather than sweeping its unstaged half into the commit, and skips
+Prettier with a notice when `node_modules` is absent. Bypass once with
+`git commit --no-verify` — the gate still checks formatting later.
 
 `cargo xtask golden` runs the archived legacy implementation and rewrites
 `tests/golden/reference/`. It is a developer-machine command: it needs Python 3 on
@@ -62,6 +54,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --workspace
 pnpm install --frozen-lockfile
+pnpm format                        # Prettier, check only
+pnpm format:write                  # Prettier, rewrite in place
 pnpm --filter @codepack/ui typecheck
 pnpm --filter @codepack/ui lint
 pnpm --filter @codepack/ui build
@@ -75,8 +69,15 @@ and tests it like any other crate.
 Running the app in development needs both halves, which the Tauri CLI starts together:
 
 ```powershell
-pnpm --filter @codepack/ui exec tauri dev
+pnpm desktop:dev
 ```
+
+**The working directory matters.** The Tauri CLI locates a project by finding
+`tauri.conf.json` in a *subfolder* of the current directory. Here the shell
+(`apps/desktop/src-tauri`) sits beside the frontend (`apps/desktop/ui`), so from `ui` the
+config is a sibling and the CLI aborts — which is why the previously documented
+`pnpm --filter @codepack/ui exec tauri dev` never worked. Both scripts run from
+`apps/desktop`, and the CLI is a workspace-root dev dependency so it resolves there.
 
 Producing the Windows installer:
 

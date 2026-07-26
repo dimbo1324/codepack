@@ -7,9 +7,12 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "format": "prettier --check .",
-    "format:write": "prettier --write ."
+    "format:write": "prettier --write .",
+    "desktop:dev": "pnpm --dir apps/desktop exec tauri dev",
+    "desktop:build": "pnpm --dir apps/desktop exec tauri build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "prettier": "3.9.6",
     "prettier-plugin-svelte": "3.5.2"
   }

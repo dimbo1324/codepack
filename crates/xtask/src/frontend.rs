@@ -63,18 +63,25 @@ pub(crate) fn gate_checks(root: &Path) -> Result<(), String> {
 
 /// Builds the Windows installer: frontend bundle, release binary, then the NSIS package.
 ///
-/// The Tauri CLI is a dev dependency of the UI package rather than a globally installed
-/// binary, which is why this goes through pnpm instead of calling `tauri` directly — the
-/// version that builds a release is then pinned by `pnpm-lock.yaml` like everything else.
-/// `tauri build` runs `beforeBuildCommand` itself, so the frontend is not built twice.
+/// Runs from `apps/desktop`, and that detail is the whole trick. The Tauri CLI locates a
+/// project by looking for `tauri.conf.json` in a *subfolder* of the working directory, and
+/// this repository keeps the shell in `apps/desktop/src-tauri` beside the frontend in
+/// `apps/desktop/ui`. Invoked from `ui`, the config is a sibling rather than a child and
+/// the CLI aborts with "couldn't recognize the current folder as a Tauri project" — which
+/// is exactly what the previously documented `--filter @codepack/ui exec tauri dev`
+/// command did. `apps/desktop` is the directory that contains both halves.
+///
+/// The CLI is a pnpm dev dependency rather than a global install, so the version that
+/// builds a release is pinned by `pnpm-lock.yaml` like everything else. `tauri build` runs
+/// `beforeBuildCommand` itself, so the frontend is not built twice.
 pub(crate) fn package(root: &Path) -> Result<(), String> {
     if !dependencies_installed(root) {
         return Err("packaging needs the frontend toolchain: run `pnpm install` first".to_string());
     }
     pnpm(
-        root,
+        &root.join("apps/desktop"),
         "tauri build",
-        &["--filter", "@codepack/ui", "exec", "tauri", "build"],
+        &["exec", "tauri", "build"],
     )?;
 
     let bundle = root.join("target/release/bundle/nsis");
