@@ -1,148 +1,114 @@
 # Task Checklist
 
-**Task:** Этап **S12 — Человеко-ориентированные результаты** 🎯 (`ROADMAP.md` §4,
-BLUEPRINT §B.9). Зависимости S7 и S11 сданы. У этапа нет legacy-паритета — все шесть
-пунктов BLUEPRINT §B.9 новые (legacy имел только статичный HTML-дашборд без
-интерактивности, `BLUEPRINT.md` признаёт это прямо: «PDF — частично, только
-HTML-дашборд»).
-**Date:** 2026-07-25
-**Branch:** feat/s12-human-oriented-results
+**Task:** Narrow the whole toolchain to Windows 10/11, add strict auto-formatting on
+commit, produce an installable `.exe`, and make the app single-instance.
+**Date:** 2026-07-26
+**Branch:** feat/windows-only-toolchain-and-installer
 
-Планирование делегировано `codepack-stage-planner` — полный план в истории задачи.
-Решение по объёму ниже — моё, на основе этого плана и предыдущих прецедентов проекта
-(S6+S7, S8+S9: под-обещать и честно назвать, что не вошло, а не тихо сузить).
+Four owner-requested tasks in one branch, because they share one theme: take what S0–S12
+already built and finish it into something installable and maintainable on one platform,
+rather than half-working on three. Stages S13 and S14 stay untouched as features.
 
-## Объём этой задачи (ядро S12)
+Note on language: this file is English per `.ai/project/10-project-map.md`; the S12
+checklist was written in Russian, which violated that rule.
 
-**Входит:**
-1. Общий модуль синтеза «простыми словами» — **без парсинга markdown других отчётов**.
-   `project_health.rs::compute_scores` и `key_files.rs`'s scoring выносятся в
-   `pub(crate)`-функции, возвращающие структуры, а не текст; новый модуль читает их
-   напрямую, как и `ScanResult.summary` (только счётчики, не сырой текст находок —
-   инвариант I3).
-2. `PROJECT_OVERVIEW.html` — новый `ReportJob`: связный человекочитаемый обзор
-   (что за проект, стек, здоровье, топ-риски) для нетехнического читателя. `@media
-   print` вместо PDF-библиотеки — perm. решение, не заглушка (обоснование ниже).
-3. Секция «Explain in plain words» в `REPORT_DASHBOARD.html`, тот же модуль синтеза.
-4. `ONBOARDING_GUIDE.md` — маршрут чтения на основе ранжирования `key_files` +
-   `runbook` (установка/запуск) + `architecture_map` (слои).
-5. `REVIEW_CHECKLIST.md` — чек-лист ревьюера + diff-сводка на **файловом** уровне
-   (`DiffSelection` не хранит номера строк — см. «Не входит»). Деградирует честно,
-   когда diff-режим `all`/пусто (тот же паттерн, что `dashboard.rs::read_text_best_effort`).
-6. Интерактивность дашборда: фильтр/поиск по карточкам и ссылкам — рукописный
-   вставленный JS, без внешней библиотеки, без CDN.
-7. Три новых `ReportJob` подключены в `profile.rs` (гейтинг), `catalog.rs`
-   (`manifest.json`/`INDEX.md`), раннер отчётов.
-8. Desktop: одна тонкая Tauri-команда (обобщение `open_dashboard` на произвольное имя
-   файла бандла), а не три копии.
+## Owner decisions that shape this task
 
-**Не входит (осознанно, зафиксировано как открытые вопросы, не потеряно):**
-- Рендер Mermaid в браузере + экспорт SVG/PNG (деливерэблы 5-вторая-половина и 6).
-  Требует вендоринга JS-библиотеки (Mermaid, MIT) инлайном в HTML — весомое решение
-  само по себе (лицензия, версия, офлайн-аудит), сопоставимое по духу с решением не
-  тащить `tiktoken-rs` в S6. Отдельная задача.
-- `file:line`-ссылки в режиме ревью — `codepack-diff` не хранит данные по хankам/строкам
-  нигде (проверено grep'ом). Нужна новая работа в другом крейте, не одна строка кода.
-  Отдельная задача.
-- PDF-рендеринг — **не переносится, закрывается навсегда**. Ни одной PDF-зависимости
-  в дереве нет и не будет; `@media print` — это и есть ответ на требование BLUEPRINT.
-- Q4 (платная версия) — упоминается в плане владельца как «вернуться к вопросу на
-  S12»; я его не решаю, только фиксирую в отчёте.
-- Q12 (локализация артефактов) — остаётся отдельно отложенным; новые строки этого
-  этапа собраны в одном модуле, чтобы будущая локализация не усложнилась задним числом.
+1. **Windows-only for now.** macOS and Linux leave CI and the code paths. Cross-platform
+   code is commented with a `TODO` naming what returns and when — not deleted, because
+   BLUEPRINT §B.4 still declares cross-platform a product goal. BLUEPRINT is **not**
+   rewritten: the product intent has not changed, only the current build scope, so the
+   narrowing is recorded in `docs/decisions/open-questions.md` instead.
+2. **The installer is S14 scope, pulled forward on purpose.** `ROADMAP.md` §1 puts
+   packaging in S14 and stage order is binding, so this is an explicit owner decision
+   and gets recorded as one. Only the Windows installer comes forward; signing,
+   notarisation, `SHA256SUMS.txt`, and auto-update stay in S14.
+3. **Test helpers under `#[cfg(unix)]` stay.** They are dormant on Windows (the branch
+   does not compile there) and they exist to prove invariant I7 (symlinks are never
+   followed). Commenting them out would cost real safety coverage and buy nothing, so
+   they are left alone and called out in the final report.
 
 ## Preparation
 
-- [+] Ритуал ориентации подтверждён (сделан до вызова стадийного планировщика)
-- [+] Зафиксирован baseline: 890 тестов, golden 3/3, гейт зелёный
-- [+] Чек-лист закоммичен до начала кода
+- [ ] Orientation ritual done (git, ROADMAP, overview, previous checklist, decisions)
+- [ ] Baseline recorded: 913 tests, golden 3/3, `cargo xtask gate` green locally
+- [ ] Checklist committed before any code
 
-## Implementation — синтез и общая инфраструктура
+## Task 1 — Windows-only toolchain
 
-- [+] `project_health.rs::compute_scores` → `pub(crate)`, тип с именованными полями
-      вместо кортежа `(&str, i64, Vec<String>)`
-- [+] `key_files.rs` — вынесена `pub(crate) fn ranked_key_files(ctx) -> Vec<(i64, &InventoryFile, Vec<String>)>`,
-      рендер существующего отчёта переведён на неё же
-- [+] Новый модуль `humanize.rs` — чистые функции: строка стека, сводка здоровья,
-      топ-риски из `scan.summary` + `risk_reasons` профиля; никогда не читает
-      `Finding::message` (инвариант I3)
+- [ ] `.github/workflows/ci.yml`: matrix reduced to `windows-latest`; the macOS/Linux
+      legs and the Linux system-dependency step commented out with a `TODO` pointing at
+      the open question, not deleted
+- [ ] `codepack-core::paths`: the `Os::Mac`/`Os::Linux` layout arms commented with a
+      `TODO`; Windows is the only resolved layout
+- [ ] The two layout tests for macOS/Linux commented alongside the code they cover, so a
+      commented branch never looks tested
+- [ ] `.ai/project/11-commands.md`: platform notes and gate policy match a Windows-only
+      reality
+- [ ] `docs/decisions/open-questions.md`: the narrowing recorded, plus the still-unknown
+      Unix gate failure logged so dropping those legs does not bury it
 
-## Implementation — PROJECT_OVERVIEW.html
+## Task 2 — Strict auto-formatting
 
-- [+] `ReportJob`, самодостаточный HTML (как `dashboard.rs` — инлайн `<style>`),
-      `@media print`, нулевые внешние ссылки
-- [+] Секция здоровья использует `codepack_tokens::format_bytes` там, где нужен размер
-      (инвариант I4, прецедент `key_files.rs`/`project_health.rs`)
+- [ ] `prettier-plugin-svelte` added (Prettier cannot format `.svelte` without it)
+- [ ] `.prettierrc` and `.prettierignore` at the repository root; settings chosen to
+      match the code already in the tree, not to churn it
+- [ ] `pnpm format` (check) kept, `pnpm format:write` added
+- [ ] `cargo xtask fmt` formats Rust **and** the frontend
+- [ ] `cargo xtask install-hooks` installs a `pre-commit` hook via `core.hooksPath`
+- [ ] The hook formats **only staged files** and re-stages them; it degrades to a warning
+      when `node_modules` is absent instead of blocking a Rust-only commit
+- [ ] Whole tree formatted once, in its own commit, so the mechanical diff stays separate
+      from the logic diff
+- [ ] Frontend format/typecheck/lint join `cargo xtask gate`, skipping with a clear
+      message when `node_modules` is absent
+- [ ] `.ai/project/11-commands.md` documents the new commands
 
-## Implementation — dashboard: секция + интерактивность
+## Task 3 — Installable `.exe`
 
-- [+] «Explain in plain words» — тот же модуль синтеза, не дублирующая логика
-- [+] Фильтр/поиск по карточкам/ссылкам — vanilla JS, инлайн, без библиотек
+- [ ] `bundle.targets` set to NSIS so the artifact is a single `.exe` installer
+- [ ] `mainBinaryName` set: the binary is `codepack-desktop` while `productName` is
+      `codepack`, and the bundler resolves the executable from the product name
+- [ ] NSIS `installMode` chosen so a normal user can install without an admin prompt
+- [ ] `cargo xtask package` drives the whole build (frontend → Tauri → installer)
+- [ ] The installer is actually built and its path/size reported — a build command that
+      was never run is not a deliverable
+- [ ] `.ai/project/11-commands.md` and `ROADMAP.md` stop claiming `tauri build` is S14-only
 
-## Implementation — ONBOARDING_GUIDE.md
+## Task 4 — Single instance
 
-- [+] Топ-N файлов из `ranked_key_files`, ссылки на `13_runbook.md` и
-      `24_architecture_map.md` вместо повторного вывода их логики
-- [+] Тест: порядок реально выводится из ranking, а не просто «файл существует»
-
-## Implementation — REVIEW_CHECKLIST.md
-
-- [+] Чек-лист ревьюера (статичный, но контекстно осмысленный) + diff-сводка на
-      уровне файлов из `ctx.diff`
-- [+] Явная деградация без активного diff — протестирована в обе стороны
-
-## Implementation — подключение в каталог
-
-- [+] `profile.rs` — три новые константы гейтинга
-- [+] `catalog.rs` — три новые записи для `manifest.json`/`INDEX.md`
-- [+] Раннер отчётов подключает три новых job'а (`group_h_human_jobs`, также
-      добавлена в `full_catalog_runner.rs`, изначально забытую при первой проводке —
-      найдено самоконтролем, не внешним ревью)
-
-## Implementation — desktop plumbing
-
-- [+] Обобщение `open_dashboard` → `open_bundle_report`, три новые тонкие команды
-- [+] Существующие вызовы `open_dashboard` переведены на неё же, дубля не остаётся
+- [ ] `tauri-plugin-single-instance` added (new production dependency — named in the
+      report with its justification)
+- [ ] Registered first among plugins, per the plugin's own requirement
+- [ ] A second launch focuses the existing window instead of starting a second process:
+      restores it if minimised, shows it if hidden, raises it if behind other windows
+- [ ] Only one tray icon can exist, because only one process can
+- [ ] Behaviour verified against the built installer, not only in `tauri dev`
 
 ## Verification
 
-- [+] `cargo fmt --all --check`
-- [+] `cargo clippy --workspace --all-targets -- -D warnings`
-- [+] `cargo test --workspace` — 913 (было 890)
-- [+] `cargo test -p codepack-engine --test golden` — 3/3, три существующие фикстуры
-      не сдвинулись (добавлено именованное исключение `S12_ADDITIVE_ARTIFACTS`)
-- [+] I3-регрессия для новых путей (сажаем секрет, проверяем `PROJECT_OVERVIEW.html`/
-      `REVIEW_CHECKLIST.md`/секцию дашборда — секрет не должен появиться нигде)
-- [+] Тест «ноль внешних ссылок» на всех новых/изменённых HTML (`http://`/`https://`/
-      `cdn.` отсутствуют строкой)
-- [+] `full_catalog_runner.rs` расширен тремя новыми артефактами
-- [+] Ручная проверка в реальном браузере: `file://` вне каталога проекта отдаёт
-      только статичный снимок (нет `get_page_text`/`screenshot`/JS-выполнения) —
-      обойдено локальным HTTP-сервером (`preview_start` + временный
-      `.claude/launch.json`, не закоммичен, путь машинно-специфичный). Подтверждено
-      вживую: `PROJECT_OVERVIEW.html` рендерится с верными данными, ноль исходящих
-      запросов, текст находок нигде не виден; секция дашборда совпадает с обзорной
-      страницей по цифрам; инлайн-JS фильтр реально фильтрует (`security` → 3 из 13
-      пунктов); `@media print`-правило присутствует и верно ограничено. Печать в PDF
-      через реальный диалог браузера не проверялась — headless-браузер инструмента
-      не даёт вызвать системный диалог печати; CSS-правило проверено напрямую через
-      `document.styleSheets`, что эквивалентно для этой цели
-- [+] `cargo xtask sync-agents --check`
-- [-] `cargo deny check` — недоступен в песочнице (нет бинаря `cargo-deny`), как и
-      ожидалось; проверяется в CI на всех трёх ОС
-- [+] Независимое ревью диффа (`codepack-quality-reviewer`) — нашло документационный
-      дрейф (этот чек-лист и три state-документа) и превышение 600-строчного лимита
-      в `commands/export.rs`; оба исправлены в этой же задаче
+- [ ] `cargo fmt --all --check`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
+- [ ] `cargo test --workspace` — no regression against the 913 baseline
+- [ ] `cargo test -p codepack-engine --test golden` — 3/3
+- [ ] `pnpm --filter @codepack/ui typecheck`, `lint`, `format`, `build`
+- [ ] `cargo deny check`
+- [ ] `cargo xtask sync-agents --check`
+- [ ] `cargo xtask gate` end to end
+- [ ] Pre-commit hook exercised on a real commit with a deliberately misformatted file
+- [ ] Installer built, installed, launched, and double-launch tested for one instance
+- [ ] Independent review of the diff
+- [ ] CI green on `windows-latest`
 
 ## Completion
 
-- [+] `ROADMAP.md` — `**Status.**` для S12 + таблица §1, честный список «не вошло»
-- [+] `docs/architecture/overview.md` обновлён (`codepack-reports`, десктоп-строка)
-- [+] `docs/decisions/open-questions.md` — Q19 (Mermaid/SVG-PNG), Q20 (`file:line`),
-      Q4 поднят явно (не решён), Q12 подтверждён отложенным повторно
-- [+] Чек-лист заполнен `+`/`-`, финальный отчёт владельцу
+- [ ] `ROADMAP.md` reflects the Windows-only scope and the pulled-forward installer
+- [ ] `docs/architecture/overview.md` updated
+- [ ] `docs/decisions/open-questions.md` carries every decision and open question above
+- [ ] Checklist filled `+`/`-` honestly, final report written in Russian
 
 ## Next task
 
-Этап **S13 — Прямая интеграция с ИИ** (`ROADMAP.md` §4) либо отдельная задача
-Mermaid/SVG-PNG, если владелец решит закрыть её раньше S13.
+Either S13 (AI integration) or the return of cross-platform support, whichever the owner
+picks. The open questions recorded here are what makes the second one possible without
+re-deriving it.
