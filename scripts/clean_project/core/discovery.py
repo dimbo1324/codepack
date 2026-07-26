@@ -6,6 +6,7 @@ Python would be both wrong and unnecessary.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
@@ -74,13 +75,16 @@ def discover(root: Path, artifacts: list[str], protection) -> list[Candidate]:
         protected = protection.is_protected(relative)
         reason = "protected pattern" if protected else ""
 
-        # A nested repository is somebody else's history. `git clean` refuses to touch
-        # one without -ff for exactly this reason, and losing an unpushed sibling repo
-        # would be unrecoverable — so it is protected here regardless of the pattern
-        # list, which a reader of clean.json cannot be expected to have anticipated.
-        if is_dir and (absolute / ".git").exists():
-            protected = True
-            reason = "nested git repository"
+        # git reports a wholly untracked or ignored directory as ONE entry and never
+        # lists what is inside it. Checking only the entry's own name therefore asks the
+        # protection list about `certs/` while `shutil.rmtree` deletes `certs/.env` —
+        # the plan printed a path as protected and the same run destroyed it. So a
+        # directory candidate is judged by its contents, not by its name.
+        if not protected and is_dir:
+            sheltered = _first_protected_inside(root, absolute, protection)
+            if sheltered is not None:
+                protected = True
+                reason = f"holds {sheltered}"
 
         candidates.append(
             Candidate(
@@ -94,6 +98,56 @@ def discover(root: Path, artifacts: list[str], protection) -> list[Candidate]:
 
     candidates.sort(key=lambda c: c.relative)
     return candidates
+
+
+def _first_protected_inside(root: Path, directory: Path, protection) -> str | None:
+    """The first protected path, or nested repository, found anywhere under ``directory``.
+
+    A directory that shelters something protected is itself protected, whole. Deleting
+    the rest of it and keeping the one file would be a partial result nobody asked for,
+    from a plan that listed the directory as a single line — declining and naming what
+    stopped it leaves the decision with the person who can make it.
+
+    Symlinks are not followed: a link pointing outside the tree would otherwise decide
+    the fate of a directory inside it.
+    """
+    nested_repo = _find_nested_repo(directory)
+    if nested_repo is not None:
+        return f"nested git repository {_as_relative(root, nested_repo)}"
+
+    for current, dirs, files in os.walk(directory, onerror=lambda _e: None):
+        current_path = Path(current)
+        dirs[:] = [d for d in dirs if not (current_path / d).is_symlink()]
+        for name in files + dirs:
+            relative = _as_relative(root, current_path / name)
+            if protection.is_protected(relative):
+                return relative
+    return None
+
+
+def _find_nested_repo(directory: Path) -> Path | None:
+    """A ``.git`` anywhere beneath ``directory``, not only at its top level.
+
+    An untracked `vendor/` holding `vendor/sibling/.git` reports to git as `vendor/`
+    alone, so a top-level-only check saw no repository and queued the whole thing for
+    deletion — losing an unpushed sibling clone, the very case this guard exists for.
+    `git clean` refuses such a directory without `-ff`; so does this.
+    """
+    if (directory / ".git").exists():
+        return directory / ".git"
+    for current, dirs, _files in os.walk(directory, onerror=lambda _e: None):
+        current_path = Path(current)
+        dirs[:] = [d for d in dirs if not (current_path / d).is_symlink()]
+        if ".git" in dirs or (current_path / ".git").exists():
+            return current_path / ".git"
+    return None
+
+
+def _as_relative(root: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(root)).replace("\\", "/")
+    except ValueError:
+        return str(path).replace("\\", "/")
 
 
 def _is_artifact(relative: str, artifacts: list[str]) -> bool:

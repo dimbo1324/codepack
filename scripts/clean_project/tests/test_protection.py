@@ -57,8 +57,8 @@ class ProtectionRulesTest(unittest.TestCase):
         self.assert_protected(".vscode/settings.json")
 
     def test_windows_separators_normalize(self) -> None:
-        self.assert_protected("config\.env")
-        self.assert_protected(".vscode\settings.json")
+        self.assert_protected(r"config\.env")
+        self.assert_protected(r".vscode\settings.json")
 
     def test_ordinary_sources_and_build_output_stay_cleanable(self) -> None:
         for path in ("src/main.rs", "target", "README.md", "src/wip.rs", "node_modules"):

@@ -84,15 +84,35 @@ def remove_all(root: Path, relatives: list[str]) -> RemovalOutcome:
     return outcome
 
 
-def prune_empty_dirs(root: Path, roots: list[str], skip: list[str]) -> list[str]:
-    """Delete empty directories, repeatedly, until nothing changes.
+def prune_empty_dirs(
+    root: Path,
+    roots: list[str],
+    skip: list[str],
+    protection=None,
+    dry_run: bool = False,
+) -> list[str]:
+    """Empty directories to delete, deleted unless ``dry_run``.
 
     Git does not track directories, so one left empty by a deletion or a move never
     goes away on its own. Repeating matters because removing the innermost directory is
     what makes its parent empty — a single pass would leave the nest half-collapsed.
+
+    ``protection`` is consulted here too. It used to be skipped, so an empty ``.idea/``
+    was pruned while the plan listed it as protected: the module promises the protected
+    list wins over everything, and one of the two deletion phases did not honour it.
+
+    ``dry_run`` simulates instead of deleting, so the plan can name these paths. Without
+    it the second phase removed directories the dry run never showed, which defeats the
+    review step the whole script is built around.
     """
     skip_set = set(skip)
     removed: list[str] = []
+    simulated: set[Path] = set()
+
+    def is_empty(path: Path, dirs: list[str], files: list[str]) -> bool:
+        if files:
+            return False
+        return all((path / d) in simulated for d in dirs)
 
     while True:
         removed_this_pass = False
@@ -104,17 +124,23 @@ def prune_empty_dirs(root: Path, roots: list[str], skip: list[str]) -> list[str]
             # considered in the same pass.
             for current, dirs, files in os.walk(base, topdown=False, onerror=lambda _e: None):
                 current_path = Path(current)
-                if current_path == base:
+                if current_path == base or current_path in simulated:
                     continue
-                if skip_set & set(current_path.relative_to(root).parts):
+                relative = current_path.relative_to(root)
+                if skip_set & set(relative.parts):
                     continue
-                if dirs or files:
+                if protection is not None and protection.is_protected(str(relative)):
                     continue
-                try:
-                    current_path.rmdir()
-                except OSError:
+                if not is_empty(current_path, dirs, files):
                     continue
-                removed.append(str(current_path.relative_to(root)).replace("\\", "/"))
+                if dry_run:
+                    simulated.add(current_path)
+                else:
+                    try:
+                        current_path.rmdir()
+                    except OSError:
+                        continue
+                removed.append(str(relative).replace("\\", "/"))
                 removed_this_pass = True
         if not removed_this_pass:
             break

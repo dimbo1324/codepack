@@ -82,7 +82,23 @@ def main(argv: list[str]) -> int:
 
     print_plan(candidates, scope=args.scope, applying=args.apply)
 
+    pruning = config.get("remove_empty_dirs", True) and not args.keep_empty_dirs
+    prune_argv = (
+        root,
+        config.get("empty_dir_roots", ["."]),
+        config.get("empty_dir_skip", []),
+        protection,
+    )
+
     if not args.apply:
+        if pruning:
+            heading("empty directories that would also be pruned")
+            already_empty = prune_empty_dirs(*prune_argv, dry_run=True)
+            for relative in already_empty:
+                info(f"- {relative}")
+            if not already_empty:
+                ok("none right now")
+            info("Deleting the paths above may leave more directories empty.")
         info("")
         info("Re-run with --apply to delete. Add --yes to skip the prompt.")
         if args.scope == "all":
@@ -109,10 +125,8 @@ def main(argv: list[str]) -> int:
             )
             return 1
 
-    if config.get("remove_empty_dirs", True) and not args.keep_empty_dirs:
-        pruned = prune_empty_dirs(
-            root, config.get("empty_dir_roots", ["."]), config.get("empty_dir_skip", [])
-        )
+    if pruning:
+        pruned = prune_empty_dirs(*prune_argv)
         heading("empty directories pruned")
         if pruned:
             for relative in pruned:
