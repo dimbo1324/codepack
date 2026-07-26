@@ -40,7 +40,9 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English", "Russian"]
+        "languages": ["English", "Russian"],
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
       }
     }
   }
