@@ -1,246 +1,82 @@
 # Task Checklist
 
-**Task:** A cross-platform Python dev-tools orchestrator, plus the legacy application
-icon adopted into the current project.
+**Task:** Verify the finished orchestrator work, teach the analyser OS/kernel source
+stacks (C, Assembly, Rust, Shell, Python, Makefile), and make the installer register in
+Windows "Uninstall a program" with a Start Menu and desktop shortcut.
 **Date:** 2026-07-26
-**Branch:** feat/python-dev-orchestrator-and-legacy-icon
+**Branch:** feat/systems-stack-and-installer-registration
 
-Two owner-requested tasks. The reference implementation the owner pointed at
-(`country-decision-atlas-r/dev_tools_scripts_runner.py`) was read end to end first: a
-nine-line root shim, a package holding all logic, and a hand-edited JSON catalog that the
-loader validates before anything can launch.
+Owner asked for autonomous execution: no confirmation prompts. Anything that genuinely
+needs a decision goes into `docs/decisions/open-questions.md`, not into a blocking
+question.
 
-## The one tension to name up front
+## Task 1 — verify what was finished while the session was interrupted
 
-The orchestrator must be **cross-platform** ("на любой операционной системе"), while the
-product itself was narrowed to **Windows 10/11 only** yesterday. These do not conflict, and
-the resolution is deliberate: every script *runs* anywhere, and the ones whose work is
-inherently Windows-specific (building the `.exe` installer) detect the host and refuse with
-a clear message naming the owner decision, rather than failing cryptically half-way through
-a Rust build. A script that lies about what it can do on the current OS is worse than one
-that declines.
+- [ ] `main` in sync with `origin/main`, history reviewed
+- [ ] `cargo xtask gate` green end to end
+- [ ] Orchestrator catalog loads, `selftest` passes
 
-## Architecture (adapted from the reference, not copied)
+## Task 2 — OS / kernel source support
 
-- `dev_tools_scripts_runner.py` at the repository root — a thin shim, nothing else.
-- `scripts/runner/` — the orchestrator's own logic, mirroring the reference's separation:
-  `models` (pure data) / `exceptions` / `config_loader` (validates) / `registry` (queries) /
-  `execution` (subprocess) / `rendering` (prints) / `interactive` (reads input) / `main`
-  (dispatch). Nothing prints and reads input in the same module.
-- `scripts/runner/config/*.json` — the hand-edited catalog: `meta`, `categories`,
-  `cadences`, `scripts`.
-- One directory per script, each with its own `config/*.json`. Small scripts stay one
-  module; big ones decompose fully.
-- **Scripts are launched as modules** (`python -m scripts.<name>`), not by file path. This
-  is the one deliberate divergence from the reference: it makes small and large scripts
-  launch identically, lets a decomposed script use ordinary relative imports, and needs no
-  `sys.path` manipulation. The loader validates that a declared module sits under
-  `scripts.` — the equivalent of the reference's escape-the-root check.
-- No behaviour hardcoded in Python: each script reads its own JSON.
+The target is a tree like `torvalds/linux`: C, Assembly, Rust, Shell, Python, Makefile.
+Three separate gaps, all real:
 
-## Preparation
+**2a. Assembly and friends are not even treated as text.** `classify.rs` has `c`, `h`,
+`mk` but no `s`/`asm`, no `dts`/`dtsi`, no `lds`. The kernel's assembly and device trees
+would be classified as non-text and dropped from the text dump entirely — the worst of
+the three gaps, because the content silently disappears rather than being mislabelled.
 
-- [+] Reference orchestrator studied: entry shim, config validation, registry, execution,
-      rendering, interactive shell, and all four config files
-- [+] Baseline: `main` green (CI run on `1038f2b` all 14 steps `success`), 911 tests
-- [+] Checklist committed before any code (`8bef3ea`)
+- [ ] `TEXT_EXTENSIONS` gains assembly, device-tree, linker-script and build-input
+      extensions
+- [ ] `TEXT_FILENAMES_WITHOUT_EXTENSION` gains `kconfig`, `kbuild`, `gnumakefile` and the
+      other extensionless files a kernel tree is full of
+- [ ] Recorded as an owner decision: `12-domain-rules.md` says legacy constant sets change
+      only by explicit decision, never as a side effect
 
-## Task 1a — the orchestrator core
+**2b. No language is reported for them.** `LANGUAGE_BY_EXTENSION` has no Assembly, and
+extensionless `Makefile`/`Kconfig` can never match because the map is keyed on extension.
 
-- [+] `dev_tools_scripts_runner.py` — shim only, imports and calls `main`
-- [+] `scripts/runner/` modules as listed above
-- [+] Config validation turns a bad hand-edit into one clear message: missing file, bad
-      JSON, unknown category reference, duplicate identifier, module outside `scripts.`
-      — **proven**, see Verification below
-- [+] Interactive menu, direct invocation (`... clean`), and `help` all work
-- [+] Non-interactive with no arguments runs the default script instead of blocking on
-      `input()` — the reference's behaviour, and the one that matters for agents and CI
-- [+] RU/EN interface, English default (matches the project's language policy for tooling)
+- [ ] Assembly, device tree, linker script, Perl, awk, CMake added to the language map
+- [ ] Filename-based language detection for `Makefile`/`Kconfig`/`Kbuild`, added **beside**
+      `extension_key` rather than inside it, so `by_extension` statistics — and therefore
+      golden parity — are untouched
+- [ ] Verified: golden fixtures contain no `.c`/`.S`/`Makefile`, so none of this can move
+      legacy parity (checked before writing any of it)
 
-## Task 1b — the scripts
+**2c. The stack detector cannot recognise a kernel or any C project.** Marker-file rules
+cover twelve ecosystems, none of them C.
 
-- [+] `doctor` — report which tools are present (cargo, rustc, node, pnpm, cargo-deny,
-      git, python) and what the host OS means for the other scripts
-- [+] `format_code` — rustfmt + Prettier, the same work `cargo xtask fmt` does
-- [+] `quality_gate` — the full gate; the default script
-- [+] `clean_project` — **the destructive one, so the most decomposed.** Removes what git
-      does not track, plus empty directories. Dry-run is the default; deleting requires an
-      explicit flag or confirmation. Never touches ignored-but-precious paths listed in its
-      own config
-- [+] `build_installer` — the Windows `.exe`; declines clearly on other hosts
-- [+] `dev_run` — build, launch for manual testing, and clean up after the window closes,
-      with the cleanup level set in config
-- [+] `install_hooks` — the formatting pre-commit hook
-- [+] Every script: `--help` works, exit codes are meaningful, no hardcoded parameters
-- [+] Ninth script added beyond the plan: `selftest`, which imports every script module and
-      re-validates the catalog. Without it "keep the scripts current" had no cheap check
+- [ ] `Linux kernel` rule (`Kconfig` + `Kbuild`/`MAINTAINERS`), with the build output it
+      should prune
+- [ ] `C / Make`, `C / CMake`, `C / Meson` rules for ordinary C projects
+- [ ] `detect_stack` in `codepack-reports` learns the same markers so
+      `PROJECT_PROFILE.json` and the reports agree with the scanner
+- [ ] Tests, including a synthetic kernel-shaped tree
 
-## Task 2 — the legacy icon
+## Task 3 — installer registers as a normal Windows program
 
-- [+] Extract `assets/ICO.ico` from `docs/__arch__/codepack-main.zip` (128×128, 32-bit,
-      single image) into a temporary directory outside the repository, per the legacy
-      reference rules
-- [+] Produce a proper icon set with `tauri icon` rather than hand-rolling sizes: the
-      current `icon.png` is a 2.2 KB placeholder and the current `.ico` is unrelated
-- [+] Verify the generated `.ico` really carries multiple sizes — a single 128×128 scaled
-      down is blurry in the taskbar, which is where a user actually sees it.
-      **Six frames: 16/24/32/48/64/256, all 32bpp with alpha**, read out of the ICO
-      directory rather than trusted
-- [+] Confirm the icon reaches both places it matters: the installer/executable, and
-      `default_window_icon()`, which is what our tray icon uses. Both verified at byte
-      level, and the check **found a real gap**: `installerIcon`/`uninstallerIcon` were
-      unset, so `setup.exe` — the one file the user double-clicks — carried NSIS's default
-      icon and none of ours (0 of 7 resources matched). Set explicitly and rebuilt; now
-      6 of 6
+- [ ] Bundle metadata filled in: `publisher`, `copyright`, `shortDescription`,
+      `homepage`, `category` — these are what Control Panel actually displays
+- [ ] Start Menu shortcut and desktop shortcut created by the installer
+- [ ] Built, then **actually installed**, and verified: the Uninstall registry key exists
+      with `DisplayName`/`DisplayVersion`/`Publisher`/`UninstallString`, the shortcuts
+      exist on disk, and the entry is visible in the programs list
+- [ ] Uninstall verified too: it removes the key and the shortcuts rather than orphaning
+      them
 
 ## Verification
 
-- [+] `cargo xtask gate` green
-- [+] Every script executed for real, not just imported: `doctor`, `format_code`,
-      `quality_gate`, `clean_project` (no `--apply`, which *is* the dry run — there is no
-      `--dry-run` flag), `install_hooks`, `build_installer`, `selftest`, `list`
-- [+] `clean_project` proven safe on a scratch copy before it is ever pointed at the repo —
-      and that is how the `.env` bug below was caught
-- [+] The orchestrator's config validation proven by feeding it a deliberately broken edit:
-      ten classes (missing file, malformed JSON, unknown category, duplicate title,
-      colliding alias, module outside `scripts.`, module with no directory, unknown
-      cadence, absent required field, `default_script_title` matching nothing). All ten
-      rejected with a message naming the file and the entry index; none leaked a bare
-      `KeyError`
-- [+] Installer rebuilt with the new icon and the icon confirmed in the artifact: all six
-      frames byte-identical as `RT_ICON` resources in both `codepack-desktop.exe` and
-      `codepack_2.0.0_x64-setup.exe`, and the decoded 32×32 RGBA block Tauri's codegen
-      builds `default_window_icon()` from present verbatim in the binary
-- [+] Independent review of the diff
-- [-] CI green on `windows-latest` — **not yet observed.** The push is the last step of this
-      task, so the run starts after it. The full gate is green locally, which is the same
-      command CI runs
+- [ ] `cargo xtask gate` green
+- [ ] `cargo test -p codepack-engine --test golden` 3/3 — parity unmoved
+- [ ] A real kernel-shaped tree analysed end to end through the CLI, and the reports read
+      correctly (stack, language breakdown, no assembly dropped)
+- [ ] Installer install/verify/uninstall cycle done on this machine
+- [ ] Independent review of the diff
 
 ## Completion
 
-- [+] `.ai/project/11-commands.md` documents the orchestrator and the duty to keep the
-      scripts current and cross-platform
-- [+] `CLAUDE.md`, `AGENTS.md` (regenerated), `.claude/`, `.codex/` all point agents at it.
-      `CLAUDE.md` had **zero** mentions of the orchestrator until this was finished, and the
-      `project-maintenance` and `stage-episode` skills were still routing agents at
-      hand-assembled `cargo xtask` sequences; both mirrors updated identically
-- [+] `.ai/CHANGELOG.md` entry for the rule-module change
-- [+] `docs/architecture/overview.md` and `docs/decisions/open-questions.md` updated
-- [+] Checklist filled `+`/`-`, final report in Russian
-
-## Defects this task found in its own work
-
-- **`.env` would have been deleted.** `clean_project`'s protection rule used
-  `lstrip("./")`, which strips *characters*, not a prefix, so `".env".lstrip("./")` yields
-  `"env"` and the rule stopped matching. Live credentials were one `--apply` away. Found by
-  testing on a sandbox copy rather than the real repository; fixed in
-  `scripts/clean_project/core/protection.py` and locked with 18 cases across 8 unittest
-  tests (`6635243`).
-- **`setup.exe` carried the wrong icon**, described above under Task 2.
-- **Three more data-loss paths in `clean_project`, found by the independent review and
-  reproduced on a scratch repository before being fixed.** All three share one cause: the
-  protection list was consulted on a *different* set of paths than the ones actually
-  deleted — the same shape as the `.env` bug above.
-  1. `git status --untracked-files=normal` reports a wholly untracked or ignored directory
-     as **one entry** and never says what is inside. Protection was asked about `certs/`,
-     `shutil.rmtree` deleted `certs/.env`. The plan printed `certs/.env` as protected in
-     the same run that destroyed it. Fixed by judging a directory by its contents:
-     `_first_protected_inside` walks it, and a directory sheltering something protected is
-     protected whole, with the plan naming what stopped it.
-  2. The nested-repository guard checked `<dir>/.git` only at the top level, so an
-     untracked `vendor/` holding `vendor/sibling/.git` — an unpushed sibling clone — was
-     queued for deletion. Fixed by searching for `.git` at any depth.
-  3. `prune_empty_dirs` never consulted the protection list at all, and its removals were
-     invisible to the dry run. Fixed both: it takes `ProtectionRules`, and `dry_run=True`
-     simulates so the plan can name the directories.
-  Locked with 16 tests in `tests/test_discovery.py` that build real git repositories,
-  because none of this is reachable by testing patterns against strings.
-- **The one safety-critical suite in this task ran in no gate and no CI.** `cargo xtask
-  gate` never touched `scripts/`, so the `.env` protection could have regressed with
-  everything green. Added `crates/xtask/src/scripts.rs`: a `dev scripts` step in the full
-  gate running `python -W error -m unittest`, skipping with a notice locally when Python is
-  absent and **failing** when `CI` is set — the same rule the frontend steps already use.
-  `-W error` is deliberate: two invalid escape sequences in the protection tests were
-  warnings that nobody read.
-- **`default_lang` was a setting that did nothing.** It was required by the loader,
-  declared in `meta.json`, and read by no one — the language default came from a Python
-  constant, so editing the JSON silently had no effect. That is precisely the hardcoded
-  parameter the owner's requirements forbid. Now threaded through the registry, and an
-  unsupported value is rejected by name.
-- **A typo'd script name ran the full quality gate.** Any unrecognised first argument was
-  passed through as flags for the default script, so `gat` silently gated instead of saying
-  the name was wrong. Leading *flags* still reach the default script; a bare word now
-  errors with exit 2.
-- **`selftest` did not do what it claimed.** It asserted it imports every script module; it
-  ran `unittest discover`, which imports only `test*.py`, and the catalog loader checks only
-  that a `__main__.py` directory *exists*. A syntax error in any script passed cleanly.
-  `scripts/selftest/tests/test_catalog.py` now imports every declared module, checks each
-  exposes a callable `main` and a populated `config/`, and asserts no script imports another
-  — turning the owner's no-interdependence rule into a test rather than a promise.
-
-## Second review round — what the fixes themselves got wrong
-
-The independent review was run again against the fixes, and confirmed all seven as
-working. It then found the next layer, which is the part worth recording: the first fix
-was correct and still **failed open**.
-
-- **The contents check discarded `os.walk` errors**, so "I could not enumerate this
-  subtree" was indistinguishable from "there is nothing protected in it". A directory
-  hiding `.env` behind a permission wall read as cleanable. `_first_protected_inside` now
-  returns a *reason* rather than a bool, and an unreadable subtree is one of the three
-  things that protect a directory.
-- **`capture()` folded stderr into stdout**, and `discover` parsed that stream. A git
-  warning carries no NUL, so it glued onto the following record, that record's status
-  field became the tail of the warning, and the path vanished from the plan with nothing
-  said. Benign while records only disappeared from the *deletion* half — and lethal the
-  moment one disappeared from the *protected* half, with nothing in the parse able to tell
-  the difference. Split into `capture_streams`; a warning now aborts with the warning text,
-  because an incomplete picture must not be authorised.
-- **Pruning still deleted inside directories discovery had protected whole.** Its new
-  check consulted only the pattern list, which cannot rederive "protected because of what
-  it holds" or "is a nested repository" — so empty directories inside a sibling clone were
-  removed by the same run that refused to touch it. The discovery verdicts now travel to
-  the pruning phase.
-- **The no-interdependence test could not fail for the import form anyone would write.**
-  `assertNotIn("import scripts.doctor", text)` does not match
-  `from scripts.doctor import main`. Replaced with an AST walk over `Import`/`ImportFrom`
-  and literal `import_module` calls, and proven by planting a violation and watching it
-  fail.
-- **The new gate step could pass with the suite gone.** `unittest discover` needs
-  `tests/__init__.py` and exits 0 when it finds nothing, so deleting one file dropped all
-  23 clean-project tests while the gate stayed green — the same "a check that passes by not
-  running" failure the step was added to prevent, one layer down. `MINIMUM_TESTS` is now a
-  floor, with three unit tests of the floor itself.
-- **Findings 6 and 7 had shipped untested.** `scripts/runner/tests/test_dispatch.py` covers
-  the dispatch rules and the `default_lang` threading, in a task whose stated lesson was
-  that untested logic under `scripts/` reaches `main` green.
-- **A comment was false on the only supported platform.** It claimed symlinks are not
-  followed; Windows junctions report `is_symlink() == False` and are traversed. Corrected
-  to say so, and to say that the gap errs toward protecting more.
-
-## Known debt, named rather than hidden
-
-- **The dry run takes ~30 s** on a repository with a populated `target/` and
-  `node_modules`. Merging the two walks into one recovered part of it; the rest is the
-  inherent cost of proving a collapsed directory holds nothing protected. Making it fast
-  means changing either the discovery model or `ProtectionRules`' matching — and trading a
-  possible regression in the module that guards live credentials for a faster dry run is a
-  bad exchange to make at the end of a task. Recorded, not fixed.
-- **No escape hatch if protection over-fires.** One stray `*.pem` or `.env` anywhere under
-  `target/` or `node_modules` makes that output permanently unclearable through this tool.
-  Zero such files exist today, so this is a risk rather than a defect, but some npm
-  packages do ship a `tests/.env`.
-- `remove_all` does not re-check protection after the confirmation prompt; the verdict is
-  computed before the user answers.
-- `.ai/CHANGELOG.md` is Russian while `10-project-map.md` puts `.ai/` under English-only.
-  Consistent within the file, contradicts the module — a rules decision, not something to
-  fix silently mid-task.
-
-## Rule debt carried forward
-
-`AGENTS.md` sits at 29.5 KB of its 30 KB budget even after the module split. Q22 stays open
-with the reason and the correct response to the next overflow recorded. Also recorded there:
-the approval for marking a module `tier: extended` — which drops its body from the compiled
-entry point, and which `08-rules-evolution.md` says needs the owner — reached this task as
-transcribed text from a previous session rather than as an owner turn in it. Flagged for
-confirmation rather than assumed.
+- [ ] `docs/decisions/open-questions.md`: the constant-set decision, plus anything that
+      needs the owner later
+- [ ] `docs/architecture/overview.md` and `ROADMAP.md` updated where the shape changed
+- [ ] Checklist filled `+`/`-`, final report in Russian
+- [ ] Merge to `main`, push
