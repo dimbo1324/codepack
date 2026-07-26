@@ -28,7 +28,7 @@ class InteractiveShell:
         self._runner = runner
 
     def run(self) -> int:
-        session = Session()
+        session = Session(lang=self._registry.default_lang)
         while True:
             self._renderer.print_top_menu(session.lang)
             raw = input(self._renderer.top_prompt(session.lang)).strip()

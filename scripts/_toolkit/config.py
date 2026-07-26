@@ -2,7 +2,14 @@
 
 Each script keeps its settings in ``scripts/<name>/config/*.json`` so paths, command
 lines, and thresholds can be changed without touching Python. This module is the one
-place that reads them, so a malformed file always fails the same clear way.
+place that reads them, so a malformed file always raises the same exception, naming the
+file and the key.
+
+Unlike the orchestrator's own catalog — whose errors are caught and printed as one line,
+because the catalog decides what gets *launched* — a per-script config error reaches the
+terminal as a traceback. That is deliberate for now: these run as ``python -m`` in their
+own process, the traceback names the file, and adding a handler to all eight entry points
+would buy a tidier line and one more thing to keep in sync.
 """
 
 from __future__ import annotations

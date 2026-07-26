@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .exceptions import RunnerError
-from .models import Category, ScriptInfo
+from .models import Category, Lang, ScriptInfo
 
 
 class ScriptRegistry:
@@ -12,10 +12,22 @@ class ScriptRegistry:
         categories: list[Category],
         scripts: list[ScriptInfo],
         default_script_title: str,
+        default_lang: Lang,
     ) -> None:
         self._categories = categories
         self._scripts = scripts
         self._default_script_title = default_script_title
+        self._default_lang = default_lang
+
+    @property
+    def default_lang(self) -> Lang:
+        """The interface language from `meta.json`.
+
+        Read from config rather than fixed in Python so that changing the JSON actually
+        changes behaviour — the key was previously required by the loader and read by
+        nobody, which is worse than not having it.
+        """
+        return self._default_lang
 
     @property
     def categories(self) -> list[Category]:

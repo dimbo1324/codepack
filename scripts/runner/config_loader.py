@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .exceptions import ConfigValidationError
-from .models import MODULE_PATTERN, Category, ScriptInfo, Text
+from .models import MODULE_PATTERN, SUPPORTED_LANGS, Category, ScriptInfo, Text
 from .registry import ScriptRegistry
 
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
@@ -32,6 +32,7 @@ class ConfigLoader:
             categories=categories,
             scripts=scripts,
             default_script_title=meta["default_script_title"],
+            default_lang=meta["default_lang"],
         )
 
     # -- file-level loaders -------------------------------------------------
@@ -84,6 +85,11 @@ class ConfigLoader:
         if not isinstance(raw, dict):
             raise ConfigValidationError("meta.json must be a JSON object")
         self._require_fields(raw, ("default_script_title", "default_lang"), "meta.json")
+        if raw["default_lang"] not in SUPPORTED_LANGS:
+            raise ConfigValidationError(
+                f"meta.json: default_lang {raw['default_lang']!r} is not supported "
+                f"(known: {sorted(SUPPORTED_LANGS)})"
+            )
         return raw
 
     def _load_scripts(

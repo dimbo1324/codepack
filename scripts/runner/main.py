@@ -9,7 +9,7 @@ from .config_loader import ConfigLoader
 from .exceptions import RunnerError
 from .execution import ScriptRunner
 from .interactive import InteractiveShell
-from .models import DEFAULT_LANG, Lang
+from .models import Lang
 from .registry import ScriptRegistry
 from .rendering import MenuRenderer
 
@@ -36,7 +36,7 @@ class CliApp:
         self.shell = InteractiveShell(self.registry, self.renderer, self.runner)
 
     def parse_help_args(self, rest: list[str]) -> tuple[Lang, list[str]]:
-        lang: Lang = DEFAULT_LANG
+        lang: Lang = self.registry.default_lang
         remaining: list[str] = []
         index = 0
         while index < len(rest):
@@ -105,8 +105,18 @@ class CliApp:
         if script is not None:
             return self.runner.run(script, argv[1:])
 
-        # Not a known script name: treat the whole argv as flags for the default
-        # script, so `... --profile quick` keeps working without naming it.
+        # Leading flags with no script name are flags for the default script, so
+        # `... --quick` keeps working without naming it. A bare word, though, was meant
+        # as a script name: passing `gat` through would silently run the whole quality
+        # gate instead of saying the name is wrong, and a typo must not be indistinguishable
+        # from a deliberate choice.
+        if not argv[0].startswith("-"):
+            print(f"ERROR: unknown script: {argv[0]!r}", file=sys.stderr)
+            print(
+                "Run `list` for the catalog, or `help` for the manuals.",
+                file=sys.stderr,
+            )
+            return 2
         return self.runner.run(self.registry.default_script(), argv)
 
 

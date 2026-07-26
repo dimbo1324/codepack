@@ -11,7 +11,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 Lang = str  # "en" or "ru"
-DEFAULT_LANG: Lang = "en"
+
+#: Every language the UI copy is written in. The *default* is not here — it comes from
+#: `config/meta.json`, because a hardcoded default is a setting the owner cannot change
+#: by editing the JSON, and this catalog exists so that settings live in JSON.
+SUPPORTED_LANGS: frozenset[Lang] = frozenset({"en", "ru"})
+
+#: Used only where no loaded config is available — a failure so early that `meta.json`
+#: could not be read, and the error message still has to come out in some language.
+FALLBACK_LANG: Lang = "en"
 
 #: A script is launched as ``python -m <module>``, and the module must live under the
 #: ``scripts`` package. Validating the shape here is what stops a hand-edited catalog
@@ -83,7 +91,7 @@ class Session:
     """Mutable per-run interactive state — currently just the display language,
     threaded through every menu so a switch anywhere sticks for the rest of the run."""
 
-    lang: Lang = DEFAULT_LANG
+    lang: Lang = FALLBACK_LANG
 
     def toggle_lang(self) -> None:
         self.lang = "ru" if self.lang == "en" else "en"
