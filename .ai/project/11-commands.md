@@ -17,7 +17,8 @@ which is what makes it usable by an agent. The scripts wrap the `cargo xtask` co
 below instead of reimplementing them, so both doors reach the same code.
 
 **`clean-project` deletes files.** Dry run by default; never touches `.env`, signing
-material, local databases, or a nested git repository. Read its
+material, local databases, or a nested git repository — judging a directory by its
+contents, since git reports a wholly untracked one as a single entry. Read its
 `config/clean.json` first.
 
 **Standing duty — keep the scripts accurate and portable.** They are infrastructure
@@ -87,5 +88,7 @@ module stays the part that applies to every task.
   `apps/desktop/ui/node_modules` they skip with a notice so a Rust-only checkout still
   gates — but with `CI` set they **fail** instead, since a silent skip there would let
   unformatted frontend code through.
+- The `scripts/` test suite runs in the full gate (not `--quick`), same skip-or-fail rule.
+  It guards a tool that deletes files, so "runs nowhere" is not an option.
 - CI runs `windows-latest` only (owner decision 2026-07-26); the other legs are commented
   out in `.github/workflows/ci.yml`, not deleted.

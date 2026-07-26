@@ -46,6 +46,6 @@ __pycache__/
 # Tauri writes its generated permission/capability schemas here at build time.
 apps/desktop/src-tauri/gen/
 
-# Python bytecode from the developer scripts in scripts/
-__pycache__/
+# Python bytecode from the developer scripts in scripts/ (__pycache__/ is already
+# covered above, with the other build and coverage output)
 *.py[cod]
