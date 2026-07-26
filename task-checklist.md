@@ -122,7 +122,10 @@ checklist was written in Russian, which violated that rule.
 - [-] Installer built (4.4 MiB) but **not installed and launched from the installed copy**.
       Verified the binary it wraps instead. Installing would write to this machine's
       Program Files and Start menu, which is the owner's call, not mine — see the report
-- [ ] Independent review of the diff
+- [+] Independent review of the diff (`codepack-quality-reviewer`). Found one high-severity
+      defect — the frontend gate steps never ran in CI, because `ci.yml` had no Node/pnpm,
+      while three places claimed they did — plus documentation drift and two holes in the
+      hook. All fixed in `b4f3770`; the two findings left alone are named there with reasons
 - [ ] CI green on `windows-latest`
 
 ## Completion
@@ -134,10 +137,11 @@ checklist was written in Russian, which violated that rule.
 
 ## Rule debt
 
-`AGENTS.md` now assembles to 29.9 KiB against a 30 KiB budget. This task nearly broke it
-and had to tighten its own additions to fit, which means the **next** module addition will
-break it. That is a real constraint on the next agent and needs either a raised budget or a
-module demoted to `tier: extended` — an owner decision, not a silent one.
+`AGENTS.md` assembles to 29.6 KiB against a 30 KiB budget. This task went over twice and
+tightened its own prose both times. Now recorded as **Q22** in
+`docs/decisions/open-questions.md` rather than only here — this file is cleared by the next
+task, which would have erased the only explanation of a limit the next agent is going to
+hit.
 
 ## Next task
 
