@@ -1,0 +1,26 @@
+[
+  {
+    "key": "quality",
+    "title": { "en": "Quality & Formatting", "ru": "Качество и форматирование" },
+    "blurb": {
+      "en": "Verify and format before you commit or merge.",
+      "ru": "Проверка и форматирование перед коммитом и слиянием."
+    }
+  },
+  {
+    "key": "build",
+    "title": { "en": "Build & Manual Testing", "ru": "Сборка и ручное тестирование" },
+    "blurb": {
+      "en": "Compile the app, run it by hand, produce an installer to distribute.",
+      "ru": "Сборка приложения, ручной запуск, установщик для распространения."
+    }
+  },
+  {
+    "key": "workspace",
+    "title": { "en": "Workspace Hygiene", "ru": "Гигиена рабочего каталога" },
+    "blurb": {
+      "en": "Environment checks, git hooks, and reducing the tree to what git tracks.",
+      "ru": "Проверка окружения, git-хуки и очистка дерева до того, что отслеживает git."
+    }
+  }
+]

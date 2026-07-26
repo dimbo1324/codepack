@@ -1,0 +1,38 @@
+{
+  "_comment": "Build once, run the app for manual testing, then tidy up. Aimed at the loop of 'change something, look at it, close it'.",
+
+  "requires_platform": "win32",
+  "platform_refusal": "Running the desktop shell needs the Windows WebView2 runtime; the product targets Windows 10/11 (owner decision 2026-07-26).",
+
+  "modes": {
+    "debug": {
+      "label": "debug build (fast to compile, slow to run)",
+      "build_argv": ["cargo", "build", "-p", "codepack-desktop"],
+      "binary": "target/debug/codepack-desktop.exe"
+    },
+    "release": {
+      "label": "release build (slow to compile, what users get)",
+      "build_argv": ["cargo", "build", "--release", "-p", "codepack-desktop"],
+      "binary": "target/release/codepack-desktop.exe"
+    }
+  },
+  "default_mode": "debug",
+
+  "frontend_build_argv": ["pnpm", "--filter", "@codepack/ui", "build"],
+  "_frontend_note": "The desktop binary embeds the built frontend at compile time, so the bundle has to exist before cargo runs. `tauri dev` would instead start a Vite dev server with hot reload -- use `pnpm desktop:dev` for that. This script exists for testing the real binary, which is a different question.",
+
+  "cleanup": {
+    "default": "none",
+    "choices": {
+      "none": "leave everything in place",
+      "artifacts": "run clean-project --scope artifacts --apply --yes",
+      "all": "run clean-project --scope all --apply (asks before deleting)"
+    },
+    "argv": {
+      "artifacts": ["--scope", "artifacts", "--apply", "--yes"],
+      "all": ["--scope", "all", "--apply"]
+    },
+    "module": "scripts.clean_project"
+  },
+  "_cleanup_note": "Cleaning after a manual test is opt-in, and 'all' deliberately keeps its confirmation prompt: a testing session is exactly when a developer has uncommitted files lying around."
+}

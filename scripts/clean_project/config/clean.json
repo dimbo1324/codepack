@@ -1,0 +1,43 @@
+{
+  "_comment": "Everything this script deletes, and everything it must never delete. Read 'protected' before adding anything: entries there survive every mode, and the list exists because a full clean is otherwise indistinguishable from deleting a developer's uncommitted work and real credentials.",
+
+  "protected": [
+    ".env",
+    ".env.*",
+    "!.env.example",
+    "*.local.json",
+    "*.local.toml",
+    ".vscode/",
+    ".idea/",
+    "*.pem",
+    "*.key",
+    "*.pfx",
+    "*.p12",
+    "codepack.db",
+    "*.sqlite",
+    "*.sqlite3"
+  ],
+  "_protected_note": "The project's own security rules put secrets in an untracked .env, so a clean that removed it would destroy live credentials that exist nowhere else. Signing material and local databases are here for the same reason. A leading '!' re-includes a path, which is how .env.example stays cleanable while .env does not.",
+
+  "artifacts": [
+    "target/",
+    "node_modules/",
+    "apps/desktop/ui/node_modules/",
+    "apps/desktop/ui/dist/",
+    "apps/desktop/src-tauri/target/",
+    "apps/desktop/src-tauri/gen/",
+    "__pycache__/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+    ".mypy_cache/"
+  ],
+  "_artifacts_note": "Regenerable output. Removing these costs only rebuild time, which is why 'artifacts' scope is the safe scope. Anything untracked and not listed here is reported as 'other' instead, because the script cannot know whether it is junk or work in progress.",
+
+  "remove_empty_dirs": true,
+  "empty_dir_roots": ["."],
+  "empty_dir_skip": [".git", "node_modules", "target", ".githooks"],
+  "_empty_dir_note": "Git does not track directories, so an emptied one lingers forever after its last file is deleted or moved (apps/desktop/ui/public was one). Pruning repeats until nothing changes, so a nest of empty directories collapses in one pass.",
+
+  "default_scope": "all",
+  "_scope_note": "'all' matches what the owner asked for -- the repository reduced to exactly what git tracks. The default *action* is still a dry run: choosing the wide scope and choosing to delete are two separate decisions."
+}

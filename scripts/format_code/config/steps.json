@@ -1,0 +1,22 @@
+{
+  "_comment": "Formatting is owned by cargo xtask fmt, which runs rustfmt and Prettier. This script is the orchestrator's door to it, not a second implementation -- two formatters configured in two places would drift.",
+  "steps": [
+    {
+      "label": "rustfmt + Prettier (cargo xtask fmt)",
+      "argv": ["cargo", "xtask", "fmt"],
+      "required": true
+    }
+  ],
+  "check_steps": [
+    {
+      "label": "rustfmt --check",
+      "argv": ["cargo", "fmt", "--all", "--check"],
+      "required": true
+    },
+    {
+      "label": "Prettier --check",
+      "argv": ["pnpm", "run", "format"],
+      "required": false
+    }
+  ]
+}

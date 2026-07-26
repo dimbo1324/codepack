@@ -1,0 +1,122 @@
+[
+  {
+    "title": "quality-gate",
+    "module": "scripts.quality_gate",
+    "category": "quality",
+    "aliases": ["gate", "check"],
+    "cadence_ref": "before_merge",
+    "summary": {
+      "en": "Run the project's full quality gate.",
+      "ru": "Запустить полный quality gate проекта."
+    },
+    "description": {
+      "en": "Runs `cargo xtask gate`: rustfmt check, clippy with warnings denied, the whole workspace test suite, cargo-deny, the frontend format/typecheck/lint checks, and the AGENTS.md sync check. This is a door to the gate, not a second implementation -- CI runs the same command, so a green run here means the same thing it means there. Use --quick before a push to skip the test run.",
+      "ru": "Запускает `cargo xtask gate`: проверку rustfmt, clippy с запретом предупреждений, все тесты воркспейса, cargo-deny, проверки формата/типов/линта фронтенда и синхронность AGENTS.md. Это дверь к гейту, а не вторая его реализация — CI запускает ту же команду, поэтому зелёный прогон здесь значит то же, что и там. Флаг --quick пропускает тесты, это минимум перед push."
+    },
+    "examples": ["--quick"]
+  },
+  {
+    "title": "format-code",
+    "module": "scripts.format_code",
+    "category": "quality",
+    "aliases": ["format", "fmt"],
+    "cadence_ref": "before_commit",
+    "summary": {
+      "en": "Format everything with rustfmt and Prettier.",
+      "ru": "Отформатировать всё через rustfmt и Prettier."
+    },
+    "description": {
+      "en": "Runs `cargo xtask fmt`, which formats Rust with rustfmt and the frontend plus config files with Prettier. Once `install-hooks` has been run this happens automatically for staged files on every commit, so reach for this when you want the whole tree formatted at once, or with --check to see what CI would object to.",
+      "ru": "Запускает `cargo xtask fmt`: Rust форматируется rustfmt, фронтенд и конфиги — Prettier. После `install-hooks` это происходит автоматически для застейдженных файлов при каждом коммите, поэтому вручную нужно, когда хочется отформатировать всё дерево сразу, или с --check — чтобы увидеть, к чему придерётся CI."
+    },
+    "examples": ["--check"]
+  },
+  {
+    "title": "dev-run",
+    "module": "scripts.dev_run",
+    "category": "build",
+    "aliases": ["run", "dev"],
+    "cadence_ref": "on_demand",
+    "platforms": ["win32"],
+    "summary": {
+      "en": "Build the app, run it for manual testing, optionally clean up after.",
+      "ru": "Собрать приложение, запустить для ручного тестирования, при желании убрать за собой."
+    },
+    "description": {
+      "en": "Builds the frontend bundle, then the desktop binary, then launches it and waits for you to close the window -- reporting how long the session lasted and how the app exited. The frontend is rebuilt first on purpose: the Rust binary embeds it at compile time, so a stale bundle silently produces an app without the change you meant to test. --mode release builds what users get instead of the fast debug build; --cleanup artifacts|all tidies up afterwards by delegating to clean-project. For UI iteration with hot reload, use `pnpm desktop:dev` instead.",
+      "ru": "Собирает бандл фронтенда, затем десктопный бинарь, запускает его и ждёт, пока вы закроете окно, сообщая длительность сессии и код выхода. Фронтенд пересобирается специально: бинарь встраивает его на этапе компиляции, поэтому устаревший бандл молча даст приложение без той правки, которую вы собирались проверить. --mode release собирает то, что получают пользователи, вместо быстрой debug-сборки; --cleanup artifacts|all убирает за собой, делегируя работу clean-project. Для итераций по UI с горячей перезагрузкой используйте `pnpm desktop:dev`."
+    },
+    "examples": ["--mode release", "--cleanup artifacts", "--skip-frontend"]
+  },
+  {
+    "title": "build-installer",
+    "module": "scripts.build_installer",
+    "category": "build",
+    "aliases": ["installer", "package", "build"],
+    "cadence_ref": "before_release",
+    "platforms": ["win32"],
+    "summary": {
+      "en": "Produce the Windows .exe installer for distribution.",
+      "ru": "Собрать Windows .exe-установщик для распространения."
+    },
+    "description": {
+      "en": "Runs `cargo xtask package`, which builds the frontend, the release binary, and an NSIS installer, then reports the artifact it actually found on disk with its size. The installer uses installMode currentUser, so installing needs no administrator prompt. It is unsigned: Windows SmartScreen will warn about an unknown publisher until code signing lands in stage S14. Refuses immediately on a non-Windows host rather than failing deep inside a ten-minute release build.",
+      "ru": "Запускает `cargo xtask package`: собирает фронтенд, release-бинарь и NSIS-установщик, затем сообщает найденный на диске артефакт и его размер. Установщик использует installMode currentUser, поэтому установка не требует прав администратора. Он не подписан: Windows SmartScreen будет предупреждать о неизвестном издателе, пока подпись кода не появится на этапе S14. На не-Windows системе отказывается сразу, а не падает внутри десятиминутной release-сборки."
+    },
+    "examples": []
+  },
+  {
+    "title": "doctor",
+    "module": "scripts.doctor",
+    "category": "workspace",
+    "aliases": ["env", "check-env"],
+    "cadence_ref": "on_demand",
+    "summary": {
+      "en": "Report which tools are present and what this host can do.",
+      "ru": "Показать, какие инструменты есть и что доступно на этой системе."
+    },
+    "description": {
+      "en": "Read-only. Probes git, cargo, rustc, rustfmt, node, pnpm, cargo-deny and python, checks the paths the other scripts depend on (node_modules, the Tauri config, the tracked hook), and says which scripts this operating system cannot run. Exits non-zero when a required tool is missing, so it works as a first step in a setup script. The tool list lives in its config/tools.json.",
+      "ru": "Только чтение. Проверяет git, cargo, rustc, rustfmt, node, pnpm, cargo-deny и python, наличие путей, от которых зависят остальные скрипты (node_modules, конфиг Tauri, отслеживаемый хук), и сообщает, какие скрипты на этой ОС недоступны. Возвращает ненулевой код при отсутствии обязательного инструмента, поэтому годится первым шагом в setup-скрипте. Список инструментов — в его config/tools.json."
+    },
+    "examples": ["--strict"]
+  },
+  {
+    "title": "install-hooks",
+    "module": "scripts.install_hooks",
+    "category": "workspace",
+    "aliases": ["hooks"],
+    "cadence_ref": "once_per_clone",
+    "summary": {
+      "en": "Activate the tracked git hooks for this clone.",
+      "ru": "Включить отслеживаемые git-хуки для этого клона."
+    },
+    "description": {
+      "en": "Points core.hooksPath at the tracked .githooks/ directory, so the pre-commit formatting hook is versioned with the repository instead of living in an untracked .git/hooks that disappears on every fresh clone. The hook formats only staged files and re-stages them, and refuses to touch a partially staged file rather than sweep its unstaged half into the commit.",
+      "ru": "Направляет core.hooksPath на отслеживаемый каталог .githooks/, поэтому pre-commit хук форматирования версионируется вместе с репозиторием, а не живёт в неотслеживаемом .git/hooks, который исчезает при каждом свежем клоне. Хук форматирует только застейдженные файлы и пере-стейджит их, а частично застейдженный файл не трогает, чтобы не втянуть в коммит его незастейдженную половину."
+    },
+    "examples": []
+  },
+  {
+    "title": "clean-project",
+    "module": "scripts.clean_project",
+    "category": "workspace",
+    "aliases": ["clean"],
+    "cadence_ref": "on_demand",
+    "destructive": true,
+    "summary": {
+      "en": "Reduce the working tree to exactly what git tracks.",
+      "ru": "Свести рабочее дерево ровно к тому, что отслеживает git."
+    },
+    "description": {
+      "en": "Removes untracked and ignored paths, then prunes the empty directories git cannot track and so never cleans up itself. DRY RUN BY DEFAULT: it prints the plan and deletes nothing until you pass --apply, because choosing a wide scope and choosing to delete are separate decisions. Paths in its protected list survive every mode -- .env above all, since this project's own security rules make it the only copy of real credentials, along with signing material, local databases, and any nested git repository. --scope artifacts limits it to regenerable build output (target/, node_modules/, dist/, caches); the default 'all' is the full reduction. Anything untracked that is not known build output is reported separately and warned about, because the script cannot tell junk from work you have not committed.",
+      "ru": "Удаляет неотслеживаемые и игнорируемые пути, затем вычищает пустые каталоги, которые git не отслеживает и потому никогда не убирает сам. ПО УМОЛЧАНИЮ — СУХОЙ ПРОГОН: печатает план и ничего не удаляет, пока не передан --apply, потому что выбор широкой области и решение удалять — это два разных решения. Пути из списка защиты выживают в любом режиме — прежде всего .env, поскольку по собственным правилам безопасности проекта это единственная копия реальных учётных данных, а также ключи подписи, локальные базы и любой вложенный git-репозиторий. --scope artifacts ограничивает работу пересоздаваемым выводом сборки (target/, node_modules/, dist/, кеши); режим по умолчанию 'all' — полная очистка. Всё неотслеживаемое, что не является известным выводом сборки, показывается отдельно и с предупреждением: скрипт не может отличить мусор от несохранённой работы."
+    },
+    "examples": [
+      "--scope artifacts",
+      "--apply",
+      "--scope artifacts --apply --yes",
+      "--keep-empty-dirs"
+    ]
+  }
+]

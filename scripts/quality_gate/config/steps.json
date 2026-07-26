@@ -1,0 +1,17 @@
+{
+  "_comment": "The gate itself lives in cargo xtask, which CI runs verbatim. Reimplementing the step list here would let the two drift, and the whole point of a gate is that everyone runs the same one.",
+  "steps": [
+    {
+      "label": "full gate (fmt, clippy, tests, deny, frontend, agents sync)",
+      "argv": ["cargo", "xtask", "gate"],
+      "required": true
+    }
+  ],
+  "quick_steps": [
+    {
+      "label": "quick gate (skips the test run)",
+      "argv": ["cargo", "xtask", "gate", "--quick"],
+      "required": true
+    }
+  ]
+}

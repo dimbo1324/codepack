@@ -1,0 +1,10 @@
+{
+  "_comment": "core.hooksPath is pointed at the tracked .githooks/ directory by cargo xtask install-hooks. Kept as config so the command can change without touching Python.",
+  "steps": [
+    {
+      "label": "install the formatting pre-commit hook",
+      "argv": ["cargo", "xtask", "install-hooks"],
+      "required": true
+    }
+  ]
+}

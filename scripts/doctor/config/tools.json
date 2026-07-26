@@ -1,0 +1,76 @@
+{
+  "_comment": "Tools the other scripts depend on. 'required' means some script cannot work without it; 'optional' means only part of the toolchain is affected. Edit this list rather than doctor's Python.",
+  "tools": [
+    {
+      "name": "git",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "clean-project, install-hooks, and every git-aware script"
+    },
+    {
+      "name": "cargo",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "quality-gate, build-installer, dev-run"
+    },
+    {
+      "name": "rustc",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "compiling the workspace"
+    },
+    {
+      "name": "rustfmt",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "format-code, and the pre-commit hook"
+    },
+    {
+      "name": "node",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "the Svelte frontend build"
+    },
+    {
+      "name": "pnpm",
+      "version_args": ["--version"],
+      "required": true,
+      "needed_for": "frontend install/build, Prettier, and the Tauri CLI"
+    },
+    {
+      "name": "cargo-deny",
+      "version_args": ["--version"],
+      "required": false,
+      "needed_for": "the deny step of quality-gate; CI installs it separately"
+    },
+    {
+      "name": "python",
+      "version_args": ["--version"],
+      "required": false,
+      "needed_for": "cargo xtask golden, which regenerates the legacy references"
+    }
+  ],
+  "paths": [
+    {
+      "path": "node_modules",
+      "label": "workspace node_modules",
+      "hint": "run: pnpm install"
+    },
+    {
+      "path": "apps/desktop/ui/node_modules",
+      "label": "frontend node_modules",
+      "hint": "run: pnpm install"
+    },
+    {
+      "path": "apps/desktop/src-tauri/tauri.conf.json",
+      "label": "Tauri config",
+      "hint": "the desktop shell is missing from this checkout"
+    },
+    {
+      "path": ".githooks/pre-commit",
+      "label": "tracked pre-commit hook",
+      "hint": "run: install-hooks"
+    }
+  ],
+  "windows_only_scripts": ["build-installer", "dev-run"]
+}
