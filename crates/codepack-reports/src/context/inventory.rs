@@ -95,17 +95,11 @@ const SYSTEMS_LANGUAGE_BY_EXTENSION: &[(&str, &str)] = &[
     ("pm", "Perl"),
     ("awk", "Awk"),
     ("cocci", "Coccinelle"),
-    ("lua", "Lua"),
-    ("zig", "Zig"),
-    ("scala", "Scala"),
-    ("ex", "Elixir"),
-    ("exs", "Elixir"),
-    ("erl", "Erlang"),
-    ("hs", "Haskell"),
-    ("jl", "Julia"),
-    ("proto", "Protocol Buffers"),
-    ("tf", "Terraform"),
 ];
+// Lua, Zig, Scala, Elixir, Erlang, Haskell, Julia, Protobuf and Terraform were in an
+// earlier draft and were removed: none is part of the six languages this task is about,
+// and every entry here changes `PROJECT_PROFILE.json` for projects that have nothing to
+// do with kernels. Worth adding one day, as their own decision.
 
 /// Extensionless files whose name *is* the language signal.
 ///
@@ -304,6 +298,21 @@ mod tests {
             &CancellationToken::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn the_systems_language_table_never_shadows_the_legacy_one() {
+        // `language_for_extension` chains legacy first, so a duplicate in the systems
+        // table would be silently unreachable — the separation would read as deliberate
+        // while meaning nothing. `classify.rs` has the same guard; this is its twin.
+        for (extension, _) in SYSTEMS_LANGUAGE_BY_EXTENSION {
+            assert!(
+                !LANGUAGE_BY_EXTENSION
+                    .iter()
+                    .any(|(legacy, _)| legacy == extension),
+                "{extension} is already in the legacy language table"
+            );
+        }
     }
 
     #[test]

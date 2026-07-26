@@ -12,6 +12,14 @@ struct StackRule {
     markers: &'static [&'static str],
     marker_extensions: &'static [&'static str],
     extra_ignored_dirs: &'static [&'static str],
+    /// Markers that must **all** be present before the rule can match at all.
+    ///
+    /// `markers` is an any-of list, which is right for an ecosystem identified by one
+    /// unambiguous file (`Cargo.toml`, `go.mod`). It is wrong for a tree identified by a
+    /// *combination*: `COPYING` alone would have made every GPL project a Linux kernel,
+    /// and that verdict then prunes directories. Empty for every legacy rule, so their
+    /// behaviour is unchanged.
+    required_markers: &'static [&'static str],
 }
 
 /// One matched technology stack, with the markers that matched and the extra
@@ -40,6 +48,7 @@ const STACK_RULES: &[StackRule] = &[
             ".parcel-cache",
             "out",
         ],
+        required_markers: &[],
     },
     StackRule {
         name: "Python",
@@ -63,66 +72,77 @@ const STACK_RULES: &[StackRule] = &[
             "htmlcov",
             "*.egg-info",
         ],
+        required_markers: &[],
     },
     StackRule {
         name: "Go",
         markers: &["go.mod"],
         marker_extensions: &[],
         extra_ignored_dirs: &["vendor"],
+        required_markers: &[],
     },
     StackRule {
         name: "Rust",
         markers: &["Cargo.toml"],
         marker_extensions: &[],
         extra_ignored_dirs: &["target"],
+        required_markers: &[],
     },
     StackRule {
         name: "Java / Maven",
         markers: &["pom.xml"],
         marker_extensions: &[],
         extra_ignored_dirs: &["target", ".mvn"],
+        required_markers: &[],
     },
     StackRule {
         name: "Java / Gradle",
         markers: &["build.gradle", "settings.gradle", "build.gradle.kts"],
         marker_extensions: &[],
         extra_ignored_dirs: &["build", ".gradle", ".idea"],
+        required_markers: &[],
     },
     StackRule {
         name: ".NET / C#",
         markers: &[],
         marker_extensions: &[".csproj", ".sln"],
         extra_ignored_dirs: &["bin", "obj", ".vs"],
+        required_markers: &[],
     },
     StackRule {
         name: "Flutter / Dart",
         markers: &["pubspec.yaml"],
         marker_extensions: &[],
         extra_ignored_dirs: &[".dart_tool", "build", ".flutter-plugins"],
+        required_markers: &[],
     },
     StackRule {
         name: "PHP / Composer",
         markers: &["composer.json"],
         marker_extensions: &[],
         extra_ignored_dirs: &["vendor"],
+        required_markers: &[],
     },
     StackRule {
         name: "Ruby",
         markers: &["Gemfile"],
         marker_extensions: &[],
         extra_ignored_dirs: &[".bundle", "vendor/bundle"],
+        required_markers: &[],
     },
     StackRule {
         name: "iOS / Swift",
         markers: &["Package.swift"],
         marker_extensions: &[".xcodeproj", ".xcworkspace"],
         extra_ignored_dirs: &[".build", "DerivedData"],
+        required_markers: &[],
     },
     StackRule {
         name: "Android",
         markers: &["AndroidManifest.xml"],
         marker_extensions: &[],
         extra_ignored_dirs: &["build", ".gradle", ".idea"],
+        required_markers: &[],
     },
     // --- Systems and OS trees (owner decision 2026-07-26) ------------------------
     //
@@ -131,24 +151,23 @@ const STACK_RULES: &[StackRule] = &[
     // appears in any golden fixture, so legacy parity cannot move.
     StackRule {
         name: "Linux kernel",
-        // Kconfig plus Kbuild is what makes a tree a kernel-style tree rather than any
-        // project that happens to ship a Makefile. Listed before the generic C rules so
-        // a kernel reports as a kernel first.
-        markers: &["Kconfig", "Kbuild", "MAINTAINERS", "COPYING"],
+        // `Kconfig` is required and one of these must join it. `Kconfig` alone appears in
+        // buildroot, Zephyr and plenty of embedded projects, and `COPYING` alone appears
+        // in a large share of GPL repositories — either on its own would have declared
+        // them kernels *and then pruned directories on the strength of that verdict*.
+        // This mirrors `codepack_reports::context::stack`, which already required the
+        // pair; the two must agree or the export plan and PROJECT_PROFILE.json describe
+        // different projects.
+        markers: &["Kbuild", "MAINTAINERS"],
+        required_markers: &["Kconfig"],
         marker_extensions: &[],
-        extra_ignored_dirs: &[
-            // Kbuild output. `.o`/`.ko` land beside their sources all over the tree, so
-            // pruning directories only goes so far — the binary-extension set is what
-            // actually keeps them out of a text dump.
-            "include/generated",
-            "include/config",
-            "arch/x86/include/generated",
-            ".tmp_versions",
-            "debian",
-            "tools/testing/selftests/output",
-            "Documentation/output",
-            "rust/target",
-        ],
+        // Only entries the matcher can actually act on. `IgnoredDirMatcher` compares a
+        // bare directory *name* at any depth, so a path like `include/generated` never
+        // matches — and would have been reported in `manifest.json` as ignored while
+        // being exported in full, which is an artifact stating something false. Kbuild's
+        // generated output is kept out by the binary-extension set instead. `debian/` is
+        // deliberately absent: it is real packaging source, not build output.
+        extra_ignored_dirs: &[".tmp_versions"],
     },
     StackRule {
         name: "C / CMake",
@@ -160,18 +179,21 @@ const STACK_RULES: &[StackRule] = &[
             "cmake-build-release",
             "_build",
         ],
+        required_markers: &[],
     },
     StackRule {
         name: "C / Meson",
         markers: &["meson.build"],
         marker_extensions: &[],
         extra_ignored_dirs: &["builddir", "_build"],
+        required_markers: &[],
     },
     StackRule {
         name: "C / Autotools",
         markers: &["configure.ac", "configure.in", "Makefile.am"],
         marker_extensions: &[],
         extra_ignored_dirs: &["autom4te.cache", ".deps", ".libs"],
+        required_markers: &[],
     },
     StackRule {
         // Last of the C family on purpose: a bare Makefile is the weakest signal of the
@@ -180,7 +202,14 @@ const STACK_RULES: &[StackRule] = &[
         name: "C / Make",
         markers: &["Makefile", "makefile", "GNUmakefile"],
         marker_extensions: &[],
-        extra_ignored_dirs: &["build", "obj", "bin"],
+        // Deliberately empty. `obj` and `bin` were here and had to go: the matcher prunes
+        // any directory with that *name* at any depth, so one root Makefile — which a
+        // huge number of projects have — silently removed `src/bin/` from a Rust crate,
+        // a Go repo's `bin/` of scripts, and so on. Unlike `.NET / C#`, where `.csproj`
+        // unambiguously implies MSBuild's layout, a bare Makefile implies nothing about
+        // directory names. `build` needs no entry: it is already in `IGNORED_DIR_NAMES`.
+        extra_ignored_dirs: &[],
+        required_markers: &[],
     },
 ];
 
@@ -214,7 +243,24 @@ pub fn detect_stacks(root: &Path) -> Vec<StackInfo> {
 
     let mut results: Vec<StackInfo> = Vec::new();
     for rule in STACK_RULES {
-        let mut found: Vec<String> = Vec::new();
+        // Every required marker must be present before the rule is even considered. No
+        // legacy rule sets any, so this is a no-op for all twelve of them.
+        if !rule
+            .required_markers
+            .iter()
+            .all(|marker| names.contains(*marker))
+        {
+            continue;
+        }
+
+        // Required markers count as found: they are the strongest evidence the rule has,
+        // and leaving them out would make a kernel look less certain than a lone
+        // `package.json` when the results are ranked.
+        let mut found: Vec<String> = rule
+            .required_markers
+            .iter()
+            .map(|marker| (*marker).to_string())
+            .collect();
         for marker in rule.markers {
             if names.contains(*marker) {
                 found.push((*marker).to_string());
@@ -225,6 +271,15 @@ pub fn detect_stacks(root: &Path) -> Vec<StackInfo> {
                 found.push(format!("*{extension}"));
             }
         }
+
+        // A rule with required markers and no any-of hit has only proved half its case.
+        if !rule.markers.is_empty()
+            && !rule.required_markers.is_empty()
+            && found.len() == rule.required_markers.len()
+        {
+            continue;
+        }
+
         if !found.is_empty() {
             results.push(StackInfo {
                 name: rule.name.to_string(),
@@ -333,15 +388,71 @@ mod tests {
             .find(|s| s.name == "Linux kernel")
             .expect("a kernel tree must be recognised as one");
 
-        assert_eq!(kernel.markers_found.len(), 4);
-        assert!(
-            kernel
-                .extra_ignored_dirs
-                .contains(&"include/generated".to_string())
-        );
-        // The kernel's four markers outweigh the lone Makefile, so the primary stack is
-        // the specific answer rather than the generic one.
+        // Kconfig (required) + Kbuild + MAINTAINERS. COPYING is deliberately not a
+        // marker at all — see the rule's comment.
+        assert_eq!(kernel.markers_found.len(), 3);
+        assert!(kernel.markers_found.contains(&"Kconfig".to_string()));
+        // Those three outweigh the lone Makefile, so the primary answer is the specific
+        // one rather than the generic one.
         assert_eq!(primary_stack(dir.path()).unwrap().name, "Linux kernel");
+    }
+
+    #[test]
+    fn a_kernel_marker_on_its_own_is_not_a_kernel() {
+        // Each of these appears in projects that are emphatically not kernels: Kconfig in
+        // buildroot and Zephyr, COPYING and MAINTAINERS across GPL software generally.
+        // Getting this wrong is not merely a wrong label — the verdict prunes
+        // directories, so a false positive removes real files from the export.
+        for marker in ["Kconfig", "COPYING", "MAINTAINERS", "Kbuild"] {
+            let dir = tempfile::tempdir().unwrap();
+            touch(dir.path(), &[marker]);
+            assert!(
+                !detect_stacks(dir.path())
+                    .iter()
+                    .any(|s| s.name == "Linux kernel"),
+                "{marker} alone must not be read as a kernel"
+            );
+        }
+    }
+
+    #[test]
+    fn every_extra_ignored_dir_is_something_the_matcher_can_match() {
+        // `IgnoredDirMatcher` compares a bare directory name, so an entry containing a
+        // separator can never fire — and worse, `manifest.json` would list it as ignored
+        // while the directory was exported in full. Legacy shipped one such entry
+        // (`vendor/bundle`); this pins that no new rule adds another.
+        for rule in STACK_RULES {
+            if rule.name == "Ruby" {
+                continue; // the one inherited exception, kept for parity
+            }
+            for entry in rule.extra_ignored_dirs {
+                assert!(
+                    !entry.contains('/') && !entry.contains('\\'),
+                    "{}: {entry:?} contains a separator and can never match",
+                    rule.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_bare_makefile_never_prunes_a_source_directory() {
+        // A root Makefile is extremely common. When this rule carried `bin`/`obj`, one
+        // such file silently removed `src/bin/` from any Rust crate and `bin/` from any
+        // repository keeping scripts there.
+        let dir = tempfile::tempdir().unwrap();
+        touch(dir.path(), &["Makefile"]);
+
+        let make = detect_stacks(dir.path())
+            .into_iter()
+            .find(|s| s.name == "C / Make")
+            .expect("a Makefile should still be detected");
+
+        assert!(
+            make.extra_ignored_dirs.is_empty(),
+            "a bare Makefile must not prune anything: {:?}",
+            make.extra_ignored_dirs
+        );
     }
 
     #[test]
@@ -378,7 +489,7 @@ mod tests {
 
         let merged = merged_extra_ignored_dirs(&detect_stacks(dir.path()));
         assert!(merged.contains(&"target".to_string()));
-        assert!(merged.contains(&"include/generated".to_string()));
+        assert!(merged.contains(&".tmp_versions".to_string()));
     }
 
     #[test]
