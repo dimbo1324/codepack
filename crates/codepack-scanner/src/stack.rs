@@ -124,6 +124,64 @@ const STACK_RULES: &[StackRule] = &[
         marker_extensions: &[],
         extra_ignored_dirs: &["build", ".gradle", ".idea"],
     },
+    // --- Systems and OS trees (owner decision 2026-07-26) ------------------------
+    //
+    // Legacy stopped at application ecosystems, so a kernel checkout matched nothing at
+    // all and got no directory pruning. These rules are additive: none of their markers
+    // appears in any golden fixture, so legacy parity cannot move.
+    StackRule {
+        name: "Linux kernel",
+        // Kconfig plus Kbuild is what makes a tree a kernel-style tree rather than any
+        // project that happens to ship a Makefile. Listed before the generic C rules so
+        // a kernel reports as a kernel first.
+        markers: &["Kconfig", "Kbuild", "MAINTAINERS", "COPYING"],
+        marker_extensions: &[],
+        extra_ignored_dirs: &[
+            // Kbuild output. `.o`/`.ko` land beside their sources all over the tree, so
+            // pruning directories only goes so far — the binary-extension set is what
+            // actually keeps them out of a text dump.
+            "include/generated",
+            "include/config",
+            "arch/x86/include/generated",
+            ".tmp_versions",
+            "debian",
+            "tools/testing/selftests/output",
+            "Documentation/output",
+            "rust/target",
+        ],
+    },
+    StackRule {
+        name: "C / CMake",
+        markers: &["CMakeLists.txt"],
+        marker_extensions: &[],
+        extra_ignored_dirs: &[
+            "build",
+            "cmake-build-debug",
+            "cmake-build-release",
+            "_build",
+        ],
+    },
+    StackRule {
+        name: "C / Meson",
+        markers: &["meson.build"],
+        marker_extensions: &[],
+        extra_ignored_dirs: &["builddir", "_build"],
+    },
+    StackRule {
+        name: "C / Autotools",
+        markers: &["configure.ac", "configure.in", "Makefile.am"],
+        marker_extensions: &[],
+        extra_ignored_dirs: &["autom4te.cache", ".deps", ".libs"],
+    },
+    StackRule {
+        // Last of the C family on purpose: a bare Makefile is the weakest signal of the
+        // four, and plenty of non-C projects ship one. It still earns a rule, because
+        // "Makefile" is one of the languages the owner named.
+        name: "C / Make",
+        markers: &["Makefile", "makefile", "GNUmakefile"],
+        marker_extensions: &[],
+        extra_ignored_dirs: &["build", "obj", "bin"],
+    },
 ];
 
 /// Non-recursive: only looks at `root`'s immediate entries, matching legacy's
@@ -253,9 +311,74 @@ mod tests {
 
     #[test]
     fn unknown_stack_returns_empty() {
+        // Loose sources are still not a "stack": detection is marker-file based, and a
+        // stray main.c says nothing about how the project is built. The C rules key on
+        // build files (Makefile, CMakeLists.txt, configure.ac), never on `.c` itself.
         let dir = tempfile::tempdir().unwrap();
         touch(dir.path(), &["README.md", "main.c"]);
         assert!(detect_stacks(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn detects_a_linux_kernel_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        touch(
+            dir.path(),
+            &["Kconfig", "Kbuild", "MAINTAINERS", "COPYING", "Makefile"],
+        );
+
+        let stacks = detect_stacks(dir.path());
+        let kernel = stacks
+            .iter()
+            .find(|s| s.name == "Linux kernel")
+            .expect("a kernel tree must be recognised as one");
+
+        assert_eq!(kernel.markers_found.len(), 4);
+        assert!(
+            kernel
+                .extra_ignored_dirs
+                .contains(&"include/generated".to_string())
+        );
+        // The kernel's four markers outweigh the lone Makefile, so the primary stack is
+        // the specific answer rather than the generic one.
+        assert_eq!(primary_stack(dir.path()).unwrap().name, "Linux kernel");
+    }
+
+    #[test]
+    fn detects_ordinary_c_build_systems() {
+        for (marker, expected) in [
+            ("CMakeLists.txt", "C / CMake"),
+            ("meson.build", "C / Meson"),
+            ("configure.ac", "C / Autotools"),
+            ("Makefile", "C / Make"),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            touch(dir.path(), &[marker]);
+            let stacks = detect_stacks(dir.path());
+            assert!(
+                stacks.iter().any(|s| s.name == expected),
+                "{marker} should detect {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rust_in_kernel_tree_reports_both() {
+        // `torvalds/linux` carries rust/ with its own Cargo.toml. A mono-repo keeps every
+        // match, so the export prunes both `target` and the kernel's generated output.
+        let dir = tempfile::tempdir().unwrap();
+        touch(dir.path(), &["Kconfig", "Kbuild", "Cargo.toml"]);
+
+        let names: HashSet<String> = detect_stacks(dir.path())
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert!(names.contains("Linux kernel"));
+        assert!(names.contains("Rust"));
+
+        let merged = merged_extra_ignored_dirs(&detect_stacks(dir.path()));
+        assert!(merged.contains(&"target".to_string()));
+        assert!(merged.contains(&"include/generated".to_string()));
     }
 
     #[test]

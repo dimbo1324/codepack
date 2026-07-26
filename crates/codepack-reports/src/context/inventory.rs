@@ -73,11 +73,103 @@ const LANGUAGE_BY_EXTENSION: &[(&str, &str)] = &[
     ("dockerfile", "Dockerfile"),
 ];
 
+/// Languages legacy's table never covered, kept separate so the list above stays a
+/// verbatim port. Owner decision 2026-07-26: support OS and kernel trees, whose
+/// breakdown is C, Assembly, Rust, Shell, Python and Make.
+const SYSTEMS_LANGUAGE_BY_EXTENSION: &[(&str, &str)] = &[
+    ("s", "Assembly"),
+    ("asm", "Assembly"),
+    ("lds", "Linker Script"),
+    ("ld", "Linker Script"),
+    ("dts", "Device Tree"),
+    ("dtsi", "Device Tree"),
+    ("dtso", "Device Tree"),
+    ("mk", "Makefile"),
+    ("mak", "Makefile"),
+    ("make", "Makefile"),
+    ("cmake", "CMake"),
+    ("ac", "Autoconf"),
+    ("am", "Automake"),
+    ("m4", "M4"),
+    ("pl", "Perl"),
+    ("pm", "Perl"),
+    ("awk", "Awk"),
+    ("cocci", "Coccinelle"),
+    ("lua", "Lua"),
+    ("zig", "Zig"),
+    ("scala", "Scala"),
+    ("ex", "Elixir"),
+    ("exs", "Elixir"),
+    ("erl", "Erlang"),
+    ("hs", "Haskell"),
+    ("jl", "Julia"),
+    ("proto", "Protocol Buffers"),
+    ("tf", "Terraform"),
+];
+
+/// Extensionless files whose name *is* the language signal.
+///
+/// A kernel checkout holds thousands of `Makefile` and `Kconfig` files, and
+/// `extension_key` reports every one of them as `[no extension]` — so a map keyed on
+/// extension can never see them, no matter how many entries it gains.
+///
+/// Deliberately a **separate lookup** rather than a new special case inside
+/// `extension_key`: that function also feeds the `by_extension` statistics, and
+/// reshaping those would move report output that legacy parity is measured against.
+/// Language detection gets richer; the statistics stay byte-identical.
+const LANGUAGE_BY_FILENAME: &[(&str, &str)] = &[
+    ("makefile", "Makefile"),
+    ("gnumakefile", "Makefile"),
+    ("kbuild", "Makefile"),
+    ("kconfig", "Kconfig"),
+    ("dockerfile", "Dockerfile"),
+    ("vagrantfile", "Ruby"),
+    ("rakefile", "Ruby"),
+    ("gemfile", "Ruby"),
+    ("justfile", "Just"),
+    ("cmakelists.txt", "CMake"),
+    ("meson.build", "Meson"),
+];
+
 fn language_for_extension(extension: &str) -> Option<&'static str> {
     LANGUAGE_BY_EXTENSION
         .iter()
+        .chain(SYSTEMS_LANGUAGE_BY_EXTENSION.iter())
         .find(|(ext, _)| *ext == extension)
         .map(|(_, language)| *language)
+}
+
+/// The language of `relative_path`, in three passes: exact filename, then extension,
+/// then the filename's stem.
+///
+/// The order is the whole design. An exact name has to win first, because `Kconfig` and
+/// `Makefile` have no extension to fall back on. A real extension wins next, so
+/// `makefile.py` reads as Python and `Makefile.am` as Automake — which is what those
+/// files actually are. Only then does the stem decide, leaving `Makefile.in` and
+/// `Kconfig.debug` correctly labelled.
+///
+/// Splitting on both separators is not padding: `Inventory` stores `\`-separated paths,
+/// so a `/` path would otherwise keep its directories inside the "filename" and match
+/// nothing at all.
+fn language_for_path(relative_path: &str, extension: &str) -> Option<&'static str> {
+    let name = relative_path
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(relative_path)
+        .to_lowercase();
+
+    if let Some((_, language)) = LANGUAGE_BY_FILENAME.iter().find(|(key, _)| *key == name) {
+        return Some(language);
+    }
+    if let Some(language) = language_for_extension(extension) {
+        return Some(language);
+    }
+    for (key, language) in LANGUAGE_BY_FILENAME {
+        if name.starts_with(&format!("{key}.")) {
+            return Some(language);
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,7 +218,7 @@ impl Inventory {
 
         for planned in &plan.included_files {
             let extension = extension_key(&planned.relative_path);
-            let language = language_for_extension(&extension);
+            let language = language_for_path(&planned.relative_path, &extension);
 
             total_size += planned.size;
 
@@ -212,6 +304,86 @@ mod tests {
             &CancellationToken::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn kernel_shaped_paths_report_their_language() {
+        // The languages `torvalds/linux` is actually made of, plus the two build files
+        // that carry no extension at all. Paths use `\` because that is what `Inventory`
+        // stores.
+        let cases = [
+            (r"kernel\sched\core.c", "C"),
+            (r"include\linux\sched.h", "C/C++ Header"),
+            (r"arch\x86\boot\head.S", "Assembly"),
+            (r"arch\arm\lib\memcpy.s", "Assembly"),
+            (r"rust\kernel\lib.rs", "Rust"),
+            (r"scripts\checkpatch.pl", "Perl"),
+            (r"scripts\gen.sh", "Shell"),
+            (r"tools\perf\util\setup.py", "Python"),
+            (r"drivers\net\Makefile", "Makefile"),
+            (r"drivers\net\Kconfig", "Kconfig"),
+            (r"drivers\gpu\Kbuild", "Makefile"),
+            (r"arch\arm\boot\dts\board.dts", "Device Tree"),
+            (r"arch\x86\kernel\vmlinux.lds", "Linker Script"),
+        ];
+        for (path, expected) in cases {
+            let extension = extension_key(path);
+            assert_eq!(
+                language_for_path(path, &extension),
+                Some(expected),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_suffixed_build_file_keeps_a_sensible_language() {
+        // The stem only decides when the suffix means nothing on its own.
+        assert_eq!(
+            language_for_path("Makefile.in", &extension_key("Makefile.in")),
+            Some("Makefile")
+        );
+        assert_eq!(
+            language_for_path("Kconfig.debug", &extension_key("Kconfig.debug")),
+            Some("Kconfig")
+        );
+        // `.am` is a language of its own, so it wins over the stem — correctly:
+        // Makefile.am is an Automake input, not a makefile.
+        assert_eq!(
+            language_for_path("Makefile.am", &extension_key("Makefile.am")),
+            Some("Automake")
+        );
+    }
+
+    #[test]
+    fn a_real_extension_wins_over_a_coincidental_stem() {
+        // `makefile.py` is a Python script named after what it generates. The extension
+        // pass runs before the stem pass precisely so the stem cannot hijack it.
+        assert_eq!(
+            language_for_path(r"tools\makefile.py", &extension_key(r"tools\makefile.py")),
+            Some("Python")
+        );
+    }
+
+    #[test]
+    fn both_path_separators_are_understood() {
+        assert_eq!(
+            language_for_path(r"drivers\net\Kconfig", "[no extension]"),
+            Some("Kconfig")
+        );
+        assert_eq!(
+            language_for_path("drivers/net/Kconfig", "[no extension]"),
+            Some("Kconfig")
+        );
+    }
+
+    #[test]
+    fn language_detection_does_not_disturb_extension_statistics() {
+        // Why filename detection lives beside `extension_key` rather than inside it:
+        // `by_extension` feeds report output that legacy parity is measured on.
+        assert_eq!(extension_key(r"drivers\net\Makefile"), "[no extension]");
+        assert_eq!(extension_key(r"drivers\net\Kconfig"), "[no extension]");
+        assert_eq!(extension_key(r"arch\x86\boot\head.S"), "s");
     }
 
     #[test]

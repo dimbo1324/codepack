@@ -187,12 +187,99 @@ pub const TEXT_FILENAMES_WITHOUT_EXTENSION: &[&str] = &[
     "license",
 ];
 
-static TEXT_EXTENSIONS_SET: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| TEXT_EXTENSIONS.iter().copied().collect());
+/// Systems-programming extensions legacy never had, kept **separate** from the verbatim
+/// legacy set above so its provenance and its "133 entries" claim stay literally true.
+/// Both sets are unioned at lookup time.
+///
+/// Owner decision 2026-07-26 (`docs/decisions/open-questions.md`): support OS and kernel
+/// trees such as `torvalds/linux`, whose languages are C, Assembly, Rust, Shell, Python
+/// and Make.
+///
+/// Assembly is the reason this is not cosmetic. Without `s`/`asm` here,
+/// [`should_consider_text_file`] answers "no" for every `.S` file in a kernel tree, and
+/// the export drops them from the text dump **silently** — mislabelled content is
+/// annoying, missing content is a wrong answer to "what is in this project".
+pub const SYSTEMS_TEXT_EXTENSIONS: &[&str] = &[
+    // Assembly. `.S` is preprocessed assembly and is the common form in the kernel;
+    // lookups lowercase the extension, so one entry covers `.s` and `.S` both.
+    "s",
+    "asm",
+    // Device trees: sources and includes are text, `.dtb` is compiled output and stays
+    // out deliberately.
+    "dts",
+    "dtsi",
+    "dtso",
+    "overlay",
+    // Linker scripts, including the `.lds.S` form that ends in `.s` above.
+    "lds",
+    "ld",
+    // Build inputs and generated-file templates. `config` is already in the legacy
+    // set, so it is not repeated here.
+    "ac",
+    "am",
+    "m4",
+    "in",
+    "mak",
+    "make",
+    "kconfig",
+    "defconfig",
+    // Kernel tooling: Coccinelle semantic patches, awk/sed scripts, symbol lists.
+    "cocci",
+    "awk",
+    "sed",
+    "map",
+    "syms",
+    "ver",
+    // Documentation and packaging formats a systems tree carries. `rst` and `patch`
+    // are already in the legacy set.
+    "texi",
+    "spec",
+    "rules",
+    "service",
+];
+
+/// Extensionless filenames a systems or kernel tree is full of, kept separate from the
+/// verbatim legacy 15 for the same provenance reason as [`SYSTEMS_TEXT_EXTENSIONS`].
+///
+/// `kconfig` and `kbuild` matter most: a kernel checkout holds thousands of each, they
+/// carry no extension at all, and legacy's list stops at `makefile`.
+pub const SYSTEMS_TEXT_FILENAMES: &[&str] = &[
+    "kconfig",
+    "kbuild",
+    "gnumakefile",
+    "maintainers",
+    "copying",
+    "authors",
+    "changelog",
+    "notice",
+    "install",
+    "todo",
+    "version",
+    "credits",
+    "codeowners",
+    "vagrantfile",
+    "justfile",
+    "procfile",
+];
+
+// Both halves are unioned once, here, so every caller sees one set and no lookup has to
+// remember there are two lists.
+static TEXT_EXTENSIONS_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    TEXT_EXTENSIONS
+        .iter()
+        .chain(SYSTEMS_TEXT_EXTENSIONS.iter())
+        .copied()
+        .collect()
+});
 static BINARY_EXTENSIONS_SET: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| BINARY_EXTENSIONS.iter().copied().collect());
-static TEXT_FILENAMES_SET: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| TEXT_FILENAMES_WITHOUT_EXTENSION.iter().copied().collect());
+static TEXT_FILENAMES_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    TEXT_FILENAMES_WITHOUT_EXTENSION
+        .iter()
+        .chain(SYSTEMS_TEXT_FILENAMES.iter())
+        .copied()
+        .collect()
+});
 
 fn is_text_extension(extension: &str) -> bool {
     TEXT_EXTENSIONS_SET.contains(extension)
@@ -272,11 +359,19 @@ mod tests {
 
     #[test]
     fn no_duplicate_entries() {
-        assert_eq!(TEXT_EXTENSIONS_SET.len(), TEXT_EXTENSIONS.len());
+        // The lookup sets are the union of the legacy list and the systems list, so the
+        // expected size is the sum. Comparing against the sum still catches a repeat
+        // within either list — which is the whole point of this test — while
+        // `the_systems_additions_never_overlap_the_legacy_sets` covers repeats across
+        // the two.
+        assert_eq!(
+            TEXT_EXTENSIONS_SET.len(),
+            TEXT_EXTENSIONS.len() + SYSTEMS_TEXT_EXTENSIONS.len()
+        );
         assert_eq!(BINARY_EXTENSIONS_SET.len(), BINARY_EXTENSIONS.len());
         assert_eq!(
             TEXT_FILENAMES_SET.len(),
-            TEXT_FILENAMES_WITHOUT_EXTENSION.len()
+            TEXT_FILENAMES_WITHOUT_EXTENSION.len() + SYSTEMS_TEXT_FILENAMES.len()
         );
     }
 
@@ -367,5 +462,74 @@ mod tests {
         let mut raw = vec![b'a'; BINARY_SAMPLE_BYTES];
         raw.push(0u8);
         assert!(!looks_binary(&raw));
+    }
+
+    #[test]
+    fn kernel_assembly_counts_as_text() {
+        // The gap that motivated SYSTEMS_TEXT_EXTENSIONS: before it, every `.S` in a
+        // kernel tree answered `false` here and vanished from the text dump without a
+        // word. Both cases are asserted because `.S` (preprocessed) is the common form
+        // and only lowercasing makes one entry cover both.
+        assert!(should_consider_text_file(Path::new("arch/x86/boot/head.S")));
+        assert!(should_consider_text_file(Path::new(
+            "arch/arm/lib/memcpy.s"
+        )));
+        assert!(should_consider_text_file(Path::new("boot/entry.asm")));
+    }
+
+    #[test]
+    fn kernel_build_files_without_an_extension_count_as_text() {
+        for path in [
+            "drivers/net/Kconfig",
+            "drivers/net/Kbuild",
+            "MAINTAINERS",
+            "GNUmakefile",
+        ] {
+            assert!(should_consider_text_file(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
+    fn device_trees_and_linker_scripts_count_as_text_but_compiled_output_does_not() {
+        assert!(should_consider_text_file(Path::new(
+            "arch/arm/boot/dts/a.dts"
+        )));
+        assert!(should_consider_text_file(Path::new("include/soc.dtsi")));
+        assert!(should_consider_text_file(Path::new("kernel/vmlinux.lds")));
+        // `.dtb` is the compiled blob. Left out on purpose: it is real binary content,
+        // and admitting it would put megabytes of it into a text dump.
+        assert!(!should_consider_text_file(Path::new("boot/board.dtb")));
+    }
+
+    #[test]
+    fn the_legacy_sets_keep_their_documented_sizes() {
+        // The doc comments claim 133/84/15 entries counted from the archive itself. The
+        // systems additions live in their own lists precisely so those claims stay true;
+        // this test is what stops a future edit from quietly growing the legacy ones.
+        assert_eq!(TEXT_EXTENSIONS.len(), 133);
+        assert_eq!(BINARY_EXTENSIONS.len(), 84);
+        assert_eq!(TEXT_FILENAMES_WITHOUT_EXTENSION.len(), 15);
+    }
+
+    #[test]
+    fn the_systems_additions_never_overlap_the_legacy_sets() {
+        // An overlap would be harmless at lookup time but would mean the separation is
+        // decorative rather than real, and the next reader could not trust either list.
+        for extension in SYSTEMS_TEXT_EXTENSIONS {
+            assert!(
+                !TEXT_EXTENSIONS.contains(extension),
+                "{extension} is already in the legacy set"
+            );
+            assert!(
+                !BINARY_EXTENSIONS.contains(extension),
+                "{extension} is claimed by both text and binary"
+            );
+        }
+        for name in SYSTEMS_TEXT_FILENAMES {
+            assert!(
+                !TEXT_FILENAMES_WITHOUT_EXTENSION.contains(name),
+                "{name} is already in the legacy set"
+            );
+        }
     }
 }

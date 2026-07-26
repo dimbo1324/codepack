@@ -243,6 +243,43 @@ pub fn detect_stack(staging_root: &Path, inventory: &Inventory) -> DetectedStack
         stack.backend.push("Rust".to_string());
     }
 
+    // Systems and OS trees (owner decision 2026-07-26). Kept in step with
+    // `codepack_scanner::stack`'s rules on purpose: the scanner decides what gets pruned
+    // and this decides what the reports say, and a reader comparing PROJECT_PROFILE.json
+    // against the export plan must not find them describing different projects.
+    let is_kernel_tree = root_file_exists(inventory, "Kconfig")
+        && (root_file_exists(inventory, "Kbuild") || root_file_exists(inventory, "MAINTAINERS"));
+    if is_kernel_tree {
+        stack.backend.push("Linux kernel".to_string());
+    }
+    if root_file_exists(inventory, "CMakeLists.txt") {
+        stack.tools.push("CMake".to_string());
+    }
+    if root_file_exists(inventory, "meson.build") {
+        stack.tools.push("Meson".to_string());
+    }
+    if root_file_exists(inventory, "configure.ac") || root_file_exists(inventory, "configure.in") {
+        stack.tools.push("Autotools".to_string());
+    }
+    if root_file_exists(inventory, "Makefile")
+        || root_file_exists(inventory, "makefile")
+        || root_file_exists(inventory, "GNUmakefile")
+    {
+        stack.tools.push("Make".to_string());
+    }
+    // C and Assembly are reported from what the tree actually contains rather than from
+    // a marker file, because neither has one: a kernel is C whether or not it ships a
+    // Makefile, and the language census already knows.
+    for (language, label) in [("C", "C"), ("Assembly", "Assembly")] {
+        if inventory
+            .files
+            .iter()
+            .any(|file| file.language == Some(language))
+        {
+            stack.backend.push(label.to_string());
+        }
+    }
+
     stack.frontend.sort();
     stack.backend.sort();
     stack.tools.sort();
@@ -266,6 +303,21 @@ mod tests {
                     size,
                     extension: crate::paths::extension_key(relative_path),
                     language: None,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    fn inventory_with_languages(files: Vec<(&str, &'static str)>) -> Inventory {
+        Inventory {
+            files: files
+                .into_iter()
+                .map(|(relative_path, language)| InventoryFile {
+                    relative_path: relative_path.to_string(),
+                    size: 100,
+                    extension: crate::paths::extension_key(relative_path),
+                    language: Some(language),
                 })
                 .collect(),
             ..Default::default()
@@ -296,6 +348,50 @@ mod tests {
 
         assert_eq!(stack.backend, vec!["Rust".to_string()]);
         assert_eq!(stack.package_managers, vec!["Cargo".to_string()]);
+    }
+
+    #[test]
+    fn reports_a_kernel_tree_the_same_way_the_scanner_does() {
+        let dir = tempfile::tempdir().unwrap();
+        let inventory = inventory_with(vec![
+            ("Kconfig", 10),
+            ("Kbuild", 10),
+            ("MAINTAINERS", 10),
+            ("Makefile", 10),
+        ]);
+
+        let stack = detect_stack(dir.path(), &inventory);
+
+        assert!(stack.backend.contains(&"Linux kernel".to_string()));
+        assert!(stack.tools.contains(&"Make".to_string()));
+    }
+
+    #[test]
+    fn a_lone_kconfig_is_not_a_kernel() {
+        // Kconfig alone appears in plenty of embedded projects; the pairing with Kbuild
+        // or MAINTAINERS is what makes the claim honest.
+        let dir = tempfile::tempdir().unwrap();
+        let inventory = inventory_with(vec![("Kconfig", 10)]);
+
+        let stack = detect_stack(dir.path(), &inventory);
+
+        assert!(!stack.backend.contains(&"Linux kernel".to_string()));
+    }
+
+    #[test]
+    fn c_and_assembly_come_from_the_files_not_from_a_marker() {
+        // Neither language has a marker file, so they are read off the census. This is
+        // what makes a kernel report "C, Assembly" rather than nothing at all.
+        let dir = tempfile::tempdir().unwrap();
+        let inventory = inventory_with_languages(vec![
+            (r"kernel\sched\core.c", "C"),
+            (r"arch\x86\boot\head.S", "Assembly"),
+        ]);
+
+        let stack = detect_stack(dir.path(), &inventory);
+
+        assert!(stack.backend.contains(&"C".to_string()));
+        assert!(stack.backend.contains(&"Assembly".to_string()));
     }
 
     #[test]
