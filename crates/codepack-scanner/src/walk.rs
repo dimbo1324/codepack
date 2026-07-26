@@ -33,31 +33,79 @@ use crate::ignore::pattern::{GlobPattern, has_glob_metachars};
 pub struct IgnoredDirMatcher {
     literal: HashSet<String>,
     globs: Vec<GlobPattern>,
+    /// Entries written as a path from the project root, lowercased and `/`-separated.
+    ///
+    /// Kept apart from `literal` because the two answer different questions: a name
+    /// matches at any depth, a path matches in exactly one place. `target` should prune
+    /// every `target/` in a workspace; `include/generated` should prune the kernel's
+    /// generated headers and nothing else that happens to be called `generated`.
+    paths: HashSet<String>,
 }
 
 impl IgnoredDirMatcher {
     pub fn new(extra_names: impl IntoIterator<Item = String>) -> Self {
         let mut literal = HashSet::new();
         let mut globs = Vec::new();
+        let mut paths = HashSet::new();
         for raw in extra_names {
-            let lower = raw.trim().to_lowercase();
+            let lower = raw.trim().to_lowercase().replace('\\', "/");
+            let lower = lower.trim_matches('/').to_string();
             if lower.is_empty() {
                 continue;
             }
-            if has_glob_metachars(&lower) {
+            if lower.contains('/') {
+                // A separator is what distinguishes the two kinds. Before this, such an
+                // entry landed in `literal` and could never match anything, because the
+                // matcher only ever saw a bare directory name — and `manifest.json` still
+                // advertised it as ignored.
+                paths.insert(lower);
+            } else if has_glob_metachars(&lower) {
                 globs.push(GlobPattern::new(&lower));
             } else {
                 literal.insert(lower);
             }
         }
-        Self { literal, globs }
+        Self {
+            literal,
+            globs,
+            paths,
+        }
     }
 
-    pub fn is_ignored(&self, name: &str) -> bool {
-        let lower = name.to_lowercase();
-        constants::is_base_ignored_dir_name(&lower)
-            || self.literal.contains(&lower)
-            || self.globs.iter().any(|pattern| pattern.matches(&lower))
+    /// Whether the directory at `relative_path` should be pruned.
+    ///
+    /// Takes the path rather than the name so the two kinds of rule can be answered
+    /// together, and so a caller cannot pass a name that disagrees with the path it came
+    /// from.
+    pub fn is_ignored(&self, relative_path: &Path) -> bool {
+        let name = relative_path
+            .file_name()
+            .map(|value| value.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+
+        if constants::is_base_ignored_dir_name(&name)
+            || self.literal.contains(&name)
+            || self.globs.iter().any(|pattern| pattern.matches(&name))
+        {
+            return true;
+        }
+
+        if self.paths.is_empty() {
+            return false;
+        }
+        let joined = relative_path
+            .to_string_lossy()
+            .to_lowercase()
+            .replace('\\', "/");
+        let joined = joined.trim_matches('/');
+        // Exact match is what actually fires — a pruned directory is never descended
+        // into, so a child is never offered. The prefix arm keeps the answer correct if
+        // a future caller asks about a nested path directly.
+        self.paths.contains(joined)
+            || self
+                .paths
+                .iter()
+                .any(|entry| joined.starts_with(&format!("{entry}/")))
     }
 }
 
@@ -139,9 +187,7 @@ pub fn walk_project(
             // `follow_links(false)` already keeps walkdir from descending into a
             // symlinked directory, but `path_is_symlink()` is checked independently
             // here too (invariant I7: never rely solely on the walker default).
-            if entry.path_is_symlink()
-                || ignored_dirs.is_ignored(&entry.file_name().to_string_lossy())
-            {
+            if entry.path_is_symlink() || ignored_dirs.is_ignored(&rel) {
                 skipped_dirs.push(SkippedDir {
                     relative_path: rel,
                     reason: None,
@@ -219,23 +265,63 @@ mod tests {
     #[test]
     fn ignored_dir_matcher_matches_base_names_case_insensitively() {
         let matcher = IgnoredDirMatcher::new(std::iter::empty());
-        assert!(matcher.is_ignored("node_modules"));
-        assert!(matcher.is_ignored("NODE_MODULES"));
-        assert!(!matcher.is_ignored("src"));
+        assert!(matcher.is_ignored(Path::new("node_modules")));
+        assert!(matcher.is_ignored(Path::new("NODE_MODULES")));
+        assert!(!matcher.is_ignored(Path::new("src")));
     }
 
     #[test]
     fn ignored_dir_matcher_matches_extra_literal_names() {
         let matcher = IgnoredDirMatcher::new(["vendor".to_string()]);
-        assert!(matcher.is_ignored("vendor"));
-        assert!(!matcher.is_ignored("target"));
+        assert!(matcher.is_ignored(Path::new("vendor")));
+        assert!(!matcher.is_ignored(Path::new("target")));
     }
 
     #[test]
     fn ignored_dir_matcher_glob_matches_egg_info_style_entries() {
         let matcher = IgnoredDirMatcher::new(["*.egg-info".to_string()]);
-        assert!(matcher.is_ignored("my_package.egg-info"));
-        assert!(!matcher.is_ignored("my_package"));
+        assert!(matcher.is_ignored(Path::new("my_package.egg-info")));
+        assert!(!matcher.is_ignored(Path::new("my_package")));
+    }
+
+    #[test]
+    fn a_name_entry_still_matches_at_any_depth() {
+        // The behaviour every legacy rule depends on, pinned so the new path arm cannot
+        // narrow it by accident: `target` must prune every `target/` in a workspace.
+        let matcher = IgnoredDirMatcher::new(["target".to_string()]);
+        assert!(matcher.is_ignored(Path::new("target")));
+        assert!(matcher.is_ignored(Path::new("crates/foo/target")));
+        assert!(matcher.is_ignored(Path::new("a/b/c/TARGET")));
+    }
+
+    #[test]
+    fn a_path_entry_matches_only_in_its_one_place() {
+        let matcher = IgnoredDirMatcher::new(["include/generated".to_string()]);
+        assert!(matcher.is_ignored(Path::new("include/generated")));
+        // The whole reason for the distinction: a directory merely *named* `generated`
+        // elsewhere in the tree is somebody's source and must survive.
+        assert!(!matcher.is_ignored(Path::new("generated")));
+        assert!(!matcher.is_ignored(Path::new("src/generated")));
+        assert!(!matcher.is_ignored(Path::new("other/include/generated")));
+    }
+
+    #[test]
+    fn a_path_entry_is_separator_and_case_insensitive() {
+        // Rules are authored with `/`; Windows hands the walker `\`. Both must land on
+        // the same answer or the rule works on one platform only.
+        let matcher = IgnoredDirMatcher::new(["Include/Generated".to_string()]);
+        assert!(matcher.is_ignored(Path::new("include/generated")));
+        assert!(matcher.is_ignored(Path::new(r"include\generated")));
+    }
+
+    #[test]
+    fn a_path_entry_also_covers_what_is_underneath_it() {
+        // Pruning means children are never offered, so this arm is belt-and-braces —
+        // but a caller that asks about a nested path directly must not be told the
+        // subtree is fine.
+        let matcher = IgnoredDirMatcher::new(["rust/target".to_string()]);
+        assert!(matcher.is_ignored(Path::new("rust/target/debug")));
+        assert!(!matcher.is_ignored(Path::new("rust/targeted")));
     }
 
     #[test]

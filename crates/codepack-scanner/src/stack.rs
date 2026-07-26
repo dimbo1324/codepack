@@ -161,13 +161,22 @@ const STACK_RULES: &[StackRule] = &[
         markers: &["Kbuild", "MAINTAINERS"],
         required_markers: &["Kconfig"],
         marker_extensions: &[],
-        // Only entries the matcher can actually act on. `IgnoredDirMatcher` compares a
-        // bare directory *name* at any depth, so a path like `include/generated` never
-        // matches — and would have been reported in `manifest.json` as ignored while
-        // being exported in full, which is an artifact stating something false. Kbuild's
-        // generated output is kept out by the binary-extension set instead. `debian/` is
-        // deliberately absent: it is real packaging source, not build output.
-        extra_ignored_dirs: &[".tmp_versions"],
+        // Kbuild output. The path-shaped entries prune exactly one place each, which is
+        // the point: a bare `generated` would also remove any directory a project happens
+        // to call that. `debian/` is deliberately absent — it is real packaging source,
+        // not build output. `.o`/`.ko` scattered beside their sources are kept out by the
+        // binary-extension set, not by directory rules.
+        extra_ignored_dirs: &[
+            ".tmp_versions",
+            "include/generated",
+            "include/config",
+            "arch/x86/include/generated",
+            "arch/arm/include/generated",
+            "arch/arm64/include/generated",
+            "tools/testing/selftests/output",
+            "Documentation/output",
+            "rust/target",
+        ],
     },
     StackRule {
         name: "C / CMake",
@@ -417,22 +426,51 @@ mod tests {
 
     #[test]
     fn every_extra_ignored_dir_is_something_the_matcher_can_match() {
-        // `IgnoredDirMatcher` compares a bare directory name, so an entry containing a
-        // separator can never fire — and worse, `manifest.json` would list it as ignored
-        // while the directory was exported in full. Legacy shipped one such entry
-        // (`vendor/bundle`); this pins that no new rule adds another.
+        // Both kinds of entry now fire — a bare name at any depth, a `/`-path in exactly
+        // one place. What must never appear is an entry the matcher cannot represent:
+        // a backslash (it normalises to `/`, so a literal one is a typo), a leading or
+        // trailing slash, or an empty segment, each of which would silently never match
+        // while `manifest.json` advertised the directory as ignored.
         for rule in STACK_RULES {
-            if rule.name == "Ruby" {
-                continue; // the one inherited exception, kept for parity
-            }
             for entry in rule.extra_ignored_dirs {
                 assert!(
-                    !entry.contains('/') && !entry.contains('\\'),
-                    "{}: {entry:?} contains a separator and can never match",
+                    !entry.contains('\\'),
+                    "{}: {entry:?} uses a backslash; write paths with '/'",
+                    rule.name
+                );
+                assert!(
+                    !entry.starts_with('/') && !entry.ends_with('/'),
+                    "{}: {entry:?} has a leading or trailing separator",
+                    rule.name
+                );
+                assert!(
+                    !entry.contains("//"),
+                    "{}: {entry:?} has an empty path segment",
                     rule.name
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_kernels_generated_output_is_actually_prunable() {
+        // These used to be dead: entries with a separator landed in the name table and
+        // could never fire, yet were reported as ignored. Pinning that they are real
+        // paths the matcher understands, in the rule that owns them.
+        let dir = tempfile::tempdir().unwrap();
+        touch(dir.path(), &["Kconfig", "Kbuild"]);
+
+        let kernel = detect_stacks(dir.path())
+            .into_iter()
+            .find(|s| s.name == "Linux kernel")
+            .unwrap();
+
+        let matcher =
+            crate::walk::IgnoredDirMatcher::new(kernel.extra_ignored_dirs.iter().cloned());
+        assert!(matcher.is_ignored(Path::new("include/generated")));
+        assert!(matcher.is_ignored(Path::new("rust/target")));
+        // and does not over-reach: a project's own `generated` elsewhere survives
+        assert!(!matcher.is_ignored(Path::new("src/generated")));
     }
 
     #[test]
