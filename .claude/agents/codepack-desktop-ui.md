@@ -32,7 +32,7 @@ Note that `apps/desktop/src-tauri` is introduced in stage S11; before that, only
 `apps/desktop/ui` exists.
 
 Verify with `pnpm --filter @codepack/ui typecheck`, `pnpm --filter @codepack/ui lint`,
-and `cargo clippy --workspace --all-targets -- -D warnings`; run `cargo tauri dev` for a
+and `cargo clippy --workspace --all-targets -- -D warnings`; run `pnpm desktop:dev` for a
 manual pass when available.
 
 Report: what changed in the UI and the command layer, what you verified, on which

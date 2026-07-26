@@ -80,10 +80,8 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
     }
     step(root, "deny", "cargo", &["deny", "check"])?;
     println!("\n=== frontend ===");
-    if frontend::dependencies_installed(root) {
+    if frontend::require_or_skip(root)? {
         frontend::gate_checks(root)?;
-    } else {
-        frontend::skip_notice();
     }
     println!("\n=== agents sync ===");
     sync_agents::run(root, true).map_err(|error| format!("sync-agents: {error}"))?;
@@ -97,7 +95,10 @@ fn doctor(root: &Path) {
         ("rustc", "rustc", ["--version"]),
         ("cargo-deny", "cargo-deny", ["--version"]),
         ("node", "node", ["--version"]),
-        ("pnpm", "pnpm", ["--version"]),
+        // Not a bare "pnpm": see `frontend::PNPM`. `doctor` exists to answer "is my
+        // environment ready", and the gate depends on pnpm — reporting "not found" for an
+        // installed pnpm is the one wrong answer this command must not give.
+        ("pnpm", frontend::PNPM, ["--version"]),
     ] {
         let reported = Command::new(program)
             .args(args)

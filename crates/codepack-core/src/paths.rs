@@ -18,7 +18,15 @@ const DB_FILE_NAME: &str = "codepack.db";
 /// stay here as the specification of what has to come back. Restoring them means
 /// uncommenting the variants, the `current_os` detection, the `layout` arms, the
 /// `resolve_base_dirs` arms, and the two layout tests — they were commented together and
-/// belong together.
+/// belong together. Also rename `layout`'s `_home_dir` back to `home_dir` and delete the
+/// paragraph above it explaining the underscore, which becomes false at that point.
+///
+/// Note what this does *not* do: it does not stop the crate compiling elsewhere. On a
+/// non-Windows host `AppPaths::resolve()` now returns `NoAppDirectories` at runtime,
+/// because `current_os` claims Windows and the Windows arm demands `APPDATA`. The CLI
+/// suite will not catch that either, since it injects `APPDATA`/`LOCALAPPDATA` on every
+/// platform. So restoring cross-platform support starts from a wrong *runtime*, not from a
+/// compile error — which is worth knowing alongside Q21.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Os {
     Windows,

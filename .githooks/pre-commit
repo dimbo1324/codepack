@@ -23,7 +23,12 @@ cd "$(git rev-parse --show-toplevel)"
 mapfile -d '' -t staged < <(git diff --cached --name-only --diff-filter=ACMR -z)
 [ ${#staged[@]} -gt 0 ] || exit 0
 
-mapfile -d '' -t unstaged < <(git diff --name-only --diff-filter=ACMR -z)
+# Deliberately unfiltered, unlike the staged query above: here *any* difference means the
+# file is partially staged. Filtering to ACMR would miss a type change (`T`) — a file
+# staged as modified and then replaced in the worktree by a symlink would pass the `-f`
+# test below, get formatted through the link, and be re-staged, which is exactly the
+# promotion of unstaged work that rule 2 exists to prevent.
+mapfile -d '' -t unstaged < <(git diff --name-only -z)
 
 is_partially_staged() {
   local candidate=$1 other
@@ -49,14 +54,16 @@ for file in "${staged[@]}"; do
   esac
 done
 
-formatted=()
-
+# Each group is re-staged as soon as its formatter succeeds, rather than both at the end.
+# If Prettier failed after rustfmt had already rewritten files, a single `git add` at the
+# end would never run: those `.rs` files would be left formatted-but-unstaged, i.e.
+# partially staged, and the next attempt would skip them with "format them yourself".
 if [ ${#rust[@]} -gt 0 ]; then
   # `rustfmt` directly rather than `cargo fmt`, which has no way to take a file list.
   # It finds `rustfmt.toml` by walking up from each file; `--edition` is passed anyway
   # because without it rustfmt assumes 2015 and misparses current syntax.
   rustfmt --edition 2024 "${rust[@]}"
-  formatted+=("${rust[@]}")
+  git add -- "${rust[@]}"
 fi
 
 if [ ${#other[@]} -gt 0 ]; then
@@ -65,14 +72,10 @@ if [ ${#other[@]} -gt 0 ]; then
     # passed as-is. `.prettierignore` still applies to explicitly named files, which is
     # what keeps the golden references and test fixtures out of reach.
     pnpm exec prettier --write --ignore-unknown --log-level warn "${other[@]}"
-    formatted+=("${other[@]}")
+    git add -- "${other[@]}"
   else
     echo "pre-commit: node_modules missing, skipping Prettier (run 'pnpm install')" >&2
   fi
-fi
-
-if [ ${#formatted[@]} -gt 0 ]; then
-  git add -- "${formatted[@]}"
 fi
 
 if [ ${#partial[@]} -gt 0 ]; then

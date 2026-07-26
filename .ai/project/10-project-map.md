@@ -28,7 +28,7 @@ Other areas:
 
 - `apps/desktop/ui` — Svelte + Vite + TypeScript frontend (pnpm workspace).
 - `apps/desktop/src-tauri` — the Tauri shell (crate `codepack-desktop`, binary
-  `codepack`). It is a member of the same cargo workspace as `crates/*`, and it calls
+  `codepack-desktop`). It is a member of the same cargo workspace as `crates/*`, and it calls
   `codepack-engine` directly rather than shelling out to `codepack-cli`: the two front
   ends sit side by side over the engine (BLUEPRINT §C.2), not in a chain.
   The webview holds **no filesystem permission** (`capabilities/default.json`); every

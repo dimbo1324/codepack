@@ -19,7 +19,7 @@ Cross-platform behavior is verified, not assumed: paths, tray, and dialogs diffe
 
 Note that apps/desktop/src-tauri is introduced in stage S11; before that only apps/desktop/ui exists.
 
-Verify: pnpm --filter @codepack/ui typecheck; pnpm --filter @codepack/ui lint; cargo clippy --workspace --all-targets -- -D warnings; cargo tauri dev for a manual pass when available.
+Verify: pnpm --filter @codepack/ui typecheck; pnpm --filter @codepack/ui lint; cargo clippy --workspace --all-targets -- -D warnings; pnpm desktop:dev for a manual pass when available.
 
 Report: what changed in the UI and the command layer, what you verified, on which operating systems.
 """

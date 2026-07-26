@@ -1,11 +1,15 @@
 //! The pnpm half of the toolchain: Prettier formatting, and the frontend gate checks.
 //!
-//! Everything here is **optional by design**. A fresh clone that has never run
-//! `pnpm install` must still be able to run `cargo xtask gate` and get a meaningful
-//! answer about the Rust side, because most work in this repository never touches the
-//! frontend. So a missing `node_modules` prints a notice and skips, rather than failing
-//! the gate on an absent dependency the task did not need. CI installs dependencies, so
-//! there the checks always really run.
+//! Everything here is **optional on a developer machine and mandatory in CI**. A fresh
+//! clone that has never run `pnpm install` must still be able to run `cargo xtask gate`
+//! and get a meaningful answer about the Rust side, because most work in this repository
+//! never touches the frontend — so a missing `node_modules` prints a notice and skips.
+//!
+//! In CI the same skip would be a silent hole: the checks would exist, report "skipped",
+//! and exit 0, leaving unformatted or type-broken frontend code to pass. So when `CI` is
+//! set, a missing toolchain is a failure instead — see [`require_or_skip`]. That is not
+//! belt-and-braces with the workflow's `pnpm install` step, it is what makes deleting that
+//! step impossible to do quietly.
 
 use std::path::Path;
 use std::process::Command;
@@ -13,7 +17,7 @@ use std::process::Command;
 /// pnpm ships as `pnpm.CMD` on Windows, and `std::process::Command` only ever appends
 /// `.exe` when resolving a bare name — so naming it `pnpm` fails with "program not found"
 /// on the one platform this project currently targets.
-const PNPM: &str = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
+pub(crate) const PNPM: &str = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
 
 /// Prettier lives in the workspace root's `node_modules`; `svelte-check` and ESLint live
 /// in the UI package's. One `pnpm install` produces both, so both are checked — a partial
@@ -27,6 +31,26 @@ pub(crate) fn skip_notice() {
         "  skipped: apps/desktop/ui/node_modules is missing.\n  \
          Run `pnpm install` to include the frontend in this command."
     );
+}
+
+/// Decides whether the frontend steps run, skip, or fail.
+///
+/// Returns `Ok(true)` to run them, `Ok(false)` to skip on a developer machine, and `Err`
+/// in CI — where an absent toolchain means the workflow lost its `pnpm install` step and
+/// the checks would otherwise pass by not happening.
+pub(crate) fn require_or_skip(root: &Path) -> Result<bool, String> {
+    if dependencies_installed(root) {
+        return Ok(true);
+    }
+    if std::env::var_os("CI").is_some() {
+        return Err(
+            "frontend dependencies are missing, and CI is set: the workflow must run \
+             `pnpm install` before the gate, or these checks would silently skip"
+                .to_string(),
+        );
+    }
+    skip_notice();
+    Ok(false)
 }
 
 fn pnpm(root: &Path, label: &str, args: &[&str]) -> Result<(), String> {

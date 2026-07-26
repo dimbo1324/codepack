@@ -12,7 +12,7 @@ on:
 concurrency:
   # `head_ref` is set only for pull_request, `ref` only otherwise, so a branch and its
   # open PR share one group. Without this, enabling push on every branch would run the
-  # full three-OS matrix twice for every push to a branch that has a PR open.
+  # whole matrix twice for every push to a branch that has a PR open.
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
@@ -56,6 +56,21 @@ jobs:
       #         librsvg2-dev \
       #         libxdo-dev
 
+      # `cargo xtask gate` runs the frontend format/typecheck/lint checks only when the
+      # pnpm toolchain is present, and skips with a notice otherwise. Without these three
+      # steps that skip is what CI did — the checks existed and never ran anywhere except a
+      # developer's machine. `xtask` now also hard-fails instead of skipping when `CI` is
+      # set, so deleting these steps breaks the build loudly rather than silently.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Install pinned Rust toolchain
         run: rustup show
 
@@ -69,10 +84,11 @@ jobs:
       - name: cargo xtask gate
         run: cargo xtask gate
 
-      # Stage S10's own acceptance criterion: "a headless export runs in CI on three
-      # operating systems". The test suite exercises the binary too, but this runs it
-      # the way a user's pipeline would -- a release build, on a real checkout, driving
-      # the whole eight-step pipeline end to end.
+      # Stage S10's own acceptance criterion, minus its three-OS half: that part is
+      # deferred with cross-platform support (owner decision 2026-07-26), so this now
+      # proves headless export on Windows only. The test suite exercises the binary too,
+      # but this runs it the way a user's pipeline would -- a release build, on a real
+      # checkout, driving the whole eight-step pipeline end to end.
       - name: Headless export (S10 acceptance)
         shell: bash
         run: |

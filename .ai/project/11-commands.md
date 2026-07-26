@@ -85,10 +85,9 @@ Producing the Windows installer:
 cargo xtask package
 ```
 
-It builds the frontend, then the Tauri release bundle, and leaves an NSIS `.exe`
-installer under `target/release/bundle/nsis/`. Code signing, notarisation,
-`SHA256SUMS.txt`, and auto-update remain stage S14 — only the installer itself was pulled
-forward, by owner decision 2026-07-26.
+Leaves an NSIS `.exe` under `target/release/bundle/nsis/`. Signing, notarisation,
+`SHA256SUMS.txt`, and auto-update stay in S14 — only the installer was pulled forward
+(owner decision 2026-07-26).
 
 ## Gate policy
 
@@ -96,29 +95,27 @@ forward, by owner decision 2026-07-26.
 - The quick gate is the minimum for intermediate pushes.
 - `sync-agents --check` is part of the gate: a drift between `AGENTS.md` and the `.ai/`
   modules breaks the build on purpose.
-- Frontend `format`/`typecheck`/`lint` are part of the gate. They are skipped with a
-  printed notice when `apps/desktop/ui/node_modules` is absent, so a Rust-only checkout
-  still gates — but CI installs dependencies, so there they always run.
+- Frontend `format`/`typecheck`/`lint` are part of the gate. Without
+  `apps/desktop/ui/node_modules` they skip with a notice, so a Rust-only checkout still
+  gates — but when `CI` is set they **fail** instead, because a silent skip there would let
+  unformatted frontend code pass.
 - Documentation-only or configuration-only changes still run the gate.
-- CI runs `windows-latest` only. Owner decision 2026-07-26 narrowed the build scope to
-  Windows 10/11; the `macos-latest` and `ubuntu-latest` legs are commented out in
-  `.github/workflows/ci.yml` rather than deleted.
+- CI runs `windows-latest` only (owner decision 2026-07-26); the other two legs are
+  commented out in `.github/workflows/ci.yml`, not deleted.
 
 ## Platform notes
 
-The supported target is **Windows 10 and Windows 11**. macOS and Linux are out of scope
-for now (BLUEPRINT §B.4 still declares them a product goal; see
-`docs/decisions/open-questions.md` for the decision and Q21 for what has to be
-re-diagnosed when they return).
+The supported target is **Windows 10 and Windows 11**. macOS and Linux are out of scope for
+now — BLUEPRINT §B.4 still calls them a product goal; see `open-questions.md` for the
+decision and Q21 for what must be re-diagnosed first.
 
 - Windows: long paths and antivirus can interfere with temporary directories; prefer a
   repository-local temp directory in tests.
-- Cross-platform code that had to be switched off is **commented with a
-  `TODO(cross-platform)` marker**, never deleted — `codepack-core::paths` is the one place
-  in the domain crates where this applies. Grep that marker to find everything that must
-  come back together.
-- Test helpers under `#[cfg(unix)]` are left in place: they do not compile on Windows, so
-  they cost nothing here, and they carry the invariant I7 symlink coverage.
+- Switched-off cross-platform code is **commented with `TODO(cross-platform)`**, never
+  deleted. Grep that marker to find everything that must return together;
+  `codepack-core::paths` is the only domain crate affected.
+- Test helpers under `#[cfg(unix)]` stay: they do not compile on Windows, so they cost
+  nothing, and they carry the invariant I7 symlink coverage.
 
 ## Toolchain
 
