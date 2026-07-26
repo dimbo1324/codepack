@@ -81,6 +81,14 @@ jobs:
         with:
           tool: cargo-deny
 
+      # The gate's `dev scripts` step runs the scripts/ test suite, which guards
+      # clean-project's protected-path logic. It fails rather than skips when CI is set,
+      # so the interpreter is pinned here instead of relying on whatever the runner image
+      # happens to ship -- the same reasoning as the pnpm steps above.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: cargo xtask gate
         run: cargo xtask gate
 

@@ -8,6 +8,7 @@
 mod frontend;
 mod golden;
 mod hooks;
+mod scripts;
 mod sync_agents;
 
 use std::path::{Path, PathBuf};
@@ -82,6 +83,10 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
     println!("\n=== frontend ===");
     if frontend::require_or_skip(root)? {
         frontend::gate_checks(root)?;
+    }
+    if !quick {
+        println!("\n=== dev scripts ===");
+        scripts::gate_checks(root)?;
     }
     println!("\n=== agents sync ===");
     sync_agents::run(root, true).map_err(|error| format!("sync-agents: {error}"))?;
