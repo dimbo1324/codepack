@@ -1,150 +1,105 @@
 # Task Checklist
 
-**Task:** Narrow the whole toolchain to Windows 10/11, add strict auto-formatting on
-commit, produce an installable `.exe`, and make the app single-instance.
+**Task:** A cross-platform Python dev-tools orchestrator, plus the legacy application
+icon adopted into the current project.
 **Date:** 2026-07-26
-**Branch:** feat/windows-only-toolchain-and-installer
+**Branch:** feat/python-dev-orchestrator-and-legacy-icon
 
-Four owner-requested tasks in one branch, because they share one theme: take what S0–S12
-already built and finish it into something installable and maintainable on one platform,
-rather than half-working on three. Stages S13 and S14 stay untouched as features.
+Two owner-requested tasks. The reference implementation the owner pointed at
+(`country-decision-atlas-r/dev_tools_scripts_runner.py`) was read end to end first: a
+nine-line root shim, a package holding all logic, and a hand-edited JSON catalog that the
+loader validates before anything can launch.
 
-Note on language: this file is English per `.ai/project/10-project-map.md`; the S12
-checklist was written in Russian, which violated that rule.
+## The one tension to name up front
 
-## Owner decisions that shape this task
+The orchestrator must be **cross-platform** ("на любой операционной системе"), while the
+product itself was narrowed to **Windows 10/11 only** yesterday. These do not conflict, and
+the resolution is deliberate: every script *runs* anywhere, and the ones whose work is
+inherently Windows-specific (building the `.exe` installer) detect the host and refuse with
+a clear message naming the owner decision, rather than failing cryptically half-way through
+a Rust build. A script that lies about what it can do on the current OS is worse than one
+that declines.
 
-1. **Windows-only for now.** macOS and Linux leave CI and the code paths. Cross-platform
-   code is commented with a `TODO` naming what returns and when — not deleted, because
-   BLUEPRINT §B.4 still declares cross-platform a product goal. BLUEPRINT is **not**
-   rewritten: the product intent has not changed, only the current build scope, so the
-   narrowing is recorded in `docs/decisions/open-questions.md` instead.
-2. **The installer is S14 scope, pulled forward on purpose.** `ROADMAP.md` §1 puts
-   packaging in S14 and stage order is binding, so this is an explicit owner decision
-   and gets recorded as one. Only the Windows installer comes forward; signing,
-   notarisation, `SHA256SUMS.txt`, and auto-update stay in S14.
-3. **Test helpers under `#[cfg(unix)]` stay.** They are dormant on Windows (the branch
-   does not compile there) and they exist to prove invariant I7 (symlinks are never
-   followed). Commenting them out would cost real safety coverage and buy nothing, so
-   they are left alone and called out in the final report.
+## Architecture (adapted from the reference, not copied)
+
+- `dev_tools_scripts_runner.py` at the repository root — a thin shim, nothing else.
+- `scripts/runner/` — the orchestrator's own logic, mirroring the reference's separation:
+  `models` (pure data) / `exceptions` / `config_loader` (validates) / `registry` (queries) /
+  `execution` (subprocess) / `rendering` (prints) / `interactive` (reads input) / `main`
+  (dispatch). Nothing prints and reads input in the same module.
+- `scripts/runner/config/*.json` — the hand-edited catalog: `meta`, `categories`,
+  `cadences`, `scripts`.
+- One directory per script, each with its own `config/*.json`. Small scripts stay one
+  module; big ones decompose fully.
+- **Scripts are launched as modules** (`python -m scripts.<name>`), not by file path. This
+  is the one deliberate divergence from the reference: it makes small and large scripts
+  launch identically, lets a decomposed script use ordinary relative imports, and needs no
+  `sys.path` manipulation. The loader validates that a declared module sits under
+  `scripts.` — the equivalent of the reference's escape-the-root check.
+- No behaviour hardcoded in Python: each script reads its own JSON.
 
 ## Preparation
 
-- [+] Orientation ritual done (git, ROADMAP, overview, previous checklist, decisions)
-- [+] Baseline recorded: 913 tests, golden 3/3, `cargo xtask gate` green locally
-- [+] Checklist committed before any code
+- [ ] Reference orchestrator studied: entry shim, config validation, registry, execution,
+      rendering, interactive shell, and all four config files
+- [ ] Baseline: `main` green (CI run on `1038f2b` all 14 steps `success`), 911 tests
+- [ ] Checklist committed before any code
 
-## Task 1 — Windows-only toolchain
+## Task 1a — the orchestrator core
 
-- [+] `.github/workflows/ci.yml`: matrix reduced to `windows-latest`; the macOS/Linux
-      legs and the Linux system-dependency step commented out with a `TODO` pointing at
-      the open question, not deleted
-- [+] `codepack-core::paths`: the `Os::Mac`/`Os::Linux` layout arms commented with a
-      `TODO`; Windows is the only resolved layout
-- [+] The two layout tests for macOS/Linux commented alongside the code they cover, so a
-      commented branch never looks tested
-- [+] `.ai/project/11-commands.md`: platform notes and gate policy match a Windows-only
-      reality
-- [+] `docs/decisions/open-questions.md`: the narrowing recorded, plus the still-unknown
-      Unix gate failure logged as Q21 so dropping those legs does not bury it
+- [ ] `dev_tools_scripts_runner.py` — shim only, imports and calls `main`
+- [ ] `scripts/runner/` modules as listed above
+- [ ] Config validation turns a bad hand-edit into one clear message: missing file, bad
+      JSON, unknown category reference, duplicate identifier, module outside `scripts.`
+- [ ] Interactive menu, direct invocation (`... clean`), and `help` all work
+- [ ] Non-interactive with no arguments runs the default script instead of blocking on
+      `input()` — the reference's behaviour, and the one that matters for agents and CI
+- [ ] RU/EN interface, English default (matches the project's language policy for tooling)
 
-## Task 2 — Strict auto-formatting
+## Task 1b — the scripts
 
-- [+] `prettier-plugin-svelte` added (Prettier cannot format `.svelte` without it)
-- [+] `prettier.config.mjs` and `.prettierignore` at the repository root. Chose `.mjs`
-      over `.prettierrc` so the non-obvious choices carry their reasons; `printWidth: 100`
-      matches `rustfmt.toml`'s `max_width`, everything else is Prettier's default because
-      that is already what the tree looked like
-- [+] `pnpm format` (check) kept, `pnpm format:write` added; both moved to the workspace
-      root so one config and one ignore file apply regardless of the directory you run in
-- [+] `cargo xtask fmt` formats Rust **and** the frontend
-- [+] `cargo xtask install-hooks` installs a `pre-commit` hook via `core.hooksPath`
-- [+] The hook formats **only staged files** and re-stages them; it degrades to a warning
-      when `node_modules` is absent instead of blocking a Rust-only commit
-- [+] Whole tree formatted once, in its own commit, so the mechanical diff stays separate
-      from the logic diff
-- [+] Frontend format/typecheck/lint join `cargo xtask gate`, skipping with a clear
-      message when `node_modules` is absent
-- [+] `.ai/project/11-commands.md` documents the new commands
-- [+] **Unplanned, found on the way:** `.editorconfig` set `indent_size = 4` for `[*]` and
-      listed neither `.svelte` nor `.mjs` in its two-space override. Nothing enforced the
-      file, so those sources were hand-written with two spaces and silently disagreed with
-      it — Prettier's first run reindented 14 files (~1200 lines). Fixed the root cause
-      instead of overriding it in Prettier: the churn dropped to 5 files, 19 insertions
+- [ ] `doctor` — report which tools are present (cargo, rustc, node, pnpm, cargo-deny,
+      git, python) and what the host OS means for the other scripts
+- [ ] `format_code` — rustfmt + Prettier, the same work `cargo xtask fmt` does
+- [ ] `quality_gate` — the full gate; the default script
+- [ ] `clean_project` — **the destructive one, so the most decomposed.** Removes what git
+      does not track, plus empty directories. Dry-run is the default; deleting requires an
+      explicit flag or confirmation. Never touches ignored-but-precious paths listed in its
+      own config
+- [ ] `build_installer` — the Windows `.exe`; declines clearly on other hosts
+- [ ] `dev_run` — build, launch for manual testing, and clean up after the window closes,
+      with the cleanup level set in config
+- [ ] `install_hooks` — the formatting pre-commit hook
+- [ ] Every script: `--help` works, exit codes are meaningful, no hardcoded parameters
 
-## Task 3 — Installable `.exe`
+## Task 2 — the legacy icon
 
-- [+] `bundle.targets` set to NSIS so the artifact is a single `.exe` installer
-- [+] `mainBinaryName` set: the binary is `codepack-desktop` while `productName` is
-      `codepack`, and the bundler resolves the executable from the product name — it would
-      have looked for a `codepack.exe` that does not exist
-- [+] NSIS `installMode: currentUser`, so installing needs no admin prompt; installer
-      languages English + Russian
-- [+] `cargo xtask package` drives the whole build (frontend → Tauri → installer)
-- [+] Installer really built: `target/release/bundle/nsis/codepack_2.0.0_x64-setup.exe`,
-      4.4 MiB, release build 8m47s
-- [+] `.ai/project/11-commands.md` and `ROADMAP.md` stop claiming `tauri build` is S14-only
-- [+] **Unplanned, found on the way:** the documented dev command
-      `pnpm --filter @codepack/ui exec tauri dev` never worked. The Tauri CLI locates a
-      project by finding `tauri.conf.json` in a *subfolder*, and `src-tauri` is a sibling
-      of `ui/`. Both commands now run from `apps/desktop`, and the CLI moved to the
-      workspace root so it resolves from there
-
-## Task 4 — Single instance
-
-- [+] `tauri-plugin-single-instance` added (new production dependency — named in the
-      report with its justification; `cargo deny check` passes with it)
-- [+] Registered first among plugins, per the plugin's own requirement
-- [+] A second launch focuses the existing window instead of starting a second process:
-      restores it if minimised, shows it if hidden, raises it if behind other windows.
-      The tray's "Show" item now shares that one helper and gained the `unminimize()` it
-      was missing
-- [+] Only one tray icon can exist, because only one process can. This also closes a
-      second-order problem nobody had reported: two instances opened two connections to
-      the same SQLite history database
+- [ ] Extract `assets/ICO.ico` from `docs/__arch__/codepack-main.zip` (128×128, 32-bit,
+      single image) into a temporary directory outside the repository, per the legacy
+      reference rules
+- [ ] Produce a proper icon set with `tauri icon` rather than hand-rolling sizes: the
+      current `icon.png` is a 2.2 KB placeholder and the current `.ico` is unrelated
+- [ ] Verify the generated `.ico` really carries multiple sizes — a single 128×128 scaled
+      down is blurry in the taskbar, which is where a user actually sees it
+- [ ] Confirm the icon reaches both places it matters: the installer/executable, and
+      `default_window_icon()`, which is what our tray icon uses
 
 ## Verification
 
-- [+] `cargo fmt --all --check`
-- [+] `cargo clippy --workspace --all-targets -- -D warnings`
-- [+] `cargo test --workspace` — 911. Exactly the 913 baseline minus the two commented-out
-      macOS/Linux layout tests; nothing else moved
-- [+] `cargo test -p codepack-engine --test golden` — 3/3
-- [+] `pnpm --filter @codepack/ui typecheck` (102 files, 0/0), `lint`, `format`, `build`
-      (bundle byte-identical at 86.73 kB, proving the reformat was cosmetic)
-- [+] `cargo deny check` — clean, including the new plugin's licence
-- [+] `cargo xtask sync-agents --check`
-- [+] `cargo xtask gate` end to end, exit 0, with the frontend steps really running
-- [+] Pre-commit hook exercised end to end on throwaway commits: a misformatted `.ts` and
-      `.rs` came out formatted, and a partially staged file was skipped with its unstaged
-      half correctly left out of the commit. Probe commits then removed
-- [+] Single instance verified on the built release binary: three launches, one process
-- [-] Installer built (4.4 MiB) but **not installed and launched from the installed copy**.
-      Verified the binary it wraps instead. Installing would write to this machine's
-      Program Files and Start menu, which is the owner's call, not mine — see the report
-- [+] Independent review of the diff (`codepack-quality-reviewer`). Found one high-severity
-      defect — the frontend gate steps never ran in CI, because `ci.yml` had no Node/pnpm,
-      while three places claimed they did — plus documentation drift and two holes in the
-      hook. All fixed in `b4f3770`; the two findings left alone are named there with reasons
+- [ ] `cargo xtask gate` green
+- [ ] Every script executed for real, not just imported: `doctor`, `format_code`,
+      `quality_gate`, `clean_project --dry-run`, `install_hooks`, `build_installer`
+- [ ] `clean_project` proven safe on a scratch copy before it is ever pointed at the repo
+- [ ] The orchestrator's config validation proven by feeding it a deliberately broken edit
+- [ ] Installer rebuilt with the new icon and the icon confirmed in the artifact
+- [ ] Independent review of the diff
 - [ ] CI green on `windows-latest`
 
 ## Completion
 
-- [+] `ROADMAP.md` reflects the Windows-only scope and the pulled-forward installer
-- [+] `docs/architecture/overview.md` updated
-- [+] `docs/decisions/open-questions.md` carries every decision and open question above
-- [+] Checklist filled `+`/`-` honestly, final report written in Russian
-
-## Rule debt
-
-`AGENTS.md` assembles to 29.6 KiB against a 30 KiB budget. This task went over twice and
-tightened its own prose both times. Now recorded as **Q22** in
-`docs/decisions/open-questions.md` rather than only here — this file is cleared by the next
-task, which would have erased the only explanation of a limit the next agent is going to
-hit.
-
-## Next task
-
-Either S13 (AI integration) or the return of cross-platform support, whichever the owner
-picks. The open questions recorded here are what makes the second one possible without
-re-deriving it.
+- [ ] `.ai/project/11-commands.md` documents the orchestrator and the duty to keep the
+      scripts current and cross-platform
+- [ ] `CLAUDE.md`, `AGENTS.md` (regenerated), `.claude/`, `.codex/` all point agents at it
+- [ ] `.ai/CHANGELOG.md` entry for the rule-module change
+- [ ] `docs/architecture/overview.md` and `docs/decisions/open-questions.md` updated
+- [ ] Checklist filled `+`/`-`, final report in Russian
