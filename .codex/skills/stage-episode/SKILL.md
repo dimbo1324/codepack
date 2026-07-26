@@ -51,8 +51,11 @@ Delegate to the specialist subagents: `codepack-core-engine`, `codepack-security
 ## 5. Verification
 
 ```powershell
-cargo xtask gate
+python dev_tools_scripts_runner.py quality-gate
 ```
+
+If the stage changed how the project is built, checked, formatted, run or cleaned, update
+the matching script under `scripts/` in this same task and run `selftest`.
 
 Run the `code-review` skill or the `codepack-quality-reviewer` subagent before
 finalizing.

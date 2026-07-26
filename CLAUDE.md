@@ -20,6 +20,12 @@ The product intent is described in full in `BLUEPRINT.md`. The legacy Python
 implementation is archived at `docs/__arch__/codepack-main.zip` and serves as the
 behavioral reference.
 
+**Routine jobs go through the script orchestrator**, not hand-assembled commands:
+`python dev_tools_scripts_runner.py list` prints the catalog, `... <name>` runs one.
+It is cross-platform and it is the same door humans and agents use, so a workflow that
+changed is visible to everyone at once. Details, and the standing duty to keep the
+scripts current, are in `@.ai/project/11-commands.md`.
+
 The rules themselves are meant to evolve: see `@.ai/universal/08-rules-evolution.md`
 for when and how to change them, and `.ai/CHANGELOG.md` for what changed so far.
 
@@ -41,6 +47,7 @@ for when and how to change them, and `.ai/CHANGELOG.md` for what changed so far.
 - @.ai/project/12-domain-rules.md
 - @.ai/project/13-progress-tracking.md
 - @.ai/project/14-legacy-reference.md
+- @.ai/project/15-command-reference.md
 
 ## Claude Code workspace
 

@@ -358,6 +358,10 @@ Other areas:
   The webview holds **no filesystem permission** (`capabilities/default.json`); every
   file operation is a `#[tauri::command]`, and the frontend's only route to the backend
   is `ui/src/lib/api/client.ts`.
+- `dev_tools_scripts_runner.py` (root) — a thin entry shim, nothing else.
+- `scripts/` — the Python dev-tools orchestrator. `runner/` is its own logic and
+  hand-edited JSON catalog; one directory per script, each with its own `config/*.json`;
+  `_toolkit/` is the only thing scripts share. Scripts never import each other.
 - `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
 - `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
@@ -406,6 +410,35 @@ Do not mix languages inside a single file.
 
 All commands run from the repository root (Windows: PowerShell or Git Bash).
 
+## The script orchestrator — start here
+
+```powershell
+python dev_tools_scripts_runner.py          # interactive menu
+python dev_tools_scripts_runner.py list     # machine-readable catalog — use this, not the menu
+python dev_tools_scripts_runner.py <name>   # run one directly; `help` prints manuals
+```
+
+Cross-platform door to the routine jobs: `quality-gate` (default), `format-code`,
+`dev-run`, `build-installer`, `doctor`, `install-hooks`, `clean-project`, `selftest`.
+With no arguments and no terminal it runs `quality-gate` rather than blocking on input,
+which is what makes it usable by an agent. The scripts wrap the `cargo xtask` commands
+below instead of reimplementing them, so both doors reach the same code.
+
+**`clean-project` deletes files.** Dry run by default; never touches `.env`, signing
+material, local databases, or a nested git repository. Read its
+`config/clean.json` first.
+
+**Standing duty — keep the scripts accurate and portable.** They are infrastructure
+everyone relies on, so a task that changes how the project is built, checked, formatted,
+run, or cleaned updates the matching script *in that same task*; a script describing a
+workflow that no longer exists is worse than none. New routine work gets a new script:
+`scripts/<name>/__main__.py` plus one entry in `scripts/runner/config/scripts.json` —
+adding a script changes no Python in `scripts/runner/`. Settings live in each script's
+own `config/*.json`; scripts never import each other, only `scripts/_toolkit`. Resolve
+tools through `_toolkit/processes.py` (a bare `"pnpm"` does not resolve on Windows), and
+let genuinely Windows-only work refuse with a reason instead of failing part-way. Run
+`selftest` after touching anything under `scripts/`.
+
 ## Main entry point — the xtask runner
 
 ```powershell
@@ -423,108 +456,47 @@ cargo xtask doctor          # read-only environment diagnostics
 cargo xtask golden          # regenerate the legacy golden references (needs Python)
 ```
 
-`cargo xtask gate` runs formatting, clippy, tests, `cargo deny check`, the frontend
-`format`/`typecheck`/`lint` checks, and the `AGENTS.md` sync check. Prefer it over ad-hoc
-command sequences.
+Prefer `gate` over ad-hoc command sequences.
+
+`cargo deny check` needs the `cargo-deny` binary installed separately (`cargo install
+cargo-deny`, not a toolchain component; CI uses `taiki-e/install-action`).
+
+`cargo xtask golden` re-runs the archived legacy implementation to rewrite
+`tests/golden/reference/`. Developer-machine only: it needs Python 3, and CI never runs
+it because the references are committed. Run it when legacy's own output *should* change
+— never to make a failing comparison pass.
 
 ## Formatting
 
 `rustfmt` owns `.rs` (`rustfmt.toml`); Prettier owns the frontend and config files
-(`prettier.config.mjs`, exclusions in `.prettierignore` — which protects `tests/golden/`,
-test fixtures, and the generated `AGENTS.md`). `cargo xtask fmt` runs both.
+(`prettier.config.mjs`; `.prettierignore` protects `tests/golden/`, test fixtures, and
+the generated `AGENTS.md`). `cargo xtask fmt` runs both.
 
-Run `cargo xtask install-hooks` once per clone. It points `core.hooksPath` at the tracked
-`.githooks/`, so the hook is versioned rather than living in an untracked `.git/hooks`.
-The `pre-commit` hook formats **only staged files** and re-stages them; it skips a
-partially staged file rather than sweeping its unstaged half into the commit, and skips
-Prettier with a notice when `node_modules` is absent. Bypass once with
-`git commit --no-verify` — the gate still checks formatting later.
+`install-hooks` once per clone points `core.hooksPath` at the tracked `.githooks/`, so
+the hook is versioned instead of living in an untracked `.git/hooks`. The `pre-commit`
+hook formats **only staged files** and re-stages them; it skips a partially staged file
+rather than sweeping its unstaged half into the commit, and skips Prettier with a notice
+when `node_modules` is absent. `git commit --no-verify` bypasses it once — the gate still
+checks formatting later.
 
-`cargo xtask golden` runs the archived legacy implementation and rewrites
-`tests/golden/reference/`. It is a developer-machine command: it needs Python 3 on
-`PATH`, and CI never runs it — the references are committed, so the Rust suite compares
-against files. Run it only when legacy's own output should change, never to make a
-failing comparison pass.
+## Where the rest lives
 
-`cargo deny check` requires the `cargo-deny` binary (`cargo install cargo-deny`,
-not a `rust-toolchain.toml` component — CI installs it via `taiki-e/install-action`).
-`cargo xtask doctor` reports whether it is on `PATH`.
-
-## Direct commands when targeting one layer
-
-```powershell
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo build --workspace
-pnpm install --frozen-lockfile
-pnpm format                        # Prettier, check only
-pnpm format:write                  # Prettier, rewrite in place
-pnpm --filter @codepack/ui typecheck
-pnpm --filter @codepack/ui lint
-pnpm --filter @codepack/ui build
-```
-
-Frontend commands require `pnpm install` once. The frontend lives in
-`apps/desktop/ui`; the Tauri shell is `apps/desktop/src-tauri` (crate
-`codepack-desktop`), a normal member of the cargo workspace — `cargo xtask gate` builds
-and tests it like any other crate.
-
-Running the app in development needs both halves, which the Tauri CLI starts together:
-
-```powershell
-pnpm desktop:dev
-```
-
-**The working directory matters.** The Tauri CLI locates a project by finding
-`tauri.conf.json` in a *subfolder* of the current directory. Here the shell
-(`apps/desktop/src-tauri`) sits beside the frontend (`apps/desktop/ui`), so from `ui` the
-config is a sibling and the CLI aborts — which is why the previously documented
-`pnpm --filter @codepack/ui exec tauri dev` never worked. Both scripts run from
-`apps/desktop`, and the CLI is a workspace-root dev dependency so it resolves there.
-
-Producing the Windows installer:
-
-```powershell
-cargo xtask package
-```
-
-Leaves an NSIS `.exe` under `target/release/bundle/nsis/`. Signing, notarisation,
-`SHA256SUMS.txt`, and auto-update stay in S14 — only the installer was pulled forward
-(owner decision 2026-07-26).
+Per-layer commands, the Tauri working-directory trap, `cargo deny`/`golden` notes, and the
+platform notes are in `15-command-reference.md` — lookup material, kept separate so this
+module stays the part that applies to every task.
 
 ## Gate policy
 
-- Before merging to `main`, the full gate must be green.
-- The quick gate is the minimum for intermediate pushes.
-- `sync-agents --check` is part of the gate: a drift between `AGENTS.md` and the `.ai/`
-  modules breaks the build on purpose.
-- Frontend `format`/`typecheck`/`lint` are part of the gate. Without
-  `apps/desktop/ui/node_modules` they skip with a notice, so a Rust-only checkout still
-  gates — but when `CI` is set they **fail** instead, because a silent skip there would let
-  unformatted frontend code pass.
-- Documentation-only or configuration-only changes still run the gate.
-- CI runs `windows-latest` only (owner decision 2026-07-26); the other two legs are
-  commented out in `.github/workflows/ci.yml`, not deleted.
-
-## Platform notes
-
-The supported target is **Windows 10 and Windows 11**. macOS and Linux are out of scope for
-now — BLUEPRINT §B.4 still calls them a product goal; see `open-questions.md` for the
-decision and Q21 for what must be re-diagnosed first.
-
-- Windows: long paths and antivirus can interfere with temporary directories; prefer a
-  repository-local temp directory in tests.
-- Switched-off cross-platform code is **commented with `TODO(cross-platform)`**, never
-  deleted. Grep that marker to find everything that must return together;
-  `codepack-core::paths` is the only domain crate affected.
-- Test helpers under `#[cfg(unix)]` stay: they do not compile on Windows, so they cost
-  nothing, and they carry the invariant I7 symlink coverage.
-
-## Toolchain
-
-The Rust toolchain is pinned in `rust-toolchain.toml`; do not bypass it. Node and pnpm
-versions are declared in `package.json` under `engines` and `packageManager`.
+- The full gate must be green before merging to `main`; the quick gate is the minimum for
+  intermediate pushes. Documentation- and configuration-only changes still run it.
+- `sync-agents --check` is part of the gate: drift between `AGENTS.md` and `.ai/` breaks
+  the build on purpose.
+- Frontend `format`/`typecheck`/`lint` are part of it too. Without
+  `apps/desktop/ui/node_modules` they skip with a notice so a Rust-only checkout still
+  gates — but with `CI` set they **fail** instead, since a silent skip there would let
+  unformatted frontend code through.
+- CI runs `windows-latest` only (owner decision 2026-07-26); the other legs are commented
+  out in `.github/workflows/ci.yml`, not deleted.
 
 ---
 
@@ -677,3 +649,9 @@ Never weaken a rule to make a task easier — propose changes instead; autonomou
 File: `.ai/project/14-legacy-reference.md`
 
 `docs/__arch__/codepack-main.zip` is the behavioral reference for exact constants, artifact formats, and ambiguous behavior — consult it, never copy its Python architecture into Rust.
+
+## Command Reference: Per-Layer Commands and Platform Notes
+
+File: `.ai/project/15-command-reference.md`
+
+Lookup material — per-layer commands, the Tauri working-directory trap, and Windows-only platform notes. Read this file when you need a specific command; the gate, the orchestrator, and the policies that always apply live in `11-commands.md`.

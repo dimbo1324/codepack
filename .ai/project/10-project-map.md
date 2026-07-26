@@ -34,6 +34,10 @@ Other areas:
   The webview holds **no filesystem permission** (`capabilities/default.json`); every
   file operation is a `#[tauri::command]`, and the frontend's only route to the backend
   is `ui/src/lib/api/client.ts`.
+- `dev_tools_scripts_runner.py` (root) — a thin entry shim, nothing else.
+- `scripts/` — the Python dev-tools orchestrator. `runner/` is its own logic and
+  hand-edited JSON catalog; one directory per script, each with its own `config/*.json`;
+  `_toolkit/` is the only thing scripts share. Scripts never import each other.
 - `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
 - `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
