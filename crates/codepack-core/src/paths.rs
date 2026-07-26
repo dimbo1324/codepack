@@ -10,41 +10,67 @@ const LEGACY_HISTORY_FILE_NAME: &str = ".project_exporter_history.json";
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const DB_FILE_NAME: &str = "codepack.db";
 
+/// Which OS layout to resolve application directories for (BLUEPRINT §D.4).
+///
+/// TODO(cross-platform): `Mac` and `Linux` are commented out, not removed. Owner decision
+/// 2026-07-26 (`docs/decisions/open-questions.md`) narrows the build scope to Windows
+/// 10/11; BLUEPRINT §B.4 still declares cross-platform a product goal, so the layouts
+/// stay here as the specification of what has to come back. Restoring them means
+/// uncommenting the variants, the `current_os` detection, the `layout` arms, the
+/// `resolve_base_dirs` arms, and the two layout tests — they were commented together and
+/// belong together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Os {
     Windows,
-    Mac,
-    Linux,
+    // Mac,
+    // Linux,
 }
 
 fn current_os() -> Os {
-    if cfg!(target_os = "windows") {
-        Os::Windows
-    } else if cfg!(target_os = "macos") {
-        Os::Mac
-    } else {
-        Os::Linux
-    }
+    // TODO(cross-platform): restore real detection along with the `Os` variants:
+    //
+    //   if cfg!(target_os = "windows") {
+    //       Os::Windows
+    //   } else if cfg!(target_os = "macos") {
+    //       Os::Mac
+    //   } else {
+    //       Os::Linux
+    //   }
+    Os::Windows
 }
 
-fn layout(os: Os, home_dir: &Path, config_dir: &Path, data_local_dir: &Path) -> (PathBuf, PathBuf) {
+/// `_home_dir` is unused while only the Windows layout exists — the macOS and Linux log
+/// directories are the ones derived from the home directory. It keeps its place in the
+/// signature so restoring those arms is a comment change, not an API change.
+fn layout(
+    os: Os,
+    _home_dir: &Path,
+    config_dir: &Path,
+    data_local_dir: &Path,
+) -> (PathBuf, PathBuf) {
     let settings_dir = config_dir.join(APP_NAME);
     let log_dir = match os {
         Os::Windows => data_local_dir.join(APP_NAME).join("logs"),
-        Os::Mac => home_dir.join("Library").join("Logs").join(APP_NAME),
-        Os::Linux => home_dir.join(".local").join("state").join(APP_NAME),
+        // TODO(cross-platform):
+        // Os::Mac => _home_dir.join("Library").join("Logs").join(APP_NAME),
+        // Os::Linux => _home_dir.join(".local").join("state").join(APP_NAME),
     };
     (settings_dir, log_dir)
 }
 
 pub(crate) fn home_dir_from_env() -> Option<PathBuf> {
-    if cfg!(target_os = "windows") {
-        std::env::var_os("USERPROFILE")
-            .or_else(|| std::env::var_os("HOME"))
-            .map(PathBuf::from)
-    } else {
-        std::env::var_os("HOME").map(PathBuf::from)
-    }
+    // `HOME` stays in the chain after `USERPROFILE`: it is what Git Bash and MSYS set on
+    // Windows, so a developer running the CLI from that shell still resolves a home
+    // directory. This is not the cross-platform branch — that one was the `else`.
+    //
+    // TODO(cross-platform): restore the non-Windows branch:
+    //
+    //   } else {
+    //       std::env::var_os("HOME").map(PathBuf::from)
+    //   }
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
 }
 
 fn resolve_base_dirs() -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -58,17 +84,17 @@ fn resolve_base_dirs() -> Result<(PathBuf, PathBuf, PathBuf)> {
                 .map(PathBuf::from)
                 .ok_or(CoreError::NoAppDirectories)?;
             (roaming, local)
-        }
-        Os::Mac => (
-            home_dir.join("Library").join("Application Support"),
-            PathBuf::new(),
-        ),
-        Os::Linux => {
-            let config = std::env::var_os("XDG_CONFIG_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home_dir.join(".config"));
-            (config, PathBuf::new())
-        }
+        } // TODO(cross-platform):
+          // Os::Mac => (
+          //     home_dir.join("Library").join("Application Support"),
+          //     PathBuf::new(),
+          // ),
+          // Os::Linux => {
+          //     let config = std::env::var_os("XDG_CONFIG_HOME")
+          //         .map(PathBuf::from)
+          //         .unwrap_or_else(|| home_dir.join(".config"));
+          //     (config, PathBuf::new())
+          // }
     };
     Ok((home_dir, config_dir, data_local_dir))
 }
@@ -172,32 +198,38 @@ mod tests {
         );
     }
 
-    #[test]
-    fn macos_layout_matches_blueprint_d4() {
-        let (settings_dir, log_dir) = layout(
-            Os::Mac,
-            Path::new("/Users/dev"),
-            Path::new("/Users/dev/Library/Application Support"),
-            Path::new(""),
-        );
-        assert_eq!(
-            settings_dir,
-            Path::new("/Users/dev/Library/Application Support/codepack")
-        );
-        assert_eq!(log_dir, Path::new("/Users/dev/Library/Logs/codepack"));
-    }
-
-    #[test]
-    fn linux_layout_matches_blueprint_d4() {
-        let (settings_dir, log_dir) = layout(
-            Os::Linux,
-            Path::new("/home/dev"),
-            Path::new("/home/dev/.config"),
-            Path::new(""),
-        );
-        assert_eq!(settings_dir, Path::new("/home/dev/.config/codepack"));
-        assert_eq!(log_dir, Path::new("/home/dev/.local/state/codepack"));
-    }
+    // TODO(cross-platform): these two tests are commented out together with the `Os::Mac`
+    // and `Os::Linux` layout arms they cover, so a commented-out branch never looks
+    // tested. Restore them in the same change that restores the arms — they are the
+    // BLUEPRINT §D.4 specification for those layouts, which is why they are kept verbatim
+    // rather than deleted.
+    //
+    // #[test]
+    // fn macos_layout_matches_blueprint_d4() {
+    //     let (settings_dir, log_dir) = layout(
+    //         Os::Mac,
+    //         Path::new("/Users/dev"),
+    //         Path::new("/Users/dev/Library/Application Support"),
+    //         Path::new(""),
+    //     );
+    //     assert_eq!(
+    //         settings_dir,
+    //         Path::new("/Users/dev/Library/Application Support/codepack")
+    //     );
+    //     assert_eq!(log_dir, Path::new("/Users/dev/Library/Logs/codepack"));
+    // }
+    //
+    // #[test]
+    // fn linux_layout_matches_blueprint_d4() {
+    //     let (settings_dir, log_dir) = layout(
+    //         Os::Linux,
+    //         Path::new("/home/dev"),
+    //         Path::new("/home/dev/.config"),
+    //         Path::new(""),
+    //     );
+    //     assert_eq!(settings_dir, Path::new("/home/dev/.config/codepack"));
+    //     assert_eq!(log_dir, Path::new("/home/dev/.local/state/codepack"));
+    // }
 
     #[test]
     fn for_root_never_leaves_the_given_root() {
