@@ -109,6 +109,12 @@ tauri-build = { version = "2", features = [] }
 # OS through these, never `fs`.
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+# 2026-07-26: one running process per machine. Without this, launching the shortcut again
+# starts a second instance, and because each instance builds its own tray icon, the
+# notification area fills up with duplicates of the same application. Hand-rolling this
+# means a named mutex plus an IPC channel to hand the activation to the first process —
+# platform code that this plugin, maintained alongside Tauri itself, already owns.
+tauri-plugin-single-instance = "2"
 # S11: watch mode (BLUEPRINT §A.10). Cross-platform filesystem notifications with no
 # network capability; the same crate `cargo watch` and `rust-analyzer` use.
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
