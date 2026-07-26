@@ -66,6 +66,22 @@
     "examples": []
   },
   {
+    "title": "selftest",
+    "module": "scripts.selftest",
+    "category": "workspace",
+    "aliases": ["test-scripts"],
+    "cadence_ref": "on_demand",
+    "summary": {
+      "en": "Verify the developer scripts themselves.",
+      "ru": "Проверить сами скрипты разработчика."
+    },
+    "description": {
+      "en": "Runs the stdlib unittest suite under scripts/ and loads the orchestrator catalog. The tests cover clean-project's protected-path rules -- the one piece of logic here that can destroy data, and where a real bug was caught during development: a leading dot was being stripped, so the .env pattern stopped matching the file it exists to protect. Run this after touching anything in scripts/, because a broken catalog or a weakened protection rule is invisible until the moment it matters.",
+      "ru": "Запускает тесты на stdlib unittest в scripts/ и загружает каталог оркестратора. Тесты покрывают правила защиты путей clean-project — единственную логику здесь, способную уничтожить данные, и место, где при разработке нашёлся реальный баг: ведущая точка отрезалась, из-за чего правило .env перестало совпадать с файлом, который оно должно защищать. Запускайте после любых правок в scripts/: сломанный каталог или ослабленное правило защиты не видны до того момента, когда это уже важно."
+    },
+    "examples": []
+  },
+  {
     "title": "doctor",
     "module": "scripts.doctor",
     "category": "workspace",

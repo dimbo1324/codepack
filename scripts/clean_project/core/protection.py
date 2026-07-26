@@ -11,6 +11,21 @@ from __future__ import annotations
 from fnmatch import fnmatch
 
 
+def _normalize(relative_path: str) -> str:
+    """Backslashes to slashes, and a single leading ``./`` removed.
+
+    Written out rather than using ``lstrip("./")``, which strips *characters* and not a
+    prefix: ``".env".lstrip("./")`` is ``"env"``, so the pattern ``.env`` stopped
+    matching the file it exists to protect. That bug was caught by a sandbox run where
+    a planted ``.env`` was listed for deletion — the exact failure this module exists to
+    make impossible, so it is named here rather than quietly fixed.
+    """
+    normalized = relative_path.replace("\\", "/")
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized.rstrip("/")
+
+
 class ProtectionRules:
     """Glob rules for paths that survive every mode.
 
@@ -26,7 +41,7 @@ class ProtectionRules:
         self._reinclude = [p[1:] for p in patterns if p.startswith("!")]
 
     def is_protected(self, relative_path: str) -> bool:
-        normalized = relative_path.replace("\\", "/").lstrip("./")
+        normalized = _normalize(relative_path)
         if any(self._matches(normalized, p) for p in self._reinclude):
             return False
         return any(self._matches(normalized, p) for p in self._protect)
