@@ -29,6 +29,12 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "publisher": "codepack",
+    "copyright": "Copyright (c) 2026 codepack",
+    "category": "DeveloperTool",
+    "homepage": "https://github.com/dimbo1324/codepack",
+    "shortDescription": "Turn a source folder into a clean, safe snapshot.",
+    "longDescription": "codepack packages a project into an archive plus a set of reports fit to hand to an AI assistant or a person, with local-only analysis and secret redaction so nothing sensitive leaves with it.",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
@@ -42,7 +48,8 @@
         "installMode": "currentUser",
         "languages": ["English", "Russian"],
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico"
+        "uninstallerIcon": "icons/icon.ico",
+        "startMenuFolder": "codepack"
       }
     }
   }
