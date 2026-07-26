@@ -89,11 +89,14 @@ def main(argv: list[str]) -> int:
         config.get("empty_dir_skip", []),
         protection,
     )
+    # The pattern list cannot rederive "protected because of what it holds" or "is a
+    # nested repository", so the discovery verdicts travel to the pruning phase directly.
+    prune_kwargs = {"protected_trees": [c.relative for c in candidates if c.protected]}
 
     if not args.apply:
         if pruning:
             heading("empty directories that would also be pruned")
-            already_empty = prune_empty_dirs(*prune_argv, dry_run=True)
+            already_empty = prune_empty_dirs(*prune_argv, dry_run=True, **prune_kwargs)
             for relative in already_empty:
                 info(f"- {relative}")
             if not already_empty:
@@ -126,7 +129,7 @@ def main(argv: list[str]) -> int:
             return 1
 
     if pruning:
-        pruned = prune_empty_dirs(*prune_argv)
+        pruned = prune_empty_dirs(*prune_argv, **prune_kwargs)
         heading("empty directories pruned")
         if pruned:
             for relative in pruned:

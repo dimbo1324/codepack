@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.clean_project.core import discovery
 from scripts.clean_project.core.discovery import discover
 from scripts.clean_project.core.protection import ProtectionRules
 from scripts.clean_project.core.removal import prune_empty_dirs
@@ -127,6 +128,45 @@ class DiscoveryTest(unittest.TestCase):
         _write(self.root / "samples" / ".env.example")
         self.assert_cleanable("samples")
 
+    def test_an_unenumerable_subtree_protects_its_directory(self) -> None:
+        """Fail closed. `os.walk` reports a directory it cannot read through `onerror`;
+        discarding that turned "I could not look" into "there is nothing there", so a
+        directory hiding a secret behind a permission wall read as cleanable."""
+        _write(self.root / "cache" / "locked" / "keep.txt")
+        walked = self.root / "cache"
+
+        real_walk = discovery.os.walk
+
+        def failing_walk(top, **kwargs):  # type: ignore[no-untyped-def]
+            onerror = kwargs.get("onerror")
+            if Path(top) == walked and onerror is not None:
+                onerror(PermissionError(13, "denied", str(walked / "locked")))
+                return iter(())
+            return real_walk(top, **kwargs)
+
+        discovery.os.walk = failing_walk  # type: ignore[assignment]
+        try:
+            reason = self.assert_protected("cache")
+        finally:
+            discovery.os.walk = real_walk  # type: ignore[assignment]
+        self.assertIn("unreadable", reason)
+
+    def test_a_git_warning_is_surfaced_instead_of_corrupting_the_plan(self) -> None:
+        """A git warning carries no NUL, so folding stderr into stdout glued it onto the
+        next record and made that path vanish from the plan with nothing said."""
+        real = discovery.capture_streams
+        discovery.capture_streams = lambda *_a, **_k: (  # type: ignore[assignment]
+            0,
+            "?? scratch/\x00",
+            "warning: could not open directory 'cache/': Permission denied\n",
+        )
+        try:
+            with self.assertRaises(discovery.DiscoveryError) as caught:
+                discover(self.root, [], self.rules)
+        finally:
+            discovery.capture_streams = real  # type: ignore[assignment]
+        self.assertIn("incomplete", str(caught.exception))
+
 
 class PruneEmptyDirsTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -168,6 +208,17 @@ class PruneEmptyDirsTest(unittest.TestCase):
         self.assertEqual(reported, ["a", "a/b"])
         self.assertTrue((self.root / "a" / "b").exists())
         self.assertEqual(prune_empty_dirs(self.root, ["."], [], self.rules), reported)
+
+    def test_a_tree_protected_by_discovery_is_not_pruned_inside(self) -> None:
+        """Phase 2 consulted only the pattern list, so it pruned empty directories inside
+        a sibling clone the same run had just refused to touch — contradicting the
+        "protected whole" the plan and the docs promise."""
+        (self.root / "vendor" / "sibling" / "build").mkdir(parents=True)
+        pruned = prune_empty_dirs(
+            self.root, ["."], [], self.rules, protected_trees=["vendor"]
+        )
+        self.assertEqual(pruned, [])
+        self.assertTrue((self.root / "vendor" / "sibling" / "build").exists())
 
     def test_the_skip_list_still_applies(self) -> None:
         (self.root / ".git" / "objects").mkdir(parents=True)

@@ -20,7 +20,7 @@ codepack task runner
 Usage: cargo xtask <command> [options]
 
 Commands:
-  gate [--quick]          Full quality gate; --quick skips the test run
+  gate [--quick]          Full quality gate; --quick skips the test and dev-scripts runs
   fmt                     Format Rust and frontend sources in place
   lint                    Clippy across the workspace with warnings denied
   test                    Run workspace tests

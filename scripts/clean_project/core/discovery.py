@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 
-from scripts._toolkit.processes import capture
+from scripts._toolkit.processes import capture_streams
 
 #: ``git clean -xdn`` cannot emit NUL-separated output (no ``-z`` switch), and this list
 #: decides what gets deleted — so a path containing a newline or a quote must not be
@@ -51,11 +51,20 @@ class DiscoveryError(RuntimeError):
 
 
 def discover(root: Path, artifacts: list[str], protection) -> list[Candidate]:
-    code, output = capture(_LIST_ARGV, root)
+    # Streams kept apart: a git warning carries no NUL, so folding stderr into stdout
+    # glued it onto the next record and made that path vanish from the plan entirely.
+    code, output, errors = capture_streams(_LIST_ARGV, root)
     if code == 127:
         raise DiscoveryError("git is not on PATH, so nothing can be classified safely")
     if code != 0:
-        raise DiscoveryError(f"`git status` failed with exit {code}: {output.strip()}")
+        raise DiscoveryError(f"`git status` failed with exit {code}: {errors.strip()}")
+    if errors.strip():
+        # Not fatal — git warns about unreadable directories and still reports the rest —
+        # but the reader has to know the picture is incomplete before authorising deletion.
+        raise DiscoveryError(
+            "`git status` reported warnings, so the list of what is safe to delete may be "
+            f"incomplete. Resolve these first:\n{errors.strip()}"
+        )
 
     candidates: list[Candidate] = []
     for entry in output.split("\0"):
@@ -101,45 +110,53 @@ def discover(root: Path, artifacts: list[str], protection) -> list[Candidate]:
 
 
 def _first_protected_inside(root: Path, directory: Path, protection) -> str | None:
-    """The first protected path, or nested repository, found anywhere under ``directory``.
+    """Why ``directory`` may not be deleted, or ``None`` if nothing stops it.
 
     A directory that shelters something protected is itself protected, whole. Deleting
     the rest of it and keeping the one file would be a partial result nobody asked for,
     from a plan that listed the directory as a single line — declining and naming what
     stopped it leaves the decision with the person who can make it.
 
-    Symlinks are not followed: a link pointing outside the tree would otherwise decide
-    the fate of a directory inside it.
-    """
-    nested_repo = _find_nested_repo(directory)
-    if nested_repo is not None:
-        return f"nested git repository {_as_relative(root, nested_repo)}"
+    Three things stop a directory: a protected path inside it, a nested repository at any
+    depth (an untracked ``vendor/`` reports to git as one entry, so a top-level-only check
+    queued an unpushed sibling clone for deletion — `git clean` refuses such a directory
+    without `-ff`, and so does this), and **a subtree that cannot be enumerated**.
 
-    for current, dirs, files in os.walk(directory, onerror=lambda _e: None):
+    That last one is the fail-closed rule, and it is why this returns a reason rather
+    than a bool. Discarding an ``os.walk`` error turns "I could not look" into "there is
+    nothing there", so a directory holding a secret behind a permission wall read as
+    cleanable. An enumeration error now protects the directory and says so.
+
+    One walk answers all three questions. Two separate walks meant every candidate
+    traversed ``target/`` and ``node_modules`` twice, which took the repository's own dry
+    run from near-instant to 34 seconds.
+    """
+    if (directory / ".git").exists():
+        return f"nested git repository {_as_relative(root, directory / '.git')}"
+
+    blocked: list[str] = []
+
+    def unreadable(error: OSError) -> None:
+        blocked.append(_as_relative(root, Path(getattr(error, "filename", directory))))
+
+    for current, dirs, files in os.walk(directory, onerror=unreadable):
+        if blocked:
+            return f"unreadable subtree {blocked[0]} — cannot prove it holds nothing protected"
         current_path = Path(current)
+        if ".git" in dirs:
+            return f"nested git repository {_as_relative(root, current_path / '.git')}"
+        # `followlinks` defaults to False, so os.walk never descends through a POSIX
+        # symlink. Excluding the names as well keeps a link's *target* from deciding the
+        # candidate's fate. Windows junctions are a real gap: `is_symlink()` reports False
+        # for them, so they are traversed. That errs toward protecting more, not less.
         dirs[:] = [d for d in dirs if not (current_path / d).is_symlink()]
         for name in files + dirs:
             relative = _as_relative(root, current_path / name)
             if protection.is_protected(relative):
                 return relative
-    return None
 
-
-def _find_nested_repo(directory: Path) -> Path | None:
-    """A ``.git`` anywhere beneath ``directory``, not only at its top level.
-
-    An untracked `vendor/` holding `vendor/sibling/.git` reports to git as `vendor/`
-    alone, so a top-level-only check saw no repository and queued the whole thing for
-    deletion — losing an unpushed sibling clone, the very case this guard exists for.
-    `git clean` refuses such a directory without `-ff`; so does this.
-    """
-    if (directory / ".git").exists():
-        return directory / ".git"
-    for current, dirs, _files in os.walk(directory, onerror=lambda _e: None):
-        current_path = Path(current)
-        dirs[:] = [d for d in dirs if not (current_path / d).is_symlink()]
-        if ".git" in dirs or (current_path / ".git").exists():
-            return current_path / ".git"
+    if blocked:
+        return f"unreadable subtree {blocked[0]} — cannot prove it holds nothing protected"
     return None
 
 

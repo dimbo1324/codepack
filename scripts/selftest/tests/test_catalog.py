@@ -14,6 +14,7 @@ Run with:  python -m unittest discover -s scripts -t .
 
 from __future__ import annotations
 
+import ast
 import importlib
 import unittest
 from pathlib import Path
@@ -21,6 +22,29 @@ from pathlib import Path
 from scripts.runner.config_loader import ConfigLoader
 
 ROOT = Path(__file__).resolve().parents[2].parent
+
+
+def _imported_modules(source: Path) -> set[str]:
+    """Every module name ``source`` imports, however it spells the import.
+
+    Covers `import a.b`, `from a.b import c` (the module is `a.b.c` if `c` is itself a
+    module, so both are reported), and a literal `importlib.import_module("a.b")`.
+    """
+    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            found.add(node.module)
+            found.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Call):
+            target = getattr(node.func, "attr", None)
+            if target == "import_module" and node.args:
+                first = node.args[0]
+                if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                    found.add(first.value)
+    return found
 
 
 class CatalogImportTest(unittest.TestCase):
@@ -58,25 +82,36 @@ class CatalogImportTest(unittest.TestCase):
     def test_scripts_do_not_import_one_another(self) -> None:
         """The owner's rule: script implementations must not be interdependent. Only
         `scripts._toolkit` is shared, and `scripts.runner` is the orchestrator, not a
-        script's dependency."""
-        names = {script.module for script in self.registry.scripts}
+        script's dependency.
+
+        Parsed, not grepped. A substring check for `import scripts.doctor` misses
+        `from scripts.doctor import main` — the form anyone would actually write — so the
+        test asserted a rule it could not enforce.
+        """
+        forbidden = {s.module for s in self.registry.scripts} | {"scripts.runner"}
         for script in self.registry.scripts:
             directory = ROOT / Path(*script.module.split("."))
+            allowed = {script.module}
             for source in directory.rglob("*.py"):
                 # The rule constrains implementations. A test legitimately imports the
                 # loader to ask what the catalog declares — this file does exactly that.
                 if "tests" in source.relative_to(directory).parts:
                     continue
-                text = source.read_text(encoding="utf-8")
-                for other in names - {script.module}:
-                    with self.subTest(script=script.title, imports=other):
-                        self.assertNotIn(
-                            f"import {other}",
-                            text,
-                            f"{source.relative_to(ROOT)} imports another script",
+                for imported in _imported_modules(source):
+                    offending = next(
+                        (
+                            name
+                            for name in forbidden - allowed
+                            if imported == name or imported.startswith(f"{name}.")
+                        ),
+                        None,
+                    )
+                    with self.subTest(script=script.title, source=source.name):
+                        self.assertIsNone(
+                            offending,
+                            f"{source.relative_to(ROOT)} imports {imported!r}; scripts may "
+                            "share only scripts._toolkit",
                         )
-                with self.subTest(script=script.title, imports="scripts.runner"):
-                    self.assertNotIn("import scripts.runner", text)
 
 
 if __name__ == "__main__":

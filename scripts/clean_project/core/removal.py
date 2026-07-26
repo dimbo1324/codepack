@@ -90,6 +90,7 @@ def prune_empty_dirs(
     skip: list[str],
     protection=None,
     dry_run: bool = False,
+    protected_trees: list[str] | None = None,
 ) -> list[str]:
     """Empty directories to delete, deleted unless ``dry_run``.
 
@@ -101,11 +102,19 @@ def prune_empty_dirs(
     was pruned while the plan listed it as protected: the module promises the protected
     list wins over everything, and one of the two deletion phases did not honour it.
 
+    ``protected_trees`` carries the verdicts ``discover`` reached that the pattern list
+    alone cannot reproduce — a directory protected because of what it *holds*, or because
+    it is a nested repository. Consulting only the patterns still pruned empty directories
+    inside a sibling clone the same run had just refused to touch, which contradicts the
+    "protected whole" the plan and the docs promise.
+
     ``dry_run`` simulates instead of deleting, so the plan can name these paths. Without
     it the second phase removed directories the dry run never showed, which defeats the
     review step the whole script is built around.
     """
     skip_set = set(skip)
+    reserved = tuple(f"{tree.rstrip('/')}/" for tree in (protected_trees or []))
+    reserved_exact = {tree.rstrip("/") for tree in (protected_trees or [])}
     removed: list[str] = []
     simulated: set[Path] = set()
 
@@ -130,6 +139,9 @@ def prune_empty_dirs(
                 if skip_set & set(relative.parts):
                     continue
                 if protection is not None and protection.is_protected(str(relative)):
+                    continue
+                posix = str(relative).replace("\\", "/")
+                if posix in reserved_exact or posix.startswith(reserved):
                     continue
                 if not is_empty(current_path, dirs, files):
                     continue

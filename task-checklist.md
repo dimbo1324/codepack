@@ -178,6 +178,64 @@ that declines.
   exposes a callable `main` and a populated `config/`, and asserts no script imports another
   — turning the owner's no-interdependence rule into a test rather than a promise.
 
+## Second review round — what the fixes themselves got wrong
+
+The independent review was run again against the fixes, and confirmed all seven as
+working. It then found the next layer, which is the part worth recording: the first fix
+was correct and still **failed open**.
+
+- **The contents check discarded `os.walk` errors**, so "I could not enumerate this
+  subtree" was indistinguishable from "there is nothing protected in it". A directory
+  hiding `.env` behind a permission wall read as cleanable. `_first_protected_inside` now
+  returns a *reason* rather than a bool, and an unreadable subtree is one of the three
+  things that protect a directory.
+- **`capture()` folded stderr into stdout**, and `discover` parsed that stream. A git
+  warning carries no NUL, so it glued onto the following record, that record's status
+  field became the tail of the warning, and the path vanished from the plan with nothing
+  said. Benign while records only disappeared from the *deletion* half — and lethal the
+  moment one disappeared from the *protected* half, with nothing in the parse able to tell
+  the difference. Split into `capture_streams`; a warning now aborts with the warning text,
+  because an incomplete picture must not be authorised.
+- **Pruning still deleted inside directories discovery had protected whole.** Its new
+  check consulted only the pattern list, which cannot rederive "protected because of what
+  it holds" or "is a nested repository" — so empty directories inside a sibling clone were
+  removed by the same run that refused to touch it. The discovery verdicts now travel to
+  the pruning phase.
+- **The no-interdependence test could not fail for the import form anyone would write.**
+  `assertNotIn("import scripts.doctor", text)` does not match
+  `from scripts.doctor import main`. Replaced with an AST walk over `Import`/`ImportFrom`
+  and literal `import_module` calls, and proven by planting a violation and watching it
+  fail.
+- **The new gate step could pass with the suite gone.** `unittest discover` needs
+  `tests/__init__.py` and exits 0 when it finds nothing, so deleting one file dropped all
+  23 clean-project tests while the gate stayed green — the same "a check that passes by not
+  running" failure the step was added to prevent, one layer down. `MINIMUM_TESTS` is now a
+  floor, with three unit tests of the floor itself.
+- **Findings 6 and 7 had shipped untested.** `scripts/runner/tests/test_dispatch.py` covers
+  the dispatch rules and the `default_lang` threading, in a task whose stated lesson was
+  that untested logic under `scripts/` reaches `main` green.
+- **A comment was false on the only supported platform.** It claimed symlinks are not
+  followed; Windows junctions report `is_symlink() == False` and are traversed. Corrected
+  to say so, and to say that the gap errs toward protecting more.
+
+## Known debt, named rather than hidden
+
+- **The dry run takes ~30 s** on a repository with a populated `target/` and
+  `node_modules`. Merging the two walks into one recovered part of it; the rest is the
+  inherent cost of proving a collapsed directory holds nothing protected. Making it fast
+  means changing either the discovery model or `ProtectionRules`' matching — and trading a
+  possible regression in the module that guards live credentials for a faster dry run is a
+  bad exchange to make at the end of a task. Recorded, not fixed.
+- **No escape hatch if protection over-fires.** One stray `*.pem` or `.env` anywhere under
+  `target/` or `node_modules` makes that output permanently unclearable through this tool.
+  Zero such files exist today, so this is a risk rather than a defect, but some npm
+  packages do ship a `tests/.env`.
+- `remove_all` does not re-check protection after the confirmation prompt; the verdict is
+  computed before the user answers.
+- `.ai/CHANGELOG.md` is Russian while `10-project-map.md` puts `.ai/` under English-only.
+  Consistent within the file, contradicts the module — a rules decision, not something to
+  fix silently mid-task.
+
 ## Rule debt carried forward
 
 `AGENTS.md` sits at 29.5 KB of its 30 KB budget even after the module split. Q22 stays open

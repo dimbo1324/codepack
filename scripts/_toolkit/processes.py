@@ -97,21 +97,37 @@ def run(
 def capture(argv: list[str], cwd: Path) -> tuple[int, str]:
     """Run ``argv`` and return ``(returncode, stdout)``, stderr folded in.
 
-    For reading a tool's answer — a version string, ``git`` output — rather than
-    showing it. ``errors="replace"`` because a version banner in an unexpected
+    For reading a tool's answer where the two streams are interchangeable — a version
+    string, a diagnostic banner. ``errors="replace"`` because a banner in an unexpected
     encoding must not crash a diagnostic command.
+
+    Do **not** use this to parse machine-readable output: see [`capture_streams`].
+    """
+    code, out, err = capture_streams(argv, cwd)
+    return code, out + err
+
+
+def capture_streams(argv: list[str], cwd: Path) -> tuple[int, str, str]:
+    """Run ``argv`` and return ``(returncode, stdout, stderr)`` kept apart.
+
+    Required whenever stdout is parsed. Folding the streams together corrupted the
+    NUL-separated ``git status`` output that decides what ``clean-project`` deletes: a
+    warning carries no NUL, so it glued onto the following record, the record's status
+    field became the tail of the warning, and the path silently vanished from the plan.
+    A path disappearing from a deletion plan is benign; a path disappearing from the
+    *protected* half of one is not, and nothing in the parse could tell the difference.
     """
     resolved = find_tool(argv[0])
     if resolved is None:
-        return 127, ""
+        return 127, "", ""
     completed = subprocess.run(
         [resolved, *argv[1:]],
         cwd=cwd,
         check=False,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
     )
-    return completed.returncode, completed.stdout or ""
+    return completed.returncode, completed.stdout or "", completed.stderr or ""
