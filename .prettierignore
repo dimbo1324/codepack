@@ -1,0 +1,28 @@
+# Build output, dependencies, lock files.
+node_modules/
+dist/
+target/
+pnpm-lock.yaml
+Cargo.lock
+
+# Generated from the .ai/ modules by `cargo xtask sync-agents`. Formatting it here would
+# make it differ from what the generator produces, and `sync-agents --check` is part of
+# the gate — so Prettier and the gate would fight each other on every commit.
+AGENTS.md
+
+# Golden parity data. `tests/golden/reference/` holds the archived legacy
+# implementation's real output, compared byte for byte by
+# `crates/codepack-engine/tests/golden.rs`; `tests/golden/fixtures/` holds the inputs that
+# produced it. Reformatting either would rewrite the thing under test — the exact bytes
+# are the assertion.
+tests/golden/
+
+# Per-crate test fixtures, for the same reason: file contents feed byte counts, token
+# estimates, and scanner findings that tests assert on exactly.
+crates/*/tests/fixtures/
+
+# Markdown stays hand-written. The documents in `.ai/`, `docs/`, `BLUEPRINT.md`, and
+# `ROADMAP.md` are hand-wrapped prose with wide reference tables; Prettier would rewrite
+# the table alignment and fight the wrap style the project's own rules describe. Prose is
+# reviewed by humans, and a formatter adds nothing there.
+*.md
