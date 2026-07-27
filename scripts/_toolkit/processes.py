@@ -18,7 +18,25 @@ from pathlib import Path
 #: ``<name>.CMD`` shims, and ``CreateProcess`` only ever appends ``.exe`` when resolving
 #: a bare name — so a bare "pnpm" is reported as missing on a machine that has it. This
 #: exact bug was live in ``cargo xtask doctor`` until 2026-07-26.
-_WINDOWS_SHIM_SUFFIXES = (".cmd", ".bat", ".exe", "")
+#:
+#: The bare-name case is handled by the ``shutil.which`` call that runs first, so it is
+#: not repeated here — an empty entry in this tuple was skipped by the loop and only
+#: looked like coverage it did not provide.
+_WINDOWS_SHIM_SUFFIXES = (".cmd", ".bat", ".exe")
+
+#: Seconds a *captured* command may take before it is abandoned. Capturing means the
+#: caller is waiting on output it intends to parse, so a tool that never answers hangs
+#: the script with no sign of why. The classic on Windows is the Store's ``python``
+#: stub, which opens a shop window and never returns.
+#:
+#: Streaming commands (``run``) deliberately have no timeout: those are builds and test
+#: suites, where "slow" is normal and the user can see progress and interrupt.
+DEFAULT_CAPTURE_TIMEOUT = 30.0
+
+#: Synthetic exit codes, following the shell conventions so they are not mistaken for a
+#: tool's own. 127 is "command not found" everywhere; 124 is what GNU ``timeout`` returns.
+NOT_FOUND = 127
+TIMED_OUT = 124
 
 
 class ToolNotFoundError(RuntimeError):
@@ -36,8 +54,6 @@ def find_tool(name: str) -> str | None:
         return direct
     if os.name == "nt":
         for suffix in _WINDOWS_SHIM_SUFFIXES:
-            if not suffix:
-                continue
             found = shutil.which(name + suffix)
             if found:
                 return found
@@ -85,7 +101,7 @@ def run(
         print(f"$ {' '.join(argv)}", flush=True)
     if resolved is None:
         print(f"  not found on PATH: {argv[0]}", file=sys.stderr, flush=True)
-        return CommandResult(argv=real_argv, returncode=127)
+        return CommandResult(argv=real_argv, returncode=NOT_FOUND)
 
     merged_env = None
     if env:
@@ -94,7 +110,9 @@ def run(
     return CommandResult(argv=real_argv, returncode=completed.returncode)
 
 
-def capture(argv: list[str], cwd: Path) -> tuple[int, str]:
+def capture(
+    argv: list[str], cwd: Path, *, timeout: float | None = DEFAULT_CAPTURE_TIMEOUT
+) -> tuple[int, str]:
     """Run ``argv`` and return ``(returncode, stdout)``, stderr folded in.
 
     For reading a tool's answer where the two streams are interchangeable — a version
@@ -103,12 +121,14 @@ def capture(argv: list[str], cwd: Path) -> tuple[int, str]:
 
     Do **not** use this to parse machine-readable output: see [`capture_streams`].
     """
-    code, out, err = capture_streams(argv, cwd)
+    code, out, err = capture_streams(argv, cwd, timeout=timeout)
     return code, out + err
 
 
-def capture_streams(argv: list[str], cwd: Path) -> tuple[int, str, str]:
-    """Run ``argv`` and return ``(returncode, stdout, stderr)`` kept apart.
+def capture_streams(
+    argv: list[str], cwd: Path, *, timeout: float | None = DEFAULT_CAPTURE_TIMEOUT
+) -> tuple[int, str, str]:
+    """Run ``argv`` and return ``(returncode, stdout, stderr)`` kept apart, as text.
 
     Required whenever stdout is parsed. Folding the streams together corrupted the
     NUL-separated ``git status`` output that decides what ``clean-project`` deletes: a
@@ -116,18 +136,43 @@ def capture_streams(argv: list[str], cwd: Path) -> tuple[int, str, str]:
     field became the tail of the warning, and the path silently vanished from the plan.
     A path disappearing from a deletion plan is benign; a path disappearing from the
     *protected* half of one is not, and nothing in the parse could tell the difference.
+
+    Decoding is lossy (``errors="replace"``), which is right for a diagnostic banner and
+    wrong for anything whose exact bytes matter. Use [`capture_bytes`] for those.
+    """
+    code, out, err = capture_bytes(argv, cwd, timeout=timeout)
+    return (
+        code,
+        out.decode("utf-8", errors="replace"),
+        err.decode("utf-8", errors="replace"),
+    )
+
+
+def capture_bytes(
+    argv: list[str], cwd: Path, *, timeout: float | None = DEFAULT_CAPTURE_TIMEOUT
+) -> tuple[int, bytes, bytes]:
+    """Run ``argv`` and return its raw output, undecoded.
+
+    The caller decides what a byte sequence that is not valid UTF-8 means. For
+    ``clean-project`` it means "refuse": a path this process cannot represent exactly is
+    a path it must not classify, because the protection rules would be matched against a
+    name that is not the real one.
+
+    ``TIMED_OUT`` is returned rather than raised so a caller that runs several probes
+    reports a hung tool in the same shape as a missing or failing one.
     """
     resolved = find_tool(argv[0])
     if resolved is None:
-        return 127, "", ""
-    completed = subprocess.run(
-        [resolved, *argv[1:]],
-        cwd=cwd,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    return completed.returncode, completed.stdout or "", completed.stderr or ""
+        return NOT_FOUND, b"", b""
+    try:
+        completed = subprocess.run(
+            [resolved, *argv[1:]],
+            cwd=cwd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as expired:
+        return TIMED_OUT, expired.stdout or b"", b""
+    return completed.returncode, completed.stdout or b"", completed.stderr or b""

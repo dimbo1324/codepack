@@ -57,5 +57,11 @@ def confirm(question: str, *, assume_yes: bool) -> bool:
             return False
     except (AttributeError, ValueError):
         return False
-    answer = input(f"{question} [y/N]: ").strip().lower()
+    try:
+        answer = input(f"{question} [y/N]: ").strip().lower()
+    except EOFError:
+        # The stream ended instead of answering. For a prompt guarding deletion that is
+        # not consent, so it reads the same as "no".
+        print()
+        return False
     return answer in ("y", "yes")

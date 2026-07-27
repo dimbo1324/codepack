@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .console import fail, ok, step, summary, warn
-from .processes import run
+from .processes import NOT_FOUND, run
 
 
 class StepsFailed(RuntimeError):
@@ -29,7 +29,7 @@ def run_steps(steps: list[dict[str, Any]], root: Path, *, title: str) -> int:
     rows: list[tuple[str, str]] = []
     failed = False
 
-    for entry in steps:
+    for index, entry in enumerate(steps):
         label = entry["label"]
         argv = entry["argv"]
         required = bool(entry.get("required", True))
@@ -42,12 +42,13 @@ def run_steps(steps: list[dict[str, Any]], root: Path, *, title: str) -> int:
             rows.append((label, "ok"))
             continue
 
-        if result.returncode == 127:
+        if result.returncode == NOT_FOUND:
             note = f"tool not found: {argv[0]}"
             if required:
                 fail(f"{label} — {note}")
                 rows.append((label, "MISSING (required)"))
                 failed = True
+                rows.extend(_not_reached(steps[index + 1 :]))
                 break
             warn(f"{label} — {note}, skipped")
             rows.append((label, "missing (optional)"))
@@ -57,6 +58,7 @@ def run_steps(steps: list[dict[str, Any]], root: Path, *, title: str) -> int:
             fail(f"{label} — exit {result.returncode}")
             rows.append((label, f"FAILED ({result.returncode})"))
             failed = True
+            rows.extend(_not_reached(steps[index + 1 :]))
             break
 
         warn(f"{label} — exit {result.returncode}, not required")
@@ -64,3 +66,14 @@ def run_steps(steps: list[dict[str, Any]], root: Path, *, title: str) -> int:
 
     summary(title, rows)
     return 1 if failed else 0
+
+
+def _not_reached(remaining: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Rows for the steps a required failure prevented from running.
+
+    Omitting them made the summary read as though the run had been shorter than it was
+    declared to be — a reader comparing a failing summary against a passing one saw
+    lines disappear and had to guess whether they were skipped or removed. Naming them
+    as not run is the honest report the summary is for.
+    """
+    return [(entry["label"], "not run (earlier step failed)") for entry in remaining]

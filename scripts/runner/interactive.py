@@ -15,6 +15,24 @@ _QUIT_WORDS = ("q", "quit", "exit", "выход")
 _LANG_WORDS = ("l", "lang", "language", "язык")
 _HELP_WORDS = ("h", "help", "справка")
 
+#: Returned by ``_ask`` when the input stream ends. A distinct sentinel rather than an
+#: empty string, because empty means "the user pressed Enter" and that is a real choice
+#: here — it runs the default script.
+_EOF = object()
+
+
+def _ask(prompt: str) -> str | object:
+    """Read one answer, or ``_EOF`` if the stream ended.
+
+    Ctrl+Z on Windows and Ctrl+D elsewhere are ordinary ways to leave a menu, and they
+    used to end the session with an ``EOFError`` traceback across the terminal.
+    """
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        print()
+        return _EOF
+
 
 class InteractiveShell:
     def __init__(
@@ -31,7 +49,10 @@ class InteractiveShell:
         session = Session(lang=self._registry.default_lang)
         while True:
             self._renderer.print_top_menu(session.lang)
-            raw = input(self._renderer.top_prompt(session.lang)).strip()
+            answer = _ask(self._renderer.top_prompt(session.lang))
+            if answer is _EOF:
+                return 0
+            raw = str(answer)
             lowered = raw.lower()
 
             if not raw:
@@ -80,7 +101,10 @@ class InteractiveShell:
         catalog_order = self._registry.scripts_by_category_order()
         while True:
             self._renderer.print_help_catalog(session.lang)
-            raw = input(self._renderer.help_prompt(session.lang)).strip()
+            answer = _ask(self._renderer.help_prompt(session.lang))
+            if answer is _EOF:
+                return
+            raw = str(answer)
             lowered = raw.lower()
 
             if not raw or lowered in _BACK_WORDS:
@@ -108,7 +132,10 @@ class InteractiveShell:
         scripts = self._registry.scripts_in(category.key)
         while True:
             self._renderer.print_category_menu(category, scripts, session.lang)
-            raw = input(self._renderer.category_prompt(session.lang)).strip()
+            answer = _ask(self._renderer.category_prompt(session.lang))
+            if answer is _EOF:
+                return 0
+            raw = str(answer)
             lowered = raw.lower()
 
             if not raw or lowered in _BACK_WORDS:

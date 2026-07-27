@@ -14,7 +14,7 @@ from pathlib import Path
 
 from scripts._toolkit.config import load_config, repo_root
 from scripts._toolkit.console import fail, heading, info, ok, step, warn
-from scripts._toolkit.processes import capture, find_tool
+from scripts._toolkit.processes import TIMED_OUT, capture, find_tool
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -25,6 +25,52 @@ def _first_line(text: str) -> str:
         if stripped:
             return stripped
     return "(no version output)"
+
+
+def _git_config(root: Path, key: str) -> str | None:
+    """The value of a git setting, or ``None`` if it is unset.
+
+    ``git config --get`` exits 1 for an unset key, which is not an error here.
+    """
+    code, output = capture(["git", "config", "--get", key], root)
+    if code != 0:
+        return None
+    return output.strip() or None
+
+
+def _check_git_settings(root: Path) -> list[str]:
+    """Report git settings the scripts depend on. Returns the problems found.
+
+    These are checked because their absence breaks a script in a way that does not look
+    like a git problem: an inactive hook path means commits silently go unformatted, and
+    on Windows an unset ``core.longpaths`` makes ``git status`` warn, which makes
+    ``clean-project`` refuse to plan anything at all.
+    """
+    problems: list[str] = []
+
+    hooks_path = _git_config(root, "core.hooksPath")
+    if hooks_path is None:
+        warn("core.hooksPath  unset — the tracked pre-commit hook is NOT active")
+        info("run: install-hooks")
+        problems.append("core.hooksPath")
+    elif Path(hooks_path).name != ".githooks":
+        warn(f"core.hooksPath  points at {hooks_path!r}, not the tracked .githooks")
+        info("run: install-hooks")
+        problems.append("core.hooksPath")
+    else:
+        ok(f"core.hooksPath  {hooks_path}")
+
+    if os.name == "nt":
+        long_paths = _git_config(root, "core.longpaths")
+        if long_paths != "true":
+            warn("core.longpaths  not enabled — git cannot read deeply nested paths")
+            info("run: git config core.longpaths true")
+            info("Without it, clean-project refuses to plan: it cannot see the whole tree.")
+            problems.append("core.longpaths")
+        else:
+            ok("core.longpaths  true")
+
+    return problems
 
 
 def main(argv: list[str]) -> int:
@@ -63,6 +109,11 @@ def main(argv: list[str]) -> int:
         code, output = capture([name, *entry["version_args"]], root)
         # A tool that resolves but cannot report a version is still a problem worth
         # seeing: that is what a broken shim or a half-finished install looks like.
+        if code == TIMED_OUT:
+            # The Windows Store's `python` stub is the classic: it resolves, opens a shop
+            # window, and never answers. Without a timeout this hung the whole check.
+            warn(f"{name:<12} did not answer `--version` in time ({resolved})")
+            continue
         if code != 0:
             warn(f"{name:<12} found but `{name} --version` failed ({resolved})")
             continue
@@ -75,6 +126,9 @@ def main(argv: list[str]) -> int:
             ok(f"{entry['label']}")
         else:
             warn(f"{entry['label']} missing — {entry['hint']}")
+
+    step("git settings")
+    git_problems = _check_git_settings(root)
 
     step("platform notes")
     if os.name == "nt":
@@ -94,6 +148,12 @@ def main(argv: list[str]) -> int:
     if missing_optional:
         warn(f"optional tool(s) absent: {', '.join(missing_optional)}")
         info("Not a failure — the affected steps will say so when they run.")
+    if git_problems:
+        # Not a failing exit: the tools work and the project builds. It is a warning
+        # because each of these breaks something quietly — an unformatted commit, or a
+        # clean-project that refuses without the reader knowing why — and a warning that
+        # names the fix is the whole reason this section exists.
+        warn(f"git setting(s) to fix: {', '.join(git_problems)}")
     ok("environment is usable")
     return 0
 

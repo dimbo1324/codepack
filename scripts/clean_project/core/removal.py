@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -14,27 +14,57 @@ class RemovalOutcome:
     removed_files: int = 0
     removed_dirs: int = 0
     freed_bytes: int = 0
-    failures: list[tuple[str, str]] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.failures is None:
-            self.failures = []
+    failures: list[tuple[str, str]] = field(default_factory=list)
 
 
-def _force_writable(func, path, _exc_info):  # type: ignore[no-untyped-def]
+class EscapesRootError(RuntimeError):
+    """A path to delete does not resolve to somewhere inside the repository."""
+
+
+def _force_writable(func, path, _exc):  # type: ignore[no-untyped-def]
     """``shutil.rmtree`` error handler for read-only files.
 
     Cargo leaves read-only files in ``target/`` and npm does the same in
     ``node_modules``. On Windows a read-only file cannot be unlinked at all, so without
     this a clean fails part-way and leaves the tree in a worse state than it started.
-    Clearing the bit and retrying once is the standard fix; a second failure is a real
-    error and propagates.
+    Clearing the bit and retrying once is the standard fix; a second failure propagates
+    to ``remove_all``, which records it and moves on.
+
+    Passed as ``onexc``, which replaced ``onerror`` in Python 3.12. The two differ only
+    in the third argument — an exception rather than an ``exc_info`` triple — and this
+    handler never used it.
     """
-    try:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    except OSError:
-        raise
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def _inside(root: Path, relative: str) -> Path:
+    """Prove ``relative`` names something inside ``root``, and return it **unresolved**.
+
+    Defence in depth. The candidates come from ``git status``, which does not emit
+    absolute paths or ``..`` segments — but this is the one function in the repository
+    that deletes trees, and "the input is currently trustworthy" is a property of today's
+    caller, not of this function. ``Path("/a") / "C:/x"`` is ``C:/x``: one absolute string
+    reaching here would silently retarget the deletion outside the project.
+
+    Only the **parent** is resolved, and the returned path keeps the final component as
+    written. Resolving the whole thing would follow a symlink to its destination, and the
+    caller's ``is_symlink()`` guard — the thing that stops ``rmtree`` from walking through
+    a link and deleting somebody else's tree — would then always see ``False``. Checking
+    the parent is what the guard needs anyway: it proves the name being unlinked lives in
+    a directory inside the repository, which says nothing about, and needs nothing from,
+    where a link at that name happens to point.
+    """
+    target = root / relative
+    root_resolved = root.resolve()
+    if target.resolve() == root_resolved:
+        raise EscapesRootError("refusing to delete the repository root itself")
+    parent = target.parent.resolve()
+    if parent != root_resolved and root_resolved not in parent.parents:
+        raise EscapesRootError(
+            f"{relative!r} sits in {parent}, which is outside {root_resolved}"
+        )
+    return target
 
 
 def _tree_size(path: Path) -> int:
@@ -58,7 +88,11 @@ def _tree_size(path: Path) -> int:
 def remove_all(root: Path, relatives: list[str]) -> RemovalOutcome:
     outcome = RemovalOutcome()
     for relative in relatives:
-        target = root / relative
+        try:
+            target = _inside(root, relative)
+        except EscapesRootError as error:
+            outcome.failures.append((relative, str(error)))
+            continue
         if not target.exists():
             # Removing a parent directory can take a child listed separately; that is
             # success, not a failure worth reporting.
@@ -66,7 +100,7 @@ def remove_all(root: Path, relatives: list[str]) -> RemovalOutcome:
         size = _tree_size(target)
         try:
             if target.is_dir() and not target.is_symlink():
-                shutil.rmtree(target, onerror=_force_writable)
+                shutil.rmtree(target, onexc=_force_writable)
                 outcome.removed_dirs += 1
             else:
                 try:
@@ -129,9 +163,21 @@ def prune_empty_dirs(
             base = (root / start).resolve()
             if not base.is_dir():
                 continue
-            # topdown=False: children before parents, so a parent that becomes empty is
-            # considered in the same pass.
-            for current, dirs, files in os.walk(base, topdown=False, onerror=lambda _e: None):
+            # `topdown=True` so `dirs` can be pruned before descending: without that,
+            # every pass walked all of `node_modules` and `target` in full and then threw
+            # each result away against `skip_set`. The consideration pass below still
+            # needs children before parents, so the walk is materialised and reversed.
+            #
+            # What is recorded is the **unpruned** child list. `is_empty` reads it, and a
+            # directory whose only child is a skipped one is not empty — pruning first
+            # would have reported it as safe to remove, which in a dry run is a plan that
+            # does not match what an apply would do.
+            walked: list[tuple[str, list[str], list[str]]] = []
+            for current, dirs, files in os.walk(base, topdown=True, onerror=lambda _e: None):
+                walked.append((current, list(dirs), files))
+                dirs[:] = [d for d in dirs if d not in skip_set]
+
+            for current, dirs, files in reversed(walked):
                 current_path = Path(current)
                 if current_path == base or current_path in simulated:
                     continue

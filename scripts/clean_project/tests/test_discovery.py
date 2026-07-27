@@ -14,6 +14,7 @@ Run with:  python -m unittest discover -s scripts -t .
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import tempfile
@@ -26,6 +27,21 @@ from scripts.clean_project.core.protection import ProtectionRules
 from scripts.clean_project.core.removal import prune_empty_dirs
 
 _PATTERNS = [".env", ".env.*", "!.env.example", "*.pem", ".vscode/", "codepack.db"]
+
+
+@contextlib.contextmanager
+def _git_output(stdout: bytes, stderr: bytes):
+    """Replace what `discover` sees from git, as the raw bytes it actually reads.
+
+    Bytes rather than text on purpose: the decode is part of what these tests exercise,
+    so a helper that handed over ``str`` would test around the behaviour instead of it.
+    """
+    real = discovery.capture_bytes
+    discovery.capture_bytes = lambda *_a, **_k: (0, stdout, stderr)  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        discovery.capture_bytes = real  # type: ignore[assignment]
 
 
 def _git(root: Path, *args: str) -> None:
@@ -154,18 +170,34 @@ class DiscoveryTest(unittest.TestCase):
     def test_a_git_warning_is_surfaced_instead_of_corrupting_the_plan(self) -> None:
         """A git warning carries no NUL, so folding stderr into stdout glued it onto the
         next record and made that path vanish from the plan with nothing said."""
-        real = discovery.capture_streams
-        discovery.capture_streams = lambda *_a, **_k: (  # type: ignore[assignment]
-            0,
-            "?? scratch/\x00",
-            "warning: could not open directory 'cache/': Permission denied\n",
-        )
-        try:
+        with _git_output(
+            b"?? scratch/\x00",
+            b"warning: could not open directory 'cache/': Permission denied\n",
+        ):
             with self.assertRaises(discovery.DiscoveryError) as caught:
                 discover(self.root, [], self.rules)
-        finally:
-            discovery.capture_streams = real  # type: ignore[assignment]
         self.assertIn("incomplete", str(caught.exception))
+
+    def test_a_known_warning_carries_the_command_that_fixes_it(self) -> None:
+        """A fail-closed refusal that does not say what to do next is a dead end. The
+        owner hit exactly this: pnpm's nesting tripped Windows' path limit, and the
+        message said only "resolve these first"."""
+        with _git_output(
+            b"",
+            b"warning: could not open directory 'node_modules/.pnpm/x/': Filename too long\n",
+        ):
+            with self.assertRaises(discovery.DiscoveryError) as caught:
+                discover(self.root, [], self.rules)
+        self.assertIn("git config core.longpaths true", str(caught.exception))
+
+    def test_a_path_that_is_not_utf8_stops_the_whole_plan(self) -> None:
+        """Fail closed, for the same reason an unreadable subtree does. Decoding with
+        replacement characters would hand the protection rules a name that is not the
+        real one, and `.env` protected under a mangled name is not protected."""
+        with _git_output(b"?? sc\xffratch\x00", b""):
+            with self.assertRaises(discovery.DiscoveryError) as caught:
+                discover(self.root, [], self.rules)
+        self.assertIn("decode", str(caught.exception))
 
 
 class PruneEmptyDirsTest(unittest.TestCase):
@@ -186,6 +218,18 @@ class PruneEmptyDirsTest(unittest.TestCase):
         (self.root / "a" / "b" / "c").mkdir(parents=True)
         self.assertEqual(prune_empty_dirs(self.root, ["."], [], self.rules), ["a", "a/b", "a/b/c"])
         self.assertFalse((self.root / "a").exists())
+
+    def test_a_directory_holding_only_a_skipped_one_is_not_prunable(self) -> None:
+        """The walk stops descending into `node_modules`, but the parent still contains
+        it. Pruning the child from the list the emptiness test reads would report the
+        parent as removable, and a dry run would promise something an apply cannot do."""
+        (self.root / "app" / "node_modules" / "pkg").mkdir(parents=True)
+        (self.root / "app" / "node_modules" / "pkg" / "index.js").write_text("x")
+
+        pruned = prune_empty_dirs(self.root, ["."], ["node_modules"], self.rules, dry_run=True)
+
+        self.assertNotIn("app", pruned)
+        self.assertTrue((self.root / "app").is_dir())
 
     def test_a_protected_directory_is_not_pruned(self) -> None:
         """Pruning used to ignore the protection list entirely, so an empty `.vscode/`

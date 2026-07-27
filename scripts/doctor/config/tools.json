@@ -68,8 +68,8 @@
     },
     {
       "path": ".githooks/pre-commit",
-      "label": "tracked pre-commit hook",
-      "hint": "run: install-hooks"
+      "label": "tracked pre-commit hook file",
+      "hint": "the file is tracked, so a missing one means a damaged checkout"
     }
   ],
   "windows_only_scripts": ["build-installer", "dev-run"]

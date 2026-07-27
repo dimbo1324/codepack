@@ -6,6 +6,7 @@ way, which is what keeps every script individually readable, editable, and delet
   processes.py  find/require tools, run and capture commands, portably
   config.py     load a script's own config/*.json, and the repository root
   console.py    headings, steps, results, and the confirm prompt
+  terminal.py   output that cannot crash on a legacy console code page
 
 It has no ``__main__.py`` on purpose: the orchestrator's loader rejects any catalog
 entry without one, so this package can never be registered as a runnable script.
@@ -13,6 +14,6 @@ entry without one, so this package can never be registered as a runnable script.
 
 from __future__ import annotations
 
-from . import config, console, processes
+from . import config, console, processes, terminal
 
-__all__ = ["config", "console", "processes"]
+__all__ = ["config", "console", "processes", "terminal"]

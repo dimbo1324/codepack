@@ -132,3 +132,8 @@ def main(argv: list[str]) -> int:
     except KeyboardInterrupt:
         print()
         return 130
+    except EOFError:
+        # Every menu prompt handles EOF itself and leaves cleanly; this catches any path
+        # that does not, so the worst case is a quiet exit rather than a traceback.
+        print()
+        return 130

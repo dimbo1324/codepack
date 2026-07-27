@@ -19,7 +19,12 @@ below instead of reimplementing them, so both doors reach the same code.
 **`clean-project` deletes files.** Dry run by default; never touches `.env`, signing
 material, local databases, or a nested git repository — judging a directory by its
 contents, since git reports a wholly untracked one as a single entry. Read its
-`config/clean.json` first.
+`config/clean.json` first. It refuses to plan when `git status` cannot see the whole
+tree, and names the fix.
+
+**Per-clone git settings**, checked by `doctor` as warnings: `core.hooksPath` at
+`.githooks` (run `install-hooks`), and on Windows `core.longpaths true`, without which
+`clean-project` cannot plan.
 
 **Standing duty — keep the scripts accurate and portable.** They are infrastructure
 everyone relies on, so a task that changes how the project is built, checked, formatted,
