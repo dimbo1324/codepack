@@ -1,122 +1,67 @@
 # Task Checklist
 
-**Task:** Raise the desktop frontend (`apps/desktop/ui`) from a functional prototype to a
-professional-quality product interface: a real design system, a real desktop app shell,
-reworked pages, adaptive layout, accessibility, and the settings that are currently dead.
+**Task:** Audit and harden the developer script orchestrator (`dev_tools_scripts_runner.py`
+and `scripts/`): fix what is broken, make the failures actionable, close the security and
+robustness gaps.
 **Date:** 2026-07-27
-**Branch:** feat/frontend-redesign
+**Branch:** fix/dev-scripts-hardening
 
-Owner request: the frontend looks primitive, cluttered, inconvenient and non-adaptive.
-The scope is the UI layer only — no domain crate changes, no artifact format changes,
-no change to the Tauri command contract.
+Owner report: "некоторые скрипты не работают, или работают коряво", plus an explicit ask
+to cover the security angles. Every item below was reproduced before it was written down
+— no speculative fixes.
 
-## Constraints that bound this task
+## Defects found, with the evidence
 
-- [+] No CSS framework and no UI kit: CSP forbids remote sources, and
-      `05-security-and-secrets.md` forbids a heavy dependency for a small need. The design
-      system is hand-written CSS custom properties.
-- [+] `client.ts` stays the single choke point to the backend (S11 isolation invariant) —
-      verified by review: `@tauri-apps/*` is imported there and nowhere else
-- [+] Every new user-visible string exists in **both** `en.ts` and `ru.ts` (273 keys,
-      parity enforced at compile time by `Record<TranslationKey, string>`)
-- [+] No new production dependency at all; `package.json` and the lockfile untouched
-
-## Preparation
-
-- [+] Orientation ritual done (git, ROADMAP, overview, checklist, decisions)
-- [+] Current frontend read end to end; defects listed with evidence
-- [+] `pnpm install` so the frontend gate can actually run
+- [ ] **D1 — every script crashes on a legacy console code page.** `console.heading` and
+      the menus print `—`; on cp866 (the default for Russian `cmd.exe`) the process dies
+      with `UnicodeEncodeError` before doing any work. Reproduced: cp866 crash, ascii
+      crash, cp1251 fine.
+- [ ] **D2 — `clean-project` refuses with no remedy.** Any `git status` stderr is a
+      fail-closed refusal (correct), but the message does not name the cause. The owner's
+      actual case was `core.longpaths` unset plus deep pnpm paths.
+- [ ] **D3 — `doctor` gives a false all-clear on git hooks.** It checks that the tracked
+      file `.githooks/pre-commit` exists — always true — instead of checking
+      `core.hooksPath`. Reproduced: hooks inactive in this clone, doctor green.
+- [ ] **D4 — Windows paths are mangled in the interactive prompt.** `shlex.split` in posix
+      mode eats backslashes: `--out C:\Users\dev\build` → `['--out', 'C:Usersdevbuild']`.
+- [ ] **D5 — `EOFError` is uncaught.** Ctrl+Z/Ctrl+D at the menu gives a traceback.
+- [ ] **D6 — no subprocess has a timeout.** A hung tool (a Windows Store `python` stub is
+      the classic) blocks `doctor` forever.
+- [ ] **D7 — undecodable paths cannot be distinguished.** The deletion planner decodes git
+      output with `errors="replace"`, then matches protection rules against the mangled
+      name.
+- [ ] **D8 — `remove_all` never proves the target stays under the repository root.**
+- [ ] **D9 — `run_steps` hides the steps it skipped** after a required failure; the
+      summary reads as though they did not exist.
+- [ ] **D10 — dead code in safety-relevant paths:** the unreachable `""` shim suffix, the
+      no-op `except OSError: raise`, `failures: list = None` behind a `type: ignore`, and
+      `shutil.rmtree(onerror=)` which is deprecated since 3.12.
+- [ ] **D11 — `prune_empty_dirs` descends into `.git`, `node_modules` and `target`**
+      instead of pruning them from the walk, then discards the result.
 
 ## Implementation
 
-### Design system
-
-- [+] `src/styles/tokens.css` — colour, spacing, radius, elevation, typography, motion
-      scales for light and dark, replacing the 10 ad-hoc variables
-- [+] `src/styles/base.css` — reset, element defaults, focus-visible, scrollbars,
-      selection, reduced-motion
-- [+] `src/styles/components.css` — buttons, fields, cards, chips, badges, tables,
-      callouts, stats: the vocabulary every page shares
-
-### App shell
-
-- [+] Sidebar navigation replacing the flat 8-button row: numbered wizard steps plus a
-      separate "insights" group, with reachable/current/done state and a reason shown for
-      a locked step instead of a silently disabled button
-- [+] Header with the active project, theme toggle and language toggle
-- [+] Status bar: version, the local-only privacy statement, watch state
-
-### Shared components
-
-- [+] `Icon`, `Field`, `Switch`, `Segmented`, `Stat`, `Callout`, `EmptyState`, `Toasts`,
-      `StepProgress`, `Sidebar`, `TopBar`, `StatusBar`
-- [-] `Card` was listed in the plan and is **not** a component: cards are a global
-      `.card` class. A wrapper adding nothing but a `<div>` would be ceremony, so the
-      class stayed and the plan line was wrong, not the code.
-
-### Pages (all eight)
-
-- [+] Project — first-run state, folder drag & drop, resolution trace shown
-- [+] Settings — grouped sections with descriptions instead of one flat column
-- [+] Security — summary stats, severity filter, search, grouping by file
-- [+] Preview — stat bar, search, tree with size and hover actions, overrides panel
-- [+] Export (was "Log") — the pipeline steps rendered from `step`/`step_finished`,
-      which the UI previously received and threw away; elapsed time; log tools
-- [+] Result — outcome hero, stat cards, artifact list, grouped report actions
-- [+] History — table, relative time, status pills, scope filter
-- [+] Analytics — stat cards, risk meter, stack chips
-
-### Dead settings, wired up
-
-- [+] `ui_zoom` calls `set_ui_zoom` live, and the stored zoom is applied at startup
-- [+] `watch_enabled` calls `start_watch`/`stop_watch`, surfaces changes in the status
-      bar and as a toast, and stops when the project changes
-
-### Adaptive + accessible
-
-- [+] Three layout breakpoints; no horizontal overflow on any of the eight pages at
-      1280 / 880 / 600 CSS px
-- [+] `aria-current`, live regions for progress and toasts, focus-visible everywhere,
-      `prefers-reduced-motion` honoured, radiogroup keyboard contract (roving tabindex +
-      arrow keys) on `Segmented`
+- [ ] **Encoding** — one place that makes stdout/stderr UTF-8 safe on Windows, with an
+      ASCII-degrading fallback so output is never a crash. Applies to every script.
+- [ ] **doctor** — check what is actually true: `core.hooksPath` points at `.githooks`,
+      `core.longpaths` on Windows, and keep the checks config-driven.
+- [ ] **clean-project** — recognise the known git warnings and print the exact remedy;
+      refuse on undecodable paths; assert containment before deleting; `onexc`.
+- [ ] **processes** — timeouts, dead branch removed.
+- [ ] **interactive/execution** — handle EOF, split arguments correctly on Windows.
+- [ ] **steps** — report skipped steps honestly.
+- [ ] Tests for every fix above, wired into `selftest` and therefore the gate.
 
 ## Verification
 
-- [+] `pnpm format` / `typecheck` (134 files, 0/0) / `lint` / `build` clean
-- [+] `cargo xtask gate` green; `cargo test --workspace` 938 passed / 0 failed
-- [+] App driven end to end against a stubbed IPC layer in a browser — all eight pages,
-      light and dark, RU and EN, three widths, a full export replayed from events
-- [-] **Not** run as the native Tauri window. Screenshots of a native window are outside
-      what this environment can capture, so verification used the real frontend bundle
-      against stubbed `invoke`/event responses. What that cannot prove: the OS-level
-      appearance, and that `getCurrentWebview().onDragDropEvent` fires under the real
-      capability set (it needs no permission beyond `core:default`, which the webview
-      already has, but that reasoning is not the same as observing it).
-- [+] Independent review of the diff (`codepack-quality-reviewer`), 16 findings; all
-      correctness, i18n and dead-code findings fixed, see below
-
-## Findings from the review, and what happened to them
-
-- [+] Progress events emitted before `start_export` returned were dropped — now buffered
-      by run id and replayed on adoption
-- [+] `ParsedStep.total` was parsed and ignored; the denominator is now the engine's own
-- [+] `AnalyticsPage` had an unguarded async `$effect` — generation counter added
-- [+] Settings selects desynced from the config when an apply failed — rolled back
-- [+] Startup failure rendered `[object Object]` — `errorMessage` extracts `CommandError`
-- [+] Untranslated backend enums on screen — `i18n/enums.ts`, falling back to the raw
-      value so an unknown one is reported rather than invented
-- [+] `role="radiogroup"` without the keyboard contract — implemented
-- [+] Fragile `{#each}` key, unbounded export log (now capped at 5000 lines with the
-      dropped count shown), 13 dead i18n keys, 11 dead CSS classes — all fixed; a script
-      now confirms zero unreachable keys and zero unreferenced global classes
-- [+] Toasts stored translated strings and froze across a language switch — they store
-      keys now
-- [+] Two documentation claims corrected in `ROADMAP.md`
+- [ ] Each defect reproduced by a test that fails before the fix
+- [ ] `python dev_tools_scripts_runner.py selftest` green
+- [ ] Every script in the catalog launched and its behaviour checked by hand
+- [ ] `cargo xtask gate` green
+- [ ] Independent review of the diff
 
 ## Completion
 
-- [+] `docs/architecture/overview.md` updated (new frontend row)
-- [+] `ROADMAP.md` S11 status amended with an honest account, including what was not done
-- [+] `docs/decisions/open-questions.md`: the no-framework design-system decision and the
-      drag-and-drop / capabilities decision
-- [+] Checklist filled `+`/`-`, final report in Russian
+- [ ] `.ai/project/11-commands.md` updated if the workflow changed
+- [ ] `docs/decisions/open-questions.md` for anything that constrains the future
+- [ ] Checklist filled `+`/`-`, final report in Russian
