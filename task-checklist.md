@@ -1,79 +1,61 @@
 # Task Checklist
 
-**Task:** Stage S13 — direct AI integration. Close the loop "export → answer" without
-manual copy-paste, both over an API and by handing the bundle to a local coding agent.
+**Task:** Close audit findings 1 and 2 — a critical secret reaching the text dump
+unredacted, and two classes of secret the detector cannot see.
 **Date:** 2026-07-27
-**Branch:** feat/s13-ai-integration
+**Branch:** fix/secret-redaction-and-recall
 
-## Owner decisions taken before starting (recorded in the decisions log)
+Owner instruction: fix both, then push. The instruction is also the owner decision the
+audit said was needed for any divergence from legacy behaviour.
 
-- [+] **Both shapes.** API integration (BLUEPRINT §B.8) **and** a no-network handoff
-- [+] **Anthropic first, trait for the rest** — partially closes Q2
-- [+] **One question, one answer, saved into the bundle** — no chat UI
-- [+] **Summary and confirmation before sending** — counts and size, not a file list
+## What the audit established, and what changes because of it
 
-## What bounds this task
+- **Finding 1.** `redact_secrets` uses only legacy's keyword shapes, while the scanner
+  gained provider signatures and entropy in S3. A key the scanner calls `critical` is
+  written verbatim into `03_text_dump.txt`. The code names the gap itself:
+  `SCAN_ONLY_ROOTS` is documented as "scanned for but never redacted".
+- **Finding 2.** No rule sees a password inside `scheme://user:pass@host`, and `Basic`
+  auth is uncovered while `Bearer` is.
 
-- [+] **Invariant I1.** `codepack-ai` is the only crate permitted a network client,
-      enforced by a gate step reading every manifest — not by convention
-- [+] **Stage order.** S12's open questions (Q19/Q20) untouched
-- [+] **No key in a file, log, history, or export** — the key lives only in the OS
-      credential store, and `check` runs before it is ever read
+## Constraints discovered before writing code (these shape the fix)
+
+- [ ] Golden compares `06_security_scan.json` but **not** `03_text_dump.txt`. So the
+      redaction fix has no golden impact; the detector fix does.
+- [ ] The scanner emits **at most one hit per line**, chosen by a documented cascade.
+      New rules must sit late in that cascade, or an already-detected line changes its
+      rule/severity and golden breaks for no gain.
+- [ ] `find_secret_spans` feeds **both** redaction and the scanner's keyword confidence.
+      Widening it in place would promote provider hits to `secret_like_line`/`high` —
+      the exact regression the cascade's doc comment warns about. Redaction needs its
+      own wider span set instead.
+- [ ] Invariant I9: precision stays 1.000. Recall may only go up.
 
 ## Implementation
 
-### `crates/codepack-ai` (new crate)
-
-- [+] `provider.rs` — `AiProvider` trait; nothing in it names a vendor
-- [+] `providers/anthropic.rs` — Messages API over raw HTTP
-- [+] `keys.rs` — key only in the OS credential store, never in `Config`
-- [+] `plan.rs` — `SendPlan` for confirmation: provider, model, files, bytes, tokens,
-      scan state
-- [+] **Refuses to send a bundle carrying critical findings** unless explicitly overridden
-- [+] `handoff.rs` — the offline path: prompt file beside the bundle, command to run
-
-### Wiring
-
-- [-] **`Config` AI fields — NOT DONE**
-- [-] **Desktop commands — NOT DONE**
-- [-] **Frontend page and i18n — NOT DONE**
-
-The domain layer is complete and tested; the door to it from the application is not cut.
-The feature is therefore **not reachable by a user**. This is the honest state, not a
-rounding error: I ran out of room to do the interface properly and chose to leave it
-undone rather than ship a half-wired page.
-
-### Guard
-
-- [+] `cargo xtask gate` step proving no crate but `codepack-ai` declares an HTTP client,
-      with hermetic tests that fail when a violation is planted
+- [ ] `find_url_credentials` — the password between `://user:` and `@host`, matched by
+      **structure** not entropy, so a short password is caught as reliably as a long one
+- [ ] `Basic`/`Digest` auth alongside the existing `Bearer` matcher, without disturbing
+      the legacy-parity `find_bearer_tokens` used by the scanner's keyword path
+- [ ] Scanner: both new rules added **after** the weak-keyword step, before entropy
+- [ ] Redaction: its own span set — keyword roots widened to the scanned set, plus
+      provider, telegram, URL credentials and HTTP auth
+- [ ] Entropy deliberately **excluded** from content redaction, with the reason written
+      down
 
 ## Verification
 
-- [+] 32 tests in `codepack-ai`, 12 in `xtask` (was 9); workspace 938 → 982
-- [+] The refusal rule, the ordering (`check` before key read), and the `None` vs
-      `Some(0)` distinction each have their own test
-- [+] `cargo xtask gate` green end to end
-- [-] **No real API call was made.** No key was supplied, so the network path is verified
-      by parsing real response shapes, not by a live request. Those are different things
-      and the second is not claimed.
-- [-] Independent review of the diff — not run
+- [ ] A test that fails before the fix: an exported bundle's text dump must not contain
+      a planted AWS key
+- [ ] Corpus gains positives (URL credential, Basic auth) and negatives (a URL with no
+      credentials, `http://host/a:b@c`)
+- [ ] `cargo test -p codepack-engine --test golden` still 3/3 — proving the cascade
+      placement was right rather than assuming it
+- [ ] Precision still 1.000, recall higher
+- [ ] End-to-end rerun of the audit's own reproduction
+- [ ] `cargo xtask gate` green
 
 ## Completion
 
-- [+] `ROADMAP.md` S13 `**Status.**` line and §1 row, both saying "partially"
-- [+] `docs/architecture/invariants.md` — I1 now documents how it is enforced
-- [+] `docs/decisions/open-questions.md` — the two-shapes decision, Q2 partial
-      resolution, the critical-findings refusal, the TLS/licence decision
-- [-] `docs/architecture/overview.md` — not updated (the new crate is not in it yet)
-- [+] Checklist filled `+`/`-`, final report in Russian
-
-## What the next task must pick up
-
-1. `Config` fields (`ai_enabled`, `ai_provider`, `ai_model`), additive with
-   `#[serde(default)]` — no `schema_version` bump needed
-2. Tauri commands, thin over the crate; the key must never cross back to the frontend —
-   `keys::has_key` exists precisely so status can be rendered without reading the secret
-3. The frontend page and its i18n keys in both dictionaries
-4. `docs/architecture/overview.md`
-5. One real API call against a key the owner supplies, to close the last verification gap
+- [ ] `docs/decisions/open-questions.md`: the decision and what it costs; Q18 closed
+- [ ] Checklist filled `+`/`-`, final report in Russian
+- [ ] Push to origin (explicitly requested)
