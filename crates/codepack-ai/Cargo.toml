@@ -1,0 +1,25 @@
+[package]
+name = "codepack-ai"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Stage S13: the one crate allowed to reach the network, and only on an explicit user action."
+
+[lints]
+workspace = true
+
+[dependencies]
+codepack-core.workspace = true
+codepack-tokens.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# S13: the HTTP client. See the crate docs for why this one and not `reqwest`.
+ureq.workspace = true
+# S13: BLUEPRINT §D.4 names this crate by name for OS-native secret storage.
+keyring.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
