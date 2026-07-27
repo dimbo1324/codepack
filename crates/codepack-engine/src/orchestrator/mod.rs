@@ -39,7 +39,7 @@
 //! "reproduce the wasteful legacy behavior rather than silently optimize it" posture).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use codepack_archive::{ArchiveOptions, ArchivePlan, build_final_archives};
 use codepack_core::config::Config;
@@ -48,7 +48,6 @@ use codepack_core::{
     ProgressEvent, ProgressSender, TextDumpStats,
 };
 use codepack_reports::context::ReportContext;
-use codepack_security::FindingKind;
 use codepack_storage::{
     Connection, NewArchivePart, NewExportRun, NewFinding, NewRunFile, cleanup_old_runs,
     find_or_create_project, latest_snapshot, record_export_run,
@@ -58,41 +57,14 @@ use crate::analytics::{AnalyticsOutcome, run_analytics};
 use crate::copy::copy_project;
 use crate::error::Result;
 use crate::git_report::write_git_report;
-use crate::ignored_dirs::{extra_ignored_display, ignored_dir_names_for};
+use crate::ignored_dirs::extra_ignored_display;
 use crate::manifest::write_manifest_and_index;
 use crate::paths::build_export_paths;
-use crate::plan::{PlanOutcome, run_export_plan};
+use crate::plan::run_export_plan;
 use crate::storage::{diff_snapshot_to_new_snapshot, stored_snapshot_to_diff_snapshot};
 use crate::structure::write_structure_report;
 use crate::text_dump::write_text_dump;
-use crate::timestamp::{human_now_utc, unix_timestamp_now};
-
-/// RAII guard: removes the staging directory on every exit path from `run_export`
-/// (success, an early `?` error return, or an unwinding panic) unless `keep` is set --
-/// never only on the happy path. A plain function-tail `remove_dir_all` call would be
-/// skipped by any of this function's many `?` early returns, silently leaking the
-/// staging directory on genuine I/O/storage failures (a real gap this pass's own review
-/// found: the task-checklist's claim of "unconditional... on every code path" was true
-/// for cancellation but not for hard errors).
-struct StagingCleanupGuard<'a> {
-    staging_dir: PathBuf,
-    keep: bool,
-    progress: &'a ProgressSender,
-}
-
-impl Drop for StagingCleanupGuard<'_> {
-    fn drop(&mut self) {
-        if self.keep || !self.staging_dir.exists() {
-            return;
-        }
-        if let Err(err) = std::fs::remove_dir_all(&self.staging_dir) {
-            let _ = self.progress.send(ProgressEvent::Log(LogEvent {
-                level: LogLevel::Info,
-                message: format!("failed to remove staging directory: {err}"),
-            }));
-        }
-    }
-}
+use crate::timestamp::unix_timestamp_now;
 
 /// Everything a caller (a future CLI/UI) needs after one full export run.
 pub struct ExportOutcome {
@@ -129,68 +101,6 @@ fn send_step_finished(progress: &ProgressSender, step: &str) {
     let _ = progress.send(ProgressEvent::StepFinished {
         step: step.to_string(),
     });
-}
-
-/// A synthetic "nothing was planned or copied" [`PlanOutcome`] for the one case
-/// [`run_export`] resolves without calling step 1 at all: a token already cancelled
-/// before the pipeline begins. See `run_export`'s own inline comment at its call site
-/// for why this exists instead of calling [`run_export_plan`] and letting it hard-fail.
-fn cancelled_before_planning_outcome(paths: &ExportPaths, config: &Config) -> PlanOutcome {
-    let ignored_dir_names = ignored_dir_names_for(&paths.source_root, config);
-
-    let export_plan = codepack_scanner::ExportPlan {
-        generated_at: human_now_utc(),
-        project_name: paths.project_name.clone(),
-        source_root: paths.source_root.display().to_string(),
-        profile: config.normalized_export_profile().to_string(),
-        safe_export_mode: config.normalized_safe_export_mode().to_string(),
-        diff_export_mode: config.normalized_diff_export_mode().to_string(),
-        incremental_enabled: config.incremental_export_enabled,
-        included_files: Vec::new(),
-        excluded_files: Vec::new(),
-        skipped_dirs: Vec::new(),
-        warnings: vec!["export cancelled before pipeline step 1 began".to_string()],
-        rules: codepack_scanner::RulesReport {
-            source_file: None,
-            loaded_rules: Vec::new(),
-            excluded_dirs: Vec::new(),
-            excluded_files: Vec::new(),
-            excluded_extensions: Vec::new(),
-            always_include_files: Vec::new(),
-            always_include_dirs: Vec::new(),
-        },
-        summary: codepack_scanner::plan::PlanSummary {
-            included_count: 0,
-            excluded_count: 0,
-            estimated_included_bytes: 0,
-            estimated_included_size: codepack_tokens::format_bytes(0),
-            skipped_dirs_count: 0,
-        },
-    };
-
-    let diff_selection = codepack_diff::DiffSelection {
-        mode: "cancelled".to_string(),
-        base: "cancelled before planning began".to_string(),
-        paths: None,
-        files: Vec::new(),
-        warning: Some("export cancelled before pipeline step 1 began".to_string()),
-    };
-
-    PlanOutcome {
-        export_plan,
-        diff_selection,
-        ignored_dir_names,
-        include_relative_paths: None,
-        dropped_by_budget: 0,
-    }
-}
-
-fn finding_kind_label(kind: FindingKind) -> &'static str {
-    match kind {
-        FindingKind::SensitiveFile => "sensitive_file",
-        FindingKind::PotentialSecret => "potential_secret",
-        FindingKind::RiskyCode => "risky_code",
-    }
 }
 
 /// Runs the full eight-step export pipeline once, recording the outcome into
@@ -609,80 +519,8 @@ pub fn run_export(
     })
 }
 
-#[cfg(test)]
-mod staging_cleanup_guard_tests {
-    use super::StagingCleanupGuard;
+mod cancelled;
+mod staging;
 
-    #[test]
-    fn removes_the_staging_directory_when_dropped_and_not_kept() {
-        let dir = tempfile::tempdir().unwrap();
-        let staging_dir = dir.path().join("staging");
-        std::fs::create_dir_all(&staging_dir).unwrap();
-        assert!(staging_dir.exists());
-
-        let (progress, _rx) = codepack_core::progress_channel();
-        {
-            let _guard = StagingCleanupGuard {
-                staging_dir: staging_dir.clone(),
-                keep: false,
-                progress: &progress,
-            };
-        }
-
-        assert!(
-            !staging_dir.exists(),
-            "the guard must remove the staging directory on drop"
-        );
-    }
-
-    #[test]
-    fn leaves_the_staging_directory_in_place_when_keep_is_set() {
-        let dir = tempfile::tempdir().unwrap();
-        let staging_dir = dir.path().join("staging");
-        std::fs::create_dir_all(&staging_dir).unwrap();
-
-        let (progress, _rx) = codepack_core::progress_channel();
-        {
-            let _guard = StagingCleanupGuard {
-                staging_dir: staging_dir.clone(),
-                keep: true,
-                progress: &progress,
-            };
-        }
-
-        assert!(
-            staging_dir.exists(),
-            "keep_staging_folder must be honored by the guard, not just the happy path"
-        );
-    }
-
-    #[test]
-    fn runs_on_an_early_return_via_the_question_mark_operator_not_only_on_success() {
-        fn fails_after_constructing_the_guard(
-            staging_dir: &std::path::Path,
-            progress: &codepack_core::ProgressSender,
-        ) -> Result<(), std::io::Error> {
-            let _guard = StagingCleanupGuard {
-                staging_dir: staging_dir.to_path_buf(),
-                keep: false,
-                progress,
-            };
-            Err(std::io::Error::other("a genuine mid-pipeline failure"))?;
-            Ok(())
-        }
-
-        let dir = tempfile::tempdir().unwrap();
-        let staging_dir = dir.path().join("staging");
-        std::fs::create_dir_all(&staging_dir).unwrap();
-
-        let (progress, _rx) = codepack_core::progress_channel();
-        let result = fails_after_constructing_the_guard(&staging_dir, &progress);
-
-        assert!(result.is_err());
-        assert!(
-            !staging_dir.exists(),
-            "an early `?` error return must still trigger staging cleanup, matching the \
-             task-checklist's own 'unconditional on every code path' claim"
-        );
-    }
-}
+use cancelled::{cancelled_before_planning_outcome, finding_kind_label};
+use staging::StagingCleanupGuard;

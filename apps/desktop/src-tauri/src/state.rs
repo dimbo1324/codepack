@@ -6,9 +6,34 @@
 //! the run id the frontend was handed when it started the export.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use codepack_core::CancellationToken;
+
+/// Locks `mutex`, taking the data back even if a previous holder panicked.
+///
+/// Every lock here used to be `.expect("… is never poisoned")`. That message asserted an
+/// invariant nobody had proved: a mutex is poisoned when a thread panics *while holding
+/// it*, and the code inside these sections touches a `HashMap` and a
+/// `Box<dyn Any + Send>` — nothing that cannot panic in principle. One such panic would
+/// have made every later `lock()` return `Err`, so the `expect` would fire
+/// unconditionally from then on and the run registry would be dead for the rest of the
+/// process: no starting an export, no cancelling one, no closing the window cleanly.
+/// The user's only cure would be restarting the app, with no clue why.
+///
+/// Ignoring the poison is right *for this data specifically*, and that is the argument
+/// `.ai/project/12-domain-rules.md` asks for rather than an assertion. What these
+/// mutexes guard is a lookup table of live runs and one optional watcher handle. A panic
+/// elsewhere cannot leave either in a state that is *wrong* — only, at worst, missing an
+/// insert or a removal that the panicking operation was about to make. A stale entry is
+/// already an ordinary case the registry handles (`cancel` on a finished run is
+/// documented as harmless), so recovering and carrying on is strictly better than
+/// bringing down every subsequent export.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// A single in-flight export.
 struct ActiveRun {
@@ -33,62 +58,40 @@ impl RunRegistry {
         let run_id = {
             // A monotonic counter, not a timestamp: two exports started inside the same
             // second must not collide, and the id is never shown to the user.
-            let mut next = self
-                .next_id
-                .lock()
-                .expect("run id counter is never poisoned");
+            let mut next = lock(&self.next_id);
             *next += 1;
             format!("run-{next}")
         };
-        self.runs
-            .lock()
-            .expect("run registry is never poisoned")
-            .insert(
-                run_id.clone(),
-                ActiveRun {
-                    cancel: cancel.clone(),
-                },
-            );
+        lock(&self.runs).insert(
+            run_id.clone(),
+            ActiveRun {
+                cancel: cancel.clone(),
+            },
+        );
         (run_id, cancel)
     }
 
     /// Cancels `run_id` if it is still running. A missing id is not an error: the run
     /// may have finished between the user pressing the button and this arriving.
     pub fn cancel(&self, run_id: &str) {
-        if let Some(run) = self
-            .runs
-            .lock()
-            .expect("run registry is never poisoned")
-            .get(run_id)
-        {
+        if let Some(run) = lock(&self.runs).get(run_id) {
             run.cancel.cancel();
         }
     }
 
     /// Removes a finished run. Called on every exit path, including the error one.
     pub fn finish(&self, run_id: &str) {
-        self.runs
-            .lock()
-            .expect("run registry is never poisoned")
-            .remove(run_id);
+        lock(&self.runs).remove(run_id);
     }
 
     pub fn is_running(&self, run_id: &str) -> bool {
-        self.runs
-            .lock()
-            .expect("run registry is never poisoned")
-            .contains_key(run_id)
+        lock(&self.runs).contains_key(run_id)
     }
 
     /// Cancels every in-flight run. Used when the window closes: a background export
     /// holding a half-built staging directory must be told to stop, not left orphaned.
     pub fn cancel_all(&self) {
-        for run in self
-            .runs
-            .lock()
-            .expect("run registry is never poisoned")
-            .values()
-        {
+        for run in lock(&self.runs).values() {
             run.cancel.cancel();
         }
     }
@@ -107,18 +110,15 @@ pub struct WatchState {
 impl WatchState {
     /// Installs `watcher`, dropping any previous one.
     pub fn replace(&self, watcher: Box<dyn std::any::Any + Send>) {
-        *self.watcher.lock().expect("watch state is never poisoned") = Some(watcher);
+        *lock(&self.watcher) = Some(watcher);
     }
 
     pub fn clear(&self) {
-        *self.watcher.lock().expect("watch state is never poisoned") = None;
+        *lock(&self.watcher) = None;
     }
 
     pub fn is_watching(&self) -> bool {
-        self.watcher
-            .lock()
-            .expect("watch state is never poisoned")
-            .is_some()
+        lock(&self.watcher).is_some()
     }
 }
 
@@ -185,6 +185,58 @@ mod tests {
 
         assert!(first.is_cancelled());
         assert!(second.is_cancelled());
+    }
+
+    #[test]
+    fn the_registry_still_works_after_a_thread_panics_holding_the_lock() {
+        // The defect this replaced: with `.expect("never poisoned")`, one panic inside
+        // any critical section killed the registry for the whole process — every later
+        // start/cancel/close panicked too, and the user's only cure was restarting the
+        // app. Poisoning it deliberately here is the only way to prove the recovery is
+        // real rather than asserted.
+        let registry = Arc::new(RunRegistry::default());
+        let (existing_id, existing_token) = registry.start();
+
+        let poisoner = Arc::clone(&registry);
+        let result = std::thread::spawn(move || {
+            let _guard = lock(&poisoner.runs);
+            panic!("simulated panic while holding the registry lock");
+        })
+        .join();
+        assert!(
+            result.is_err(),
+            "the helper thread must actually have panicked"
+        );
+
+        // Everything the app needs must still work.
+        assert!(registry.is_running(&existing_id));
+        let (new_id, new_token) = registry.start();
+        assert_ne!(new_id, existing_id);
+
+        registry.cancel_all();
+        assert!(existing_token.is_cancelled());
+        assert!(new_token.is_cancelled());
+
+        registry.finish(&existing_id);
+        assert!(!registry.is_running(&existing_id));
+    }
+
+    #[test]
+    fn the_watch_state_still_works_after_a_thread_panics_holding_the_lock() {
+        let state = Arc::new(WatchState::default());
+        state.replace(Box::new(()));
+
+        let poisoner = Arc::clone(&state);
+        let result = std::thread::spawn(move || {
+            let _guard = lock(&poisoner.watcher);
+            panic!("simulated panic while holding the watch lock");
+        })
+        .join();
+        assert!(result.is_err());
+
+        assert!(state.is_watching());
+        state.clear();
+        assert!(!state.is_watching());
     }
 
     #[test]

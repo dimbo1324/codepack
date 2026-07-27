@@ -21,6 +21,8 @@
   import { errorMessage, pushToast } from "$lib/stores/toasts.svelte";
   import { initTheme } from "$lib/theme/index.svelte";
   import { receiveExportEvent, wizard } from "$lib/stores/wizard.svelte";
+  import { copyText } from "$lib/util/clipboard";
+  import { formatWatchSummary } from "$lib/util/watchSummary";
 
   import AnalyticsPage from "./pages/AnalyticsPage.svelte";
   import ExportPage from "./pages/ExportPage.svelte";
@@ -80,8 +82,25 @@
       unlisteners.push(
         await onWatchChanged((event) => {
           wizard.watchChangedPaths = event.changed_paths;
-          if (event.changed_paths.length > 0) {
-            pushToast("info", "watch.changed", { params: { count: event.changed_paths.length } });
+          if (event.changed_paths.length === 0) {
+            return;
+          }
+          pushToast("info", "watch.changed", { params: { count: event.changed_paths.length } });
+
+          // Finding 4, 2026-07-27 audit: this setting was shown to the user and read by
+          // nothing. The backend deliberately leaves the decision here (see
+          // `commands/watch.rs`), so this is where it belongs.
+          if (wizard.sessionConfig?.watch_clipboard_auto_update === true) {
+            const summary = formatWatchSummary(event.changed_paths, wizard.project?.root ?? null);
+            // Failure is reported rather than swallowed: the user asked for the
+            // clipboard to be updated, so silently not updating it would be the same
+            // class of defect this change exists to fix.
+            void copyText(summary).then((copied) => {
+              pushToast(
+                copied ? "success" : "warning",
+                copied ? "watch.copied" : "watch.copyFailed",
+              );
+            });
           }
         }),
       );

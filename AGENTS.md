@@ -462,34 +462,15 @@ cargo xtask doctor          # read-only environment diagnostics
 cargo xtask golden          # regenerate the legacy golden references (needs Python)
 ```
 
-Prefer `gate` over ad-hoc command sequences.
-
-`cargo deny check` needs the `cargo-deny` binary installed separately (`cargo install
-cargo-deny`, not a toolchain component; CI uses `taiki-e/install-action`).
-
-`cargo xtask golden` re-runs the archived legacy implementation to rewrite
-`tests/golden/reference/`. Developer-machine only: it needs Python 3, and CI never runs
-it because the references are committed. Run it when legacy's own output *should* change
-— never to make a failing comparison pass.
-
-## Formatting
-
-`rustfmt` owns `.rs` (`rustfmt.toml`); Prettier owns the frontend and config files
-(`prettier.config.mjs`; `.prettierignore` protects `tests/golden/`, test fixtures, and
-the generated `AGENTS.md`). `cargo xtask fmt` runs both.
-
-`install-hooks` once per clone points `core.hooksPath` at the tracked `.githooks/`, so
-the hook is versioned instead of living in an untracked `.git/hooks`. The `pre-commit`
-hook formats **only staged files** and re-stages them; it skips a partially staged file
-rather than sweeping its unstaged half into the commit, and skips Prettier with a notice
-when `node_modules` is absent. `git commit --no-verify` bypasses it once — the gate still
-checks formatting later.
+Prefer `gate` over ad-hoc command sequences. `cargo xtask fmt` formats both toolchains;
+run `install-hooks` once per clone and commits format themselves after that.
 
 ## Where the rest lives
 
-Per-layer commands, the Tauri working-directory trap, `cargo deny`/`golden` notes, and the
-platform notes are in `15-command-reference.md` — lookup material, kept separate so this
-module stays the part that applies to every task.
+`15-command-reference.md` holds the lookup material: per-layer commands, the Tauri
+working-directory trap, how formatting and the pre-commit hook actually work, the
+`cargo deny`/`golden` notes, and the platform notes. Kept separate so this module stays
+the part that applies to every task.
 
 ## Gate policy
 

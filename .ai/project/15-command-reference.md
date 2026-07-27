@@ -46,6 +46,19 @@ there.
 stay in stage S14 — only the installer itself was pulled forward, by owner decision
 2026-07-26.
 
+## Formatting, and the pre-commit hook
+
+`rustfmt` owns `.rs` (`rustfmt.toml`); Prettier owns the frontend and config files
+(`prettier.config.mjs`; `.prettierignore` protects `tests/golden/`, test fixtures, and
+the generated `AGENTS.md`). `cargo xtask fmt` runs both.
+
+`install-hooks` once per clone points `core.hooksPath` at the tracked `.githooks/`, so
+the hook is versioned instead of living in an untracked `.git/hooks`. The `pre-commit`
+hook formats **only staged files** and re-stages them; it skips a partially staged file
+rather than sweeping its unstaged half into the commit, and skips Prettier with a notice
+when `node_modules` is absent. `git commit --no-verify` bypasses it once — the gate still
+checks formatting later.
+
 ## Other tools
 
 `cargo deny check` needs the `cargo-deny` binary installed separately (`cargo install
