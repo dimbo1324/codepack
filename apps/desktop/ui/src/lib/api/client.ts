@@ -7,6 +7,7 @@
 // `#[tauri::command]`, never a raw `invoke()` call scattered through page code.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 
@@ -26,6 +27,29 @@ import type {
 export async function pickProjectDirectory(): Promise<string | null> {
   const selected = await openDialog({ directory: true, multiple: false });
   return typeof selected === "string" ? selected : null;
+}
+
+export type DragDropPhase = "enter" | "leave" | "drop";
+
+/** Paths dragged onto and dropped on the window.
+ *
+ * The webview receives only the path string; it still cannot read what is there, so this
+ * changes nothing about the isolation invariant — the path goes straight back to
+ * `open_project`, exactly as a path from the folder picker does. `handler` is called with
+ * whatever was dropped, including files, because the backend is the side that knows what
+ * a valid project root is.
+ *
+ * `over` is dropped rather than forwarded: it fires on every mouse move, and the only
+ * thing the UI does with the drag is show one overlay. */
+export function onWindowDragDrop(
+  handler: (phase: DragDropPhase, paths: string[]) => void,
+): Promise<UnlistenFn> {
+  return getCurrentWebview().onDragDropEvent((event) => {
+    const payload = event.payload;
+    if (payload.type === "enter") handler("enter", payload.paths);
+    else if (payload.type === "leave") handler("leave", []);
+    else if (payload.type === "drop") handler("drop", payload.paths);
+  });
 }
 
 export function getAppInfo(): Promise<AppInfo> {

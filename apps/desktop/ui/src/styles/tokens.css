@@ -1,0 +1,188 @@
+/* Design tokens.
+ *
+ * The whole interface is built from this file: no component hard-codes a colour, a
+ * spacing value, a radius or a duration. `theme/index.svelte.ts` sets `data-theme` on
+ * <html> and only the two blocks below change — everything downstream is theme-agnostic
+ * by construction, which is what makes adding a page cost nothing in light/dark work.
+ *
+ * No CSS framework and no web fonts on purpose: the Tauri CSP admits no remote source
+ * (invariant I1), and a token file is the part of a framework this app actually needs. */
+
+:root {
+  /* Spacing — a 4px rhythm with two half-steps for dense desktop rows. */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 40px;
+  --space-11: 56px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* Type. Sizes are absolute rather than rem-relative because the desktop shell scales
+     the whole webview natively (`set_ui_zoom`), so a second relative layer would compound
+     with it and make "150%" mean something different on every page. */
+  --font-sans:
+    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-display:
+    "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Consolas, "Liberation Mono",
+    monospace;
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Motion. `--ease-out` is the standard "settles quickly" curve; everything animated in
+     this app is a state change, never decoration. */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 110ms;
+  --duration-base: 170ms;
+  --duration-slow: 260ms;
+
+  --layout-sidebar: 232px;
+  --layout-rail: 68px;
+  --layout-content-max: 1080px;
+  --layout-header: 52px;
+  --layout-statusbar: 28px;
+
+  --z-sticky: 10;
+  --z-overlay: 50;
+  --z-toast: 100;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --canvas: #f4f6f9;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef1f5;
+  --surface-hover: #f2f4f8;
+  --surface-active: #e8ecf2;
+  --chrome: #fbfcfe;
+
+  --fg: #14171c;
+  --fg-secondary: #4d5561;
+  --fg-muted: #737d8c;
+  --fg-faint: #98a1ae;
+  --fg-on-accent: #ffffff;
+
+  --border: #e3e7ec;
+  --border-strong: #cbd2db;
+  --border-focus: #3b6ef5;
+
+  --accent: #3059e3;
+  --accent-hover: #2749c4;
+  --accent-active: #1f3da8;
+  --accent-soft: #e8eeff;
+  --accent-soft-border: #c3d2fb;
+  --accent-fg: #23429f;
+
+  --success: #10803f;
+  --success-soft: #e2f5e9;
+  --success-soft-border: #bde3cb;
+
+  --warning: #96610a;
+  --warning-soft: #fdf2dd;
+  --warning-soft-border: #eed7a6;
+
+  --danger: #c22a22;
+  --danger-hover: #a52019;
+  --danger-soft: #fdecea;
+  --danger-soft-border: #f3c8c4;
+
+  --info: #0a6c86;
+  --info-soft: #e2f4f9;
+  --info-soft-border: #b6dfeb;
+
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-md: 0 2px 4px rgb(16 24 40 / 6%), 0 6px 16px rgb(16 24 40 / 6%);
+  --shadow-lg: 0 8px 32px rgb(16 24 40 / 12%);
+  --shadow-focus: 0 0 0 3px rgb(48 89 227 / 22%);
+
+  --scrollbar-thumb: #c6cdd7;
+  --scrollbar-thumb-hover: #aab3c0;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0d0f13;
+  --surface: #15181d;
+  --surface-raised: #1a1e24;
+  --surface-sunken: #101318;
+  --surface-hover: #1e232a;
+  --surface-active: #262c34;
+  --chrome: #111419;
+
+  --fg: #e7eaef;
+  --fg-secondary: #a8b1be;
+  --fg-muted: #828d9c;
+  --fg-faint: #646e7c;
+  --fg-on-accent: #ffffff;
+
+  --border: #262b33;
+  --border-strong: #38404a;
+  --border-focus: #6f9bff;
+
+  --accent: #4f7dfb;
+  --accent-hover: #6a92ff;
+  --accent-active: #8aa9ff;
+  --accent-soft: #182448;
+  --accent-soft-border: #2b3d6e;
+  --accent-fg: #a9c1ff;
+
+  --success: #3fc477;
+  --success-soft: #10281b;
+  --success-soft-border: #1e4433;
+
+  --warning: #dfae4d;
+  --warning-soft: #2a2010;
+  --warning-soft-border: #4a3a1a;
+
+  --danger: #f87168;
+  --danger-hover: #ff8a82;
+  --danger-soft: #2c1517;
+  --danger-soft-border: #4d2528;
+
+  --info: #4cc0dd;
+  --info-soft: #0e2429;
+  --info-soft-border: #1c3e47;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 2px 6px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 32%);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 52%);
+  --shadow-focus: 0 0 0 3px rgb(111 155 255 / 28%);
+
+  --scrollbar-thumb: #333a44;
+  --scrollbar-thumb-hover: #454e5a;
+}

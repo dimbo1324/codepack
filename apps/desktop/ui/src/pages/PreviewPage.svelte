@@ -1,23 +1,58 @@
 <script lang="ts">
+  // The last stop before anything is written: the exact file list, with the numbers that
+  // decide whether it is the right one.
   import { previewProject } from "$lib/api/client";
-  import PreviewTree from "$lib/components/PreviewTree.svelte";
-  import { t } from "$lib/i18n/index.svelte";
-  import { wizard } from "$lib/stores/wizard.svelte";
+  import type { FileStatus } from "$lib/api/types";
+  import Callout from "$lib/components/Callout.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import PreviewTree, { type ExpandCommand } from "$lib/components/PreviewTree.svelte";
+  import Segmented, { type SegmentOption } from "$lib/components/Segmented.svelte";
+  import Stat from "$lib/components/Stat.svelte";
+  import { language, t } from "$lib/i18n/index.svelte";
+  import { reportError } from "$lib/stores/toasts.svelte";
+  import { goTo, previewStamp, wizard } from "$lib/stores/wizard.svelte";
+  import { formatCompact, formatCount } from "$lib/util/format";
+  import { countFiles, filterTree, isFilterActive } from "$lib/util/tree";
 
-  let error = $state<string | null>(null);
+  let query = $state("");
+  let status = $state<FileStatus | "all">("all");
+  let expand = $state<ExpandCommand>({ token: 0, expanded: false });
+
+  const filters: SegmentOption<FileStatus | "all">[] = $derived([
+    { value: "all", label: t("preview.filter.all") },
+    { value: "included", label: t("preview.filter.included") },
+    { value: "excluded", label: t("preview.filter.excluded") },
+    { value: "warning", label: t("preview.filter.warning") },
+  ]);
+
+  const filter = $derived({ query, status });
+
+  const visibleTree = $derived(wizard.preview ? filterTree(wizard.preview.tree, filter) : null);
+
+  const matchCount = $derived(visibleTree ? countFiles(visibleTree) : 0);
+
+  const overrideCount = $derived(Object.keys(wizard.fileOverrides).length);
+
+  /** True when the settings that shape a plan have moved since this preview was built.
+   * Numbers that quietly describe a previous configuration are worse than no numbers. */
+  const stale = $derived(
+    wizard.preview !== null &&
+      wizard.sessionConfig !== null &&
+      wizard.previewConfigStamp !==
+        previewStamp($state.snapshot(wizard.sessionConfig), wizard.fileOverrides),
+  );
 
   async function runPreview(): Promise<void> {
     if (!wizard.project || !wizard.sessionConfig) return;
-    error = null;
     wizard.previewLoading = true;
+    const config = $state.snapshot(wizard.sessionConfig);
+    const overrides = { ...wizard.fileOverrides };
     try {
-      wizard.preview = await previewProject(
-        wizard.project.root,
-        wizard.sessionConfig,
-        wizard.fileOverrides,
-      );
-    } catch (err) {
-      error = String(err);
+      wizard.preview = await previewProject(wizard.project.root, config, overrides);
+      wizard.previewConfigStamp = previewStamp(config, overrides);
+    } catch (error) {
+      reportError("preview.failed", error);
     } finally {
       wizard.previewLoading = false;
     }
@@ -25,72 +60,230 @@
 
   function onOverride(path: string, include: boolean | null): void {
     const next = { ...wizard.fileOverrides };
-    if (include === null) {
-      delete next[path];
-    } else {
-      next[path] = include;
-    }
+    if (include === null) delete next[path];
+    else next[path] = include;
     wizard.fileOverrides = next;
+  }
+
+  function setExpanded(expanded: boolean): void {
+    expand = { token: expand.token + 1, expanded };
   }
 </script>
 
-<section>
-  <button class="primary" onclick={runPreview} disabled={wizard.previewLoading}>
-    {wizard.previewLoading ? t("preview.loading") : t("preview.run")}
-  </button>
+<div class="stack page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{t("preview.title")}</h1>
+      <p class="page-lede">{t("preview.lede")}</p>
+    </div>
+    <div class="row row--tight">
+      <button class="btn" onclick={runPreview} disabled={wizard.previewLoading}>
+        {#if wizard.previewLoading}
+          <span class="spinner"></span>
+          {t("preview.loading")}
+        {:else}
+          <Icon name="refresh" size={14} />
+          {wizard.preview ? t("preview.refresh") : t("preview.run")}
+        {/if}
+      </button>
+      <button class="btn btn--primary" onclick={() => goTo("export")}>
+        {t("preview.continue")}
+        <Icon name="chevron" size={14} />
+      </button>
+    </div>
+  </div>
 
-  {#if error}
-    <p class="error">{error}</p>
-  {/if}
-
-  {#if wizard.preview}
+  {#if !wizard.preview}
+    <div class="card">
+      <EmptyState icon="tree" title={t("preview.none")} text={t("preview.noneText")}>
+        {#snippet action()}
+          <button class="btn btn--primary" onclick={runPreview} disabled={wizard.previewLoading}>
+            {t("preview.run")}
+          </button>
+        {/snippet}
+      </EmptyState>
+    </div>
+  {:else}
     {@const preview = wizard.preview}
-    <p class="summary">
-      {t("preview.summary", {
-        included: preview.included_files,
-        excluded: preview.excluded_files,
-        size: preview.estimated_bytes_human,
-        tokens: preview.estimated_tokens,
-      })}
-    </p>
+    {#if stale}
+      <Callout tone="warning">{t("preview.stale")}</Callout>
+    {/if}
+
+    <div class="stats">
+      <Stat
+        label={t("preview.stat.included")}
+        value={formatCount(preview.included_files, language.current)}
+        icon="check-circle"
+        tone="success"
+      />
+      <Stat
+        label={t("preview.stat.excluded")}
+        value={formatCount(preview.excluded_files, language.current)}
+        icon="eye-off"
+      />
+      <Stat label={t("preview.stat.size")} value={preview.estimated_bytes_human} icon="package" />
+      <Stat
+        label={t("preview.stat.tokens")}
+        value={formatCompact(preview.estimated_tokens, language.current)}
+        icon="activity"
+        hint={formatCount(preview.estimated_tokens, language.current)}
+      />
+      <Stat
+        label={t("preview.stat.skippedDirs")}
+        value={formatCount(preview.skipped_dirs, language.current)}
+        icon="folder"
+      />
+    </div>
+
     {#if preview.dropped_by_budget > 0}
-      <p class="note">{t("preview.budgetDropped", { count: preview.dropped_by_budget })}</p>
+      <Callout tone="info"
+        >{t("preview.budgetDropped", { count: preview.dropped_by_budget })}</Callout
+      >
     {/if}
     {#if preview.sensitive_count > 0}
-      <p class="note warning">{t("preview.sensitive", { count: preview.sensitive_count })}</p>
+      <Callout tone="warning">{t("preview.sensitive", { count: preview.sensitive_count })}</Callout>
     {/if}
 
-    <div class="tree">
-      <PreviewTree node={preview.tree} overrides={wizard.fileOverrides} {onOverride} />
-    </div>
+    <section class="card card--flush tree-card">
+      <div class="card__header toolbar">
+        <div class="search">
+          <span class="search__icon"><Icon name="search" size={14} /></span>
+          <input
+            class="input"
+            aria-label={t("preview.search")}
+            placeholder={t("preview.search")}
+            bind:value={query}
+          />
+          {#if query}
+            <button
+              class="btn btn--ghost btn--icon btn--sm"
+              aria-label={t("common.clear")}
+              onclick={() => (query = "")}
+            >
+              <Icon name="x" size={13} />
+            </button>
+          {/if}
+        </div>
+
+        <Segmented options={filters} value={status} onselect={(value) => (status = value)} />
+
+        <div class="row row--tight">
+          <button class="btn btn--sm" onclick={() => setExpanded(true)}>
+            {t("preview.expandAll")}
+          </button>
+          <button class="btn btn--sm" onclick={() => setExpanded(false)}>
+            {t("preview.collapseAll")}
+          </button>
+        </div>
+      </div>
+
+      {#if overrideCount > 0}
+        <div class="overrides">
+          <Icon name="sliders" size={13} />
+          <span class="overrides__title">{t("preview.overrides")}</span>
+          <span>{t("preview.overrides.count", { count: overrideCount })}</span>
+          <button class="btn btn--sm btn--ghost" onclick={() => (wizard.fileOverrides = {})}>
+            {t("preview.overrides.clear")}
+          </button>
+        </div>
+      {/if}
+
+      <div class="tree">
+        {#if !visibleTree}
+          <EmptyState icon="search" title={t("preview.noMatches")} />
+        {:else}
+          <PreviewTree
+            node={visibleTree}
+            overrides={wizard.fileOverrides}
+            {onOverride}
+            {expand}
+            forceExpanded={isFilterActive(filter)}
+          />
+        {/if}
+      </div>
+
+      {#if isFilterActive(filter) && visibleTree}
+        <p class="tree-footer">
+          {t("preview.matches", { count: formatCount(matchCount, language.current) })}
+        </p>
+      {/if}
+    </section>
   {/if}
-</section>
+</div>
 
 <style>
-  section {
+  .page {
+    height: 100%;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .tree-card {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    min-height: 320px;
+    flex: 1;
   }
 
-  .error {
-    color: var(--danger);
+  .toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
-  .note {
-    color: var(--fg-muted);
-    font-size: 13px;
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 200px;
   }
 
-  .note.warning {
-    color: var(--warning);
+  .search__icon {
+    position: absolute;
+    left: var(--space-4);
+    color: var(--fg-faint);
+    pointer-events: none;
+  }
+
+  .search .input {
+    padding-left: calc(var(--space-4) * 2 + 14px);
+    padding-right: 32px;
+  }
+
+  .search button {
+    position: absolute;
+    right: 3px;
+  }
+
+  .overrides {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-6);
+    border-bottom: 1px solid var(--border);
+    background: var(--accent-soft);
+    color: var(--accent-fg);
+    font-size: var(--text-sm);
+  }
+
+  .overrides__title {
+    font-weight: var(--weight-semibold);
   }
 
   .tree {
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 8px;
+    flex: 1;
     overflow: auto;
-    max-height: 60vh;
+    padding: var(--space-3) var(--space-2);
+  }
+
+  .tree-footer {
+    padding: var(--space-3) var(--space-6);
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    font-size: var(--text-xs);
   }
 </style>

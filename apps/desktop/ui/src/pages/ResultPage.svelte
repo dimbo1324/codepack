@@ -13,138 +13,323 @@
     openResultLocation,
     openReviewChecklist,
   } from "$lib/api/client";
-  import { t } from "$lib/i18n/index.svelte";
+  import Callout from "$lib/components/Callout.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
+  import Icon, { type IconName } from "$lib/components/Icon.svelte";
+  import Stat from "$lib/components/Stat.svelte";
+  import type { TranslationKey } from "$lib/i18n/en";
+  import { language, t } from "$lib/i18n/index.svelte";
+  import { pushToast, reportError } from "$lib/stores/toasts.svelte";
   import { goTo, wizard } from "$lib/stores/wizard.svelte";
+  import { copyText } from "$lib/util/clipboard";
+  import { baseName, formatCount } from "$lib/util/format";
 
-  let error = $state<string | null>(null);
-
-  async function reveal(path: string): Promise<void> {
-    error = null;
-    try {
-      await openResultLocation(path);
-    } catch (err) {
-      error = String(err);
-    }
+  interface ReportLink {
+    key: TranslationKey;
+    hint: TranslationKey;
+    icon: IconName;
+    open: (path: string) => Promise<void>;
   }
+
+  const reports: ReportLink[] = [
+    {
+      key: "result.openDashboard",
+      hint: "result.openDashboard.hint",
+      icon: "chart",
+      open: openDashboard,
+    },
+    {
+      key: "result.openOverview",
+      hint: "result.openOverview.hint",
+      icon: "eye",
+      open: openProjectOverview,
+    },
+    {
+      key: "result.openOnboarding",
+      hint: "result.openOnboarding.hint",
+      icon: "tree",
+      open: openOnboardingGuide,
+    },
+    {
+      key: "result.openReviewChecklist",
+      hint: "result.openReviewChecklist.hint",
+      icon: "check-circle",
+      open: openReviewChecklist,
+    },
+  ];
 
   /** One handler shared by all four "open a report" buttons: each just names which
    * extraction-and-open call to make, matching how the backend collapses the same
    * four commands onto one shared helper (`open_bundle_report`). */
-  async function openReport(open: (path: string) => Promise<void>, path: string): Promise<void> {
-    error = null;
+  async function open(action: (path: string) => Promise<void>, path: string): Promise<void> {
     try {
-      await open(path);
-    } catch (err) {
-      error = String(err);
+      await action(path);
+    } catch (error) {
+      reportError("result.openFailed", error);
     }
+  }
+
+  async function copyPath(path: string): Promise<void> {
+    const copied = await copyText(path);
+    pushToast(copied ? "success" : "danger", copied ? "common.copied" : "common.copyFailed");
   }
 </script>
 
-{#if wizard.exportResult}
+{#if !wizard.exportResult}
+  <div class="card">
+    <EmptyState icon="package" title={t("result.none")} text={t("result.noneText")}>
+      {#snippet action()}
+        <button class="btn btn--primary" onclick={() => goTo("export")}>{t("export.title")}</button>
+      {/snippet}
+    </EmptyState>
+  </div>
+{:else}
   {@const result = wizard.exportResult}
-  <section>
-    <h2>
-      {result.cancelled ? t("export.cancelled") : t("result.title")}
-    </h2>
-
-    {#if !result.successful}
-      <p class="warning">{t("result.incomplete")}</p>
-    {/if}
-
-    <ul class="stats">
-      <li>{t("result.filesCopied", { count: result.files_copied })}</li>
-      <li>{t("result.filesSkipped", { count: result.files_skipped })}</li>
-      {#if result.errors > 0}
-        <li class="danger">{t("result.errors", { count: result.errors })}</li>
-      {/if}
-      {#if result.critical_findings > 0}
-        <li class="danger">
-          {t("result.criticalFindings", { count: result.critical_findings })}
-        </li>
-      {/if}
-    </ul>
-
-    {#if result.archives.length > 0}
-      <ul class="archives">
-        {#each result.archives as archive (archive)}
-          <li><code>{archive}</code></li>
-        {/each}
-      </ul>
-    {/if}
-
-    <div class="actions">
-      {#if result.result_path}
-        {@const path = result.result_path}
-        <button class="primary" onclick={() => reveal(path)}>
-          {t("result.openFolder")}
-        </button>
-        <button onclick={() => openReport(openDashboard, path)}>
-          {t("result.openDashboard")}
-        </button>
-        <button onclick={() => openReport(openProjectOverview, path)}>
-          {t("result.openOverview")}
-        </button>
-        <button onclick={() => openReport(openOnboardingGuide, path)}>
-          {t("result.openOnboarding")}
-        </button>
-        <button onclick={() => openReport(openReviewChecklist, path)}>
-          {t("result.openReviewChecklist")}
-        </button>
-      {/if}
-      <button onclick={() => goTo("history")}>{t("result.viewHistory")}</button>
+  {@const tone = result.cancelled ? "warning" : result.successful ? "success" : "danger"}
+  <div class="stack">
+    <div class="page-header">
+      <div class="outcome">
+        <span class="outcome__icon outcome__icon--{tone}">
+          <Icon name={tone === "success" ? "check-circle" : "alert"} size={22} weight={1.6} />
+        </span>
+        <div>
+          <h1 class="page-title">
+            {result.cancelled
+              ? t("result.titleCancelled")
+              : result.successful
+                ? t("result.title")
+                : t("result.titleIncomplete")}
+          </h1>
+          <p class="page-lede">{t("result.lede")}</p>
+        </div>
+      </div>
+      <div class="row row--tight">
+        <button class="btn" onclick={() => goTo("export")}>{t("result.newExport")}</button>
+        <button class="btn" onclick={() => goTo("history")}>{t("result.viewHistory")}</button>
+      </div>
     </div>
 
-    {#if error}
-      <p class="danger">{error}</p>
+    {#if result.cancelled}
+      <Callout tone="warning">{t("result.cancelledText")}</Callout>
+    {:else if !result.successful}
+      <Callout tone="danger">{t("result.incomplete")}</Callout>
     {/if}
-  </section>
+
+    <div class="stats">
+      <Stat
+        label={t("result.stat.copied")}
+        value={formatCount(result.files_copied, language.current)}
+        icon="file"
+        tone="success"
+      />
+      <Stat
+        label={t("result.stat.skipped")}
+        value={formatCount(result.files_skipped, language.current)}
+        icon="eye-off"
+      />
+      <Stat
+        label={t("result.stat.errors")}
+        value={result.errors}
+        icon="alert"
+        tone={result.errors > 0 ? "danger" : "neutral"}
+      />
+      <Stat
+        label={t("result.stat.critical")}
+        value={result.critical_findings}
+        icon="shield"
+        tone={result.critical_findings > 0 ? "danger" : "neutral"}
+      />
+    </div>
+
+    {#if result.result_path}
+      {@const path = result.result_path}
+      <section class="card">
+        <div class="card__body bundle">
+          <span class="bundle__icon"><Icon name="package" size={20} /></span>
+          <div class="bundle__text">
+            <p class="bundle__name">{baseName(path)}</p>
+            <p class="path selectable">{path}</p>
+          </div>
+          <div class="row row--tight">
+            <button class="btn btn--sm" onclick={() => copyPath(path)}>
+              <Icon name="copy" size={13} />
+              {t("result.copyPath")}
+            </button>
+            <button class="btn btn--primary" onclick={() => open(openResultLocation, path)}>
+              <Icon name="folder-open" size={14} />
+              {t("result.openFolder")}
+            </button>
+          </div>
+        </div>
+
+        {#if result.archives.length > 0}
+          <div class="card__header archives">
+            <span class="text-muted text-sm">{t("result.archives")}</span>
+          </div>
+          <ul class="archive-list">
+            {#each result.archives as archive (archive)}
+              <li><code class="selectable">{archive}</code></li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+
+      <section class="card">
+        <div class="card__header">
+          <div>
+            <h2 class="card__title">{t("result.reports")}</h2>
+            <p class="card__subtitle">{t("result.reports.lede")}</p>
+          </div>
+        </div>
+        <div class="card__body reports">
+          {#each reports as report (report.key)}
+            <button class="report" onclick={() => open(report.open, path)}>
+              <span class="report__icon"><Icon name={report.icon} size={16} /></span>
+              <span class="report__text">
+                <span class="report__title">{t(report.key)}</span>
+                <span class="report__hint">{t(report.hint)}</span>
+              </span>
+              <span class="report__go"><Icon name="external" size={14} /></span>
+            </button>
+          {/each}
+        </div>
+      </section>
+    {/if}
+  </div>
 {/if}
 
 <style>
-  section {
+  .outcome {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
-    max-width: 720px;
+    align-items: flex-start;
+    gap: var(--space-5);
   }
 
-  h2 {
-    margin: 0;
-    font-size: 18px;
+  .outcome__icon {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    flex: none;
+    border-radius: var(--radius-md);
   }
 
-  ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 13px;
+  .outcome__icon--success {
+    background: var(--success-soft);
+    color: var(--success);
   }
 
-  .stats {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-
-  .archives code {
-    font-size: 12px;
-    word-break: break-all;
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .warning {
+  .outcome__icon--warning {
+    background: var(--warning-soft);
     color: var(--warning);
   }
 
-  .danger {
+  .outcome__icon--danger {
+    background: var(--danger-soft);
     color: var(--danger);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .bundle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    flex-wrap: wrap;
+  }
+
+  .bundle__icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: var(--radius-md);
+    background: var(--accent-soft);
+    color: var(--accent-fg);
+  }
+
+  .bundle__text {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .bundle__name {
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    word-break: break-all;
+  }
+
+  .archives {
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .archive-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-6) var(--space-6);
+    font-size: var(--text-sm);
+    word-break: break-all;
+  }
+
+  .reports {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .report {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    text-align: left;
+    transition:
+      border-color var(--duration-fast) var(--ease-out),
+      background var(--duration-fast) var(--ease-out);
+  }
+
+  .report:hover {
+    border-color: var(--accent);
+    background: var(--surface-hover);
+  }
+
+  .report__icon {
+    flex: none;
+    color: var(--accent);
+  }
+
+  .report__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .report__title {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+  }
+
+  .report__hint {
+    color: var(--fg-muted);
+    font-size: var(--text-xs);
+    line-height: var(--leading-normal);
+  }
+
+  .report__go {
+    flex: none;
+    color: var(--fg-faint);
   }
 </style>

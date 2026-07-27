@@ -42,4 +42,7 @@ export function t(key: TranslationKey, params?: Record<string, string | number>)
 
 export function setLanguage(next: Language): void {
   language.current = next;
+  // Kept in sync with the document so assistive technology, hyphenation and the
+  // browser's own text handling see the same language the user does.
+  document.documentElement.lang = next;
 }

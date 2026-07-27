@@ -5,143 +5,239 @@
   // is the one this page exists for.
   import { readProjectProfile } from "$lib/api/client";
   import type { ProjectProfileSummary } from "$lib/api/types";
-  import { t } from "$lib/i18n/index.svelte";
-  import { wizard } from "$lib/stores/wizard.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import Stat from "$lib/components/Stat.svelte";
+  import { riskLabel } from "$lib/i18n/enums";
+  import { language, t } from "$lib/i18n/index.svelte";
+  import { reportError } from "$lib/stores/toasts.svelte";
+  import { goTo, wizard } from "$lib/stores/wizard.svelte";
+  import { formatBytes, formatCount } from "$lib/util/format";
 
   let summary = $state<ProjectProfileSummary | null>(null);
-  let error = $state<string | null>(null);
   let loading = $state(false);
+
+  // Reading a profile extracts the bundle, so the call is slow enough for two of them to
+  // overlap when a second export finishes while the first read is still running. The
+  // generation counter is what stops the older answer from winning the race and
+  // describing a bundle the user has already replaced.
+  let generation = 0;
 
   $effect(() => {
     const path = wizard.exportResult?.result_path;
+    generation += 1;
+    const mine = generation;
     if (!path) {
       summary = null;
+      loading = false;
       return;
     }
     loading = true;
-    error = null;
     readProjectProfile(path)
       .then((loaded) => {
-        summary = loaded;
+        if (mine === generation) summary = loaded;
       })
-      .catch((err: unknown) => {
-        error = String(err);
+      .catch((error: unknown) => {
+        if (mine === generation) reportError("analytics.loadFailed", error);
       })
       .finally(() => {
-        loading = false;
+        if (mine === generation) loading = false;
       });
   });
 
-  /** Binary units, matching `codepack_tokens::format_bytes` so the GUI and the reports
-   * quote the same number the same way. */
-  function formatBytes(size: number): string {
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let value = size;
-    for (let index = 0; index < units.length; index += 1) {
-      if (value < 1024 || index === units.length - 1) {
-        return index === 0
-          ? `${Math.trunc(value)} ${units[index]}`
-          : `${value.toFixed(2)} ${units[index]}`;
-      }
-      value /= 1024;
-    }
-    return `${size} B`;
-  }
-
-  function riskTone(level: string): string {
+  /** The scale the reports themselves use. `unknown` maps to neutral rather than to
+   * "low": claiming safety the bundle never asserted is the one wrong answer here. */
+  function riskTone(level: string): "success" | "warning" | "danger" | "neutral" {
     if (level === "high" || level === "critical") return "danger";
     if (level === "medium") return "warning";
-    return "ok";
+    if (level === "low") return "success";
+    return "neutral";
   }
+
+  const riskWidth = $derived.by(() => {
+    switch (summary?.risk_level) {
+      case "low":
+        return 25;
+      case "medium":
+        return 55;
+      case "high":
+        return 80;
+      case "critical":
+        return 100;
+      default:
+        return 0;
+    }
+  });
 </script>
 
-<section>
-  <h2>{t("analytics.title")}</h2>
+<div class="stack">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{t("analytics.title")}</h1>
+      <p class="page-lede">{t("analytics.lede")}</p>
+    </div>
+  </div>
 
   {#if loading}
-    <p class="muted">{t("common.loading")}</p>
-  {:else if error}
-    <p class="danger">{error}</p>
+    <div class="card"><div class="loading"><span class="spinner"></span></div></div>
   {:else if !summary}
-    <p class="muted">{t("analytics.none")}</p>
+    <div class="card">
+      <EmptyState icon="chart" title={t("analytics.none")} text={t("analytics.noneText")}>
+        {#snippet action()}
+          <button class="btn btn--primary" onclick={() => goTo("export")}>
+            {t("export.title")}
+          </button>
+        {/snippet}
+      </EmptyState>
+    </div>
   {:else}
     {@const profile = summary}
-    <dl>
-      <dt>{t("analytics.projectType")}</dt>
-      <dd>{profile.project_type || "—"}</dd>
+    <div class="stats">
+      <Stat
+        label={t("analytics.stat.files")}
+        value={formatCount(profile.files, language.current)}
+        icon="file"
+      />
+      <Stat
+        label={t("analytics.stat.folders")}
+        value={formatCount(profile.folders, language.current)}
+        icon="folder"
+      />
+      <Stat
+        label={t("analytics.stat.size")}
+        value={formatBytes(profile.total_size_bytes)}
+        icon="package"
+      />
+    </div>
 
-      <dt>{t("analytics.stack")}</dt>
-      <dd>{profile.detected_stack.length > 0 ? profile.detected_stack.join(", ") : "—"}</dd>
+    <div class="split">
+      <section class="card">
+        <div class="card__header">
+          <h2 class="card__title">{t("analytics.riskLevel")}</h2>
+          <span class="badge badge--{riskTone(profile.risk_level)}">
+            {profile.risk_level ? riskLabel(profile.risk_level) : t("common.none")}
+          </span>
+        </div>
+        <div class="card__body stack--tight stack">
+          <div class="meter">
+            <div
+              class="meter__fill meter__fill--{riskTone(profile.risk_level)}"
+              style:width="{riskWidth}%"
+            ></div>
+          </div>
+          {#if profile.risk_reasons.length > 0}
+            <p class="reasons__heading">{t("analytics.riskReasons")}</p>
+            <ul class="reasons">
+              {#each profile.risk_reasons as reason (reason)}
+                <li>
+                  <Icon name="alert" size={13} />
+                  <span class="selectable">{reason}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      </section>
 
-      <dt>{t("analytics.riskLevel")}</dt>
-      <dd>
-        <span class="badge {riskTone(profile.risk_level)}">{profile.risk_level || "—"}</span>
-      </dd>
-
-      {#if profile.risk_reasons.length > 0}
-        <dt>{t("analytics.riskReasons")}</dt>
-        <dd>
-          <ul>
-            {#each profile.risk_reasons as reason (reason)}
-              <li>{reason}</li>
-            {/each}
-          </ul>
-        </dd>
-      {/if}
-
-      <dt>{t("nav.analytics")}</dt>
-      <dd>
-        {t("analytics.counts", {
-          files: profile.files,
-          folders: profile.folders,
-          size: formatBytes(profile.total_size_bytes),
-        })}
-      </dd>
-    </dl>
+      <section class="card">
+        <div class="card__header">
+          <h2 class="card__title">{t("analytics.stack")}</h2>
+        </div>
+        <div class="card__body stack--tight stack">
+          <dl class="kv">
+            <dt>{t("analytics.projectType")}</dt>
+            <dd>{profile.project_type || t("common.none")}</dd>
+          </dl>
+          {#if profile.detected_stack.length > 0}
+            <div class="chips">
+              {#each profile.detected_stack as item (item)}
+                <span class="chip">{item}</span>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-muted text-sm">{t("common.none")}</p>
+          {/if}
+        </div>
+      </section>
+    </div>
   {/if}
-</section>
+</div>
 
 <style>
-  section {
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  .meter {
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+    overflow: hidden;
+  }
+
+  .meter__fill {
+    height: 100%;
+    border-radius: inherit;
+    transition: width var(--duration-slow) var(--ease-out);
+    background: var(--fg-faint);
+  }
+
+  .meter__fill--success {
+    background: var(--success);
+  }
+
+  .meter__fill--warning {
+    background: var(--warning);
+  }
+
+  .meter__fill--danger {
+    background: var(--danger);
+  }
+
+  .reasons__heading {
+    color: var(--fg-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+
+  .reasons {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-width: 720px;
+    gap: var(--space-3);
+    font-size: var(--text-base);
   }
 
-  h2 {
-    margin: 0;
-    font-size: 18px;
+  .reasons li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    color: var(--fg-secondary);
+    line-height: var(--leading-normal);
   }
 
-  dl {
+  .reasons :global(svg) {
+    margin-top: 3px;
+    color: var(--warning);
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .loading {
     display: grid;
-    grid-template-columns: minmax(120px, auto) 1fr;
-    gap: 8px 16px;
-    margin: 0;
-    font-size: 13px;
-  }
-
-  dt {
-    color: var(--fg-muted);
-  }
-
-  dd {
-    margin: 0;
-  }
-
-  dd ul {
-    list-style: disc;
-    margin: 0;
-    padding-left: 18px;
-  }
-
-  .muted {
-    color: var(--fg-muted);
-    font-size: 13px;
-  }
-
-  .danger {
-    color: var(--danger);
+    place-items: center;
+    padding: var(--space-10);
   }
 </style>
