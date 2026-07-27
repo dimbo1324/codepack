@@ -17,7 +17,9 @@ use serde::Serialize;
 use crate::classify;
 use crate::constants;
 use crate::error::{Result, SecurityError};
-use crate::patterns::{confidence_rank, entropy, keyword, prefilter, provider, risky_code};
+use crate::patterns::{
+    confidence_rank, credentials, entropy, keyword, prefilter, provider, risky_code,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -135,12 +137,18 @@ struct SecretHit {
 ///    since people label their keys. The corpus test could not see that regression: it
 ///    measures detection as a boolean per line, so rule id and severity are invisible to
 ///    precision/recall/F1.
-/// 3. **Otherwise the weak keyword hit wins over entropy.** Entropy carries no provider
-///    identity and a fixed `low` confidence, so it adds nothing to a line the keyword
-///    cascade already described — and legacy, which has no entropy detector at all,
-///    reports exactly `secret_like_line` there.
-/// 4. **Entropy is the last resort**, which is where its whole recall contribution lives:
-///    lines no keyword and no provider signature can see.
+/// 3. **Otherwise the weak keyword hit wins over the structural credential rules and
+///    entropy.** Entropy and the credential rules carry no provider identity, so they
+///    add nothing to a line the keyword cascade already described — and legacy, which
+///    has neither, reports exactly `secret_like_line` there.
+/// 4. **Otherwise a structural credential match wins over entropy** (Finding 2,
+///    2026-07-27 audit): a password's *position* inside a URL, or an HTTP
+///    `Basic`/`Digest` auth token. Both are more specific and more precise than a
+///    generic high-entropy guess, so they are checked first — but only reached once
+///    every keyword-based rule above has passed, which is why a `Bearer` line never
+///    reaches this step: it was already caught by rule 1's `has_secret_with_value`.
+/// 5. **Entropy is the last resort**, which is where its whole recall contribution lives:
+///    lines nothing above can see.
 ///
 /// The redaction applied to the surviving hit's message is unaffected by this choice —
 /// [`redacted_message`] masks every detected span regardless of which hit is reported.
@@ -189,7 +197,26 @@ fn collect_secret_hits(line: &str) -> Vec<SecretHit> {
         }];
     }
 
-    // Rule 4: entropy, on lines nothing else recognised.
+    // Rule 4: structural credential detectors that need no keyword context at all.
+    // Not gated by the prefilter: neither "://" nor "Basic"/"Digest" is in its literal
+    // set (adding them would help little — every line reaching this point already
+    // cleared every prefilter-gated check above without matching), and both matchers
+    // are cheap single-pass scans, the same order of cost as the keyword cascade
+    // itself.
+    if !credentials::find_url_credentials(line).is_empty() {
+        return vec![SecretHit {
+            rule: "url-credentials",
+            confidence: "high",
+        }];
+    }
+    if !credentials::find_http_auth_tokens(line).is_empty() {
+        return vec![SecretHit {
+            rule: "http-auth-credentials",
+            confidence: "high",
+        }];
+    }
+
+    // Rule 5: entropy, on lines nothing else recognised.
     entropy::entropy_findings(line)
         .into_iter()
         .next()
@@ -752,6 +779,99 @@ mod tests {
                 "provider token leaked through the surviving key prefix: {}",
                 finding.message
             );
+        }
+    }
+
+    // --- Finding 2 (2026-07-27 audit): the scanner now sees connection-string
+    // passwords and Basic/Digest auth, neither of which any prior detector caught. ---
+
+    #[test]
+    fn a_password_inside_a_connection_string_is_now_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "app.py",
+            "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let hit = result
+            .findings
+            .iter()
+            .find(|f| f.rule == "url-credentials")
+            .expect("url-credentials finding present");
+        assert!(!hit.message.contains("hunter2fakepass"));
+    }
+
+    #[test]
+    fn a_basic_auth_header_is_now_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "app.py",
+            "headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let hit = result
+            .findings
+            .iter()
+            .find(|f| f.rule == "http-auth-credentials")
+            .expect("http-auth-credentials finding present");
+        assert!(!hit.message.contains("ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk"));
+    }
+
+    #[test]
+    fn a_url_with_no_credentials_is_not_flagged() {
+        // The audit's own suggested negative: the '@' sits in the path, not the
+        // authority, because a '/' appears first -- structurally not a credential.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(dir.path(), "notes.txt", "http://host/a:b@c\n");
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        assert!(
+            result.findings.iter().all(|f| f.rule != "url-credentials"),
+            "a path that only looks like userinfo must not be flagged"
+        );
+    }
+
+    #[test]
+    fn the_audits_own_reproduction_is_now_fully_detected() {
+        // AUDIT-2026-07-27.md, finding 2's table: of four planted secrets, only two were
+        // found before this fix. All four must be found now.
+        let dir = tempfile::tempdir().unwrap();
+        let file = write_file(
+            dir.path(),
+            "app.py",
+            "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')\n\
+             AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n\
+             headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}\n\
+             api_key = \"sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD\"\n",
+        );
+
+        let result = scan_project(dir.path(), &[file], None, &no_cancel()).unwrap();
+        let secrets: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PotentialSecret)
+            .collect();
+        assert_eq!(
+            secrets.len(),
+            4,
+            "expected all four planted secrets to be found, got {secrets:?}"
+        );
+        for finding in &secrets {
+            for raw in [
+                "hunter2fakepass",
+                "AKIAIOSFODNN7EXAMPLE",
+                "ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk",
+                "sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD",
+            ] {
+                assert!(
+                    !finding.message.contains(raw),
+                    "{raw} leaked into a finding message: {finding:?}"
+                );
+            }
         }
     }
 

@@ -34,30 +34,103 @@
 //! and its unquoted alternative cannot start on a `"` at all (excluded by
 //! `[^\s'"\n]`). See `mismatched_quote_style_does_not_falsely_close_early` below — this
 //! is verified by test, not assumed.
+//!
+//! ## Finding 1, 2026-07-27 audit: this pass used to redact less than the scanner found
+//!
+//! Until this fix, content redaction consulted only `keyword_scan::REDACT_ROOTS` — legacy's
+//! original, narrow keyword list — while the *scanner* had grown provider signatures
+//! and a wider keyword set (`SCAN_ONLY_ROOTS`) in S3. The result: a line the scanner
+//! itself reported as `critical` (a bare `AWS_ACCESS_KEY_ID=...`, or any
+//! `DATABASE_URL=`/`JWT_SECRET=`/`ACCESS_KEY=`/`CLIENT_SECRET=` assignment) reached
+//! `03_text_dump.txt` — the file built specifically to hand a project to an AI
+//! assistant — completely unredacted. The product already knew the line was secret and
+//! wrote it out anyway.
+//!
+//! [`find_redaction_spans`] is content redaction's own, wider span set: the full scan
+//! keyword vocabulary, HTTP auth tokens (`Bearer`/`Basic`/`Digest`), URL-embedded
+//! passwords, and every provider/Telegram signature the scanner already recognises.
+//! Entropy is the one deliberate exclusion — see that function's doc comment for why.
+//!
+//! Owner decision 2026-07-27 (`docs/decisions/open-questions.md`): this widening is
+//! intentional and diverges from legacy, which redacted keyword-only. Golden parity is
+//! unaffected — `03_text_dump.txt` is checked for presence only, never byte-compared
+//! (decision 2026-07-25).
 
-use crate::patterns::keyword::{KeySpacing, find_secret_spans, redact_value_after_separator};
+use crate::patterns::keyword::{KeySpacing, redact_value_after_separator};
+use crate::patterns::keyword_scan::{find_bearer_tokens, find_keyword_assignments, scan_roots};
+use crate::patterns::{credentials, prefilter, provider};
 
-/// Rewrites one matched `KEY: value` / `KEY=value` / `BEARER <token>` span.
+/// Every span content redaction must replace on one line.
+///
+/// Order does not matter to the caller — [`redact_line_spans`] sorts and deduplicates
+/// overlaps — but the set itself is the fix for Finding 1: keyword assignments use
+/// [`scan_roots`] (the scanner's full vocabulary), not the narrower `keyword_scan::REDACT_ROOTS`
+/// legacy shipped, and provider/Telegram/HTTP-auth/URL-credential spans are included at
+/// all, which legacy never had to consider because none of those detectors existed yet.
+///
+/// **Entropy is deliberately excluded**, the only detector left out. It is this crate's
+/// highest false-positive-risk detector by its own module doc — base64 assets, hashes,
+/// UUIDs and minified code all clear its thresholds — and that risk is acceptable for a
+/// *scan finding*, where a human reviews a short list before acting on it. It is not
+/// acceptable for *silently rewriting exported file content* nobody asked to have
+/// edited: an entropy false positive in a scan report is a line to double-check, the
+/// same false positive in content redaction is unannounced data corruption in a file
+/// the project's owner may never open, and it would be triggered by files entropy was
+/// never asked to police (arbitrary text, other people's source).
+fn find_redaction_spans(line: &str) -> Vec<(usize, usize)> {
+    let mut spans = find_keyword_assignments(line, &scan_roots());
+    spans.extend(find_bearer_tokens(line));
+    spans.extend(credentials::find_http_auth_tokens(line));
+    spans.extend(credentials::find_url_credentials(line));
+    // Gated exactly like `scan::collect_secret_hits`'s own provider check: the prefilter
+    // is a fixed literal set the provider signatures are anchored on, so a line with no
+    // hit cannot contain a provider match.
+    if prefilter::has_hit(line) {
+        spans.extend(
+            provider::find_provider_matches(line)
+                .into_iter()
+                .map(|found| (found.start, found.end)),
+        );
+    }
+    // Never gated by the prefilter — same reason as the scanner: Telegram's shape has
+    // no distinctive literal prefix to anchor on.
+    spans.extend(
+        provider::find_telegram_matches(line)
+            .into_iter()
+            .map(|found| (found.start, found.end)),
+    );
+    spans
+}
+
+/// Rewrites one matched span: `KEY: value` / `KEY=value` keeps the key name, everything
+/// else (`BEARER`/`Basic`/`Digest <token>`, a URL password, a provider or Telegram
+/// signature) has no key to name and falls through to the fixed placeholder.
 ///
 /// Shares [`redact_value_after_separator`] with the scan-report path (Q16). Keeping two
 /// copies is what let the content path — the more dangerous of the two, since its output
 /// is handed to whoever receives the bundle — retain the leak after the message path was
 /// fixed: `SECRET: "dXNlcjpwYXNzd29yZA=="` used to yield
-/// `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential.
+/// `SECRET: "dXNlcjpwYXNzd29yZA=<REDACTED>`, which decodes to a real credential. The
+/// same guard is why a base64 `Basic` token containing its own `=` padding cannot leak
+/// either: [`redact_value_after_separator`] treats that `=` exactly as it would a real
+/// assignment operator and masks the run in front of it via `sanitize_key_prefix`,
+/// which is the correct, conservative outcome even though it produces a slightly
+/// unlovely doubled placeholder rather than a single clean one.
 fn replace_match(matched: &str) -> String {
     redact_value_after_separator(
         matched,
         // The match span starts at the keyword itself, and legacy preserved any space
         // before the separator; golden references contain that spelling.
         KeySpacing::Preserve,
-        // A `BEARER <token>` span carries no key at all, so there is nothing to name.
+        // A span with no key of its own — a bare token, a provider signature, a URL
+        // password — has nothing to name.
         "<REDACTED_SECRET>",
     )
 }
 
-/// Replaces `KEY: value` / `KEY=value` / `BEARER <token>` shapes in `text` with a
-/// redacted placeholder. Applied to file content before it is included in an export or
-/// copied to the clipboard — see `BLUEPRINT.md` §A.4.2.
+/// Replaces every span [`find_redaction_spans`] finds with a redacted placeholder.
+/// Applied to file content before it is included in an export or copied to the
+/// clipboard — see `BLUEPRINT.md` §A.4.2.
 ///
 /// Works line by line because the shapes themselves are line-scoped: the original
 /// patterns excluded `\n` from every value character class, so a value could never span
@@ -72,15 +145,16 @@ pub fn redact_secrets(text: &str) -> String {
 
 /// Replaces every secret span on one line, left to right.
 fn redact_line_spans(line: &str) -> String {
-    let spans = find_secret_spans(line);
+    let spans = find_redaction_spans(line);
     if spans.is_empty() {
         return line.to_string();
     }
 
-    // Applying the keyword spans first and the bearer spans after would shift offsets,
-    // so all spans are sorted and applied in one pass. Overlaps cannot occur in
-    // practice — a bearer token is not a `key=value` — but a later span starting inside
-    // an earlier one is skipped rather than corrupting the output.
+    // Several detectors can claim overlapping or nested spans on the same line now
+    // (a keyword assignment's value can itself contain a URL-credential span, for
+    // instance), so all spans are sorted and applied in one pass and a later span
+    // starting inside an already-applied one is skipped rather than corrupting the
+    // output — the outer, earlier-starting span already covers it.
     let mut ordered = spans;
     ordered.sort_unstable();
 
@@ -196,5 +270,83 @@ mod tests {
     fn no_placeholder_leaks_original_value() {
         let redacted = redact_secrets(r#"SECRET="super-sensitive-value-123""#);
         assert!(!redacted.contains("super-sensitive-value-123"));
+    }
+
+    // --- Finding 1 (2026-07-27 audit): content redaction now matches what the scanner
+    // finds, not just legacy's narrower keyword list. ---
+
+    #[test]
+    fn scan_only_keywords_are_now_redacted_in_exported_content() {
+        // Before this fix these four reached the scanner (as `medium`/`low` findings)
+        // but never `redact_secrets` at all — the exact gap the audit's `SCAN_ONLY_ROOTS`
+        // comment ("scanned for but never redacted") named directly.
+        assert_eq!(
+            redact_secrets("DATABASE_URL=postgres://user:pass@host:5432/db"),
+            "DATABASE_URL=<REDACTED>"
+        );
+        assert_eq!(
+            redact_secrets("JWT_SECRET=abcdef0123456789"),
+            "JWT_SECRET=<REDACTED>"
+        );
+        assert_eq!(
+            redact_secrets("ACCESS_KEY=abcdef0123456789"),
+            "ACCESS_KEY=<REDACTED>"
+        );
+        assert_eq!(
+            redact_secrets("CLIENT_SECRET=abcdef0123456789"),
+            "CLIENT_SECRET=<REDACTED>"
+        );
+    }
+
+    #[test]
+    fn a_bare_provider_signature_is_redacted_from_exported_content_even_with_no_keyword() {
+        // The audit's own repro: AWS_ACCESS_KEY_ID= has no REDACT_ROOTS-bounded keyword
+        // at all ("ACCESS_KEY" is glued to the identifier by underscores on both sides),
+        // so only the provider signature can catch it. Before this fix it reached
+        // 03_text_dump.txt verbatim despite the scanner reporting it `critical`.
+        let redacted = redact_secrets("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE");
+        assert!(!redacted.contains("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn a_url_password_is_redacted_from_exported_content_with_no_keyword_at_all() {
+        // Finding 2's structural detector, wired into content redaction too: no
+        // REDACT_ROOTS/scan_roots keyword appears anywhere on this line.
+        let redacted = redact_secrets(
+            "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')",
+        );
+        assert!(!redacted.contains("hunter2fakepass"));
+        assert!(
+            redacted.contains("admin"),
+            "the username is not a secret and should survive"
+        );
+    }
+
+    #[test]
+    fn basic_auth_is_redacted_from_exported_content() {
+        let redacted =
+            redact_secrets("headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}");
+        assert!(!redacted.contains("ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk"));
+    }
+
+    #[test]
+    fn the_audits_own_four_line_reproduction_leaves_no_secret_in_exported_content() {
+        // The exact fixture from AUDIT-2026-07-27.md, finding 1, reproduced verbatim.
+        let source = "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')\n\
+                       AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n\
+                       headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}\n\
+                       api_key = \"sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD\"\n";
+        let redacted = redact_secrets(source);
+        for secret in [
+            "hunter2fakepass",
+            "AKIAIOSFODNN7EXAMPLE",
+            "ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk",
+            "sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD",
+        ] {
+            assert!(
+                !redacted.contains(secret),
+                "{secret} leaked into: {redacted}"
+            );
+        }
     }
 }

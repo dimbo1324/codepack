@@ -1,4 +1,5 @@
 pub mod code_shape;
+pub mod credentials;
 pub mod entropy;
 pub mod keyword;
 pub(crate) mod keyword_scan;

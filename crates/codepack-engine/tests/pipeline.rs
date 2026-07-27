@@ -131,6 +131,70 @@ fn a_full_run_produces_an_archive_a_real_manifest_and_a_storage_row_then_cleans_
     );
 }
 
+/// Finding 1, 2026-07-27 audit, reproduced end to end through the real pipeline: on
+/// default settings (`redact_secrets: true`), a file carrying a connection-string
+/// password, a bare AWS access key, a `Basic` auth header, and an `api_key` assignment
+/// must not carry any of those four secrets into `03_text_dump.txt` — the artifact
+/// built specifically to hand a project to an AI assistant. This test fails on the
+/// code as it stood before the fix (only the last of the four was ever redacted).
+#[test]
+fn planted_secrets_never_reach_the_text_dump() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(
+        source.path().join("app.py"),
+        "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')\n\
+         AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n\
+         headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}\n\
+         api_key = \"sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD\"\n",
+    )
+    .unwrap();
+    init_git_repo(source.path());
+
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    // Explicit rather than relying on Config::default() staying this way by accident:
+    // this test's whole point is the default-settings reproduction from the audit.
+    let config = Config {
+        redact_secrets: true,
+        ..Config::default()
+    };
+    let cancel = CancellationToken::new();
+    let (tx, _rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+    assert!(outcome.successful, "copy_stats = {:?}", outcome.copy_stats);
+
+    // The scanner must still have flagged all four, confirming this is the "product
+    // already knows" scenario the audit described, not a case where nothing was found.
+    assert!(
+        outcome.copy_stats.errors == 0,
+        "export itself must succeed regardless of what the scanner finds"
+    );
+
+    let dump = read_zip_entry(&outcome.paths.final_zip, "reports/03_text_dump.txt");
+    for secret in [
+        "hunter2fakepass",
+        "AKIAIOSFODNN7EXAMPLE",
+        "ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk",
+        "sk-projFAKEfghijklmnopqrstuvwxyz1234567890ABCD",
+    ] {
+        assert!(
+            !dump.contains(secret),
+            "{secret} leaked into 03_text_dump.txt, the file handed to an AI assistant"
+        );
+    }
+}
+
 #[test]
 fn keep_staging_folder_true_leaves_the_staging_tree_in_place() {
     let source = tempfile::tempdir().unwrap();

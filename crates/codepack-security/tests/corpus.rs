@@ -19,7 +19,7 @@
 //! `.ai/universal/06-quality-and-testing.md` and `.ai/universal/08-rules-evolution.md`.
 //! A recall drop here is a defect to report, never a reason to edit the corpus.
 
-use codepack_security::patterns::{entropy, keyword, prefilter, provider};
+use codepack_security::patterns::{credentials, entropy, keyword, prefilter, provider};
 
 /// Legacy-parity detection: only the keyword cascade legacy already had.
 fn parity_detect(line: &str) -> bool {
@@ -27,12 +27,12 @@ fn parity_detect(line: &str) -> bool {
 }
 
 /// Full-mode detection: parity plus provider signatures (prefilter-gated, matching
-/// `scan::collect_secret_hits`'s own gating exactly) plus the always-on telegram and
-/// entropy passes.
+/// `scan::collect_secret_hits`'s own gating exactly), the always-on telegram pass, the
+/// structural credential detectors added for Finding 2 (2026-07-27 audit), and entropy.
 ///
 /// The early return on a parity hit is not just a short-circuit — it mirrors
 /// `scan::collect_secret_hits`'s precedence rule, where a keyword hit suppresses every
-/// provider/entropy hit on the same line (legacy emits at most one finding per line).
+/// later rule's hit on the same line (legacy emits at most one finding per line).
 /// Because that rule only ever collapses *duplicates* on an already-detected line, it
 /// cannot change any cell of this matrix: a line detected by parity stays detected.
 fn full_detect(line: &str) -> bool {
@@ -43,6 +43,12 @@ fn full_detect(line: &str) -> bool {
         return true;
     }
     if !provider::find_telegram_matches(line).is_empty() {
+        return true;
+    }
+    if !credentials::find_url_credentials(line).is_empty() {
+        return true;
+    }
+    if !credentials::find_http_auth_tokens(line).is_empty() {
         return true;
     }
     !entropy::entropy_findings(line).is_empty()
@@ -93,6 +99,16 @@ const CORPUS: &[(&str, bool)] = &[
     ),
     (r#"signature = "zX3kQ9mPv7wR2tY8bN4cJ6hF3sD0aE9gU8i""#, true),
     ("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4", true),
+    // --- Finding 2 (2026-07-27 audit): structural credential detection, parity
+    // structurally cannot see either shape (no keyword anywhere on the line). ---
+    (
+        "db.connect('postgres://admin:hunter2fakepass@host/db?sslmode=require')",
+        true,
+    ),
+    (
+        "headers = {'Authorization': 'Basic ZmFrZXVzZXI6ZmFrZXBhc3N3b3Jk'}",
+        true,
+    ),
     // --- Negatives: ordinary code/text that must not be flagged by either mode. ---
     ("let counter = 0;", false),
     ("def calculate_total(a, b): return a + b", false),
@@ -116,6 +132,17 @@ const CORPUS: &[(&str, bool)] = &[
     // context: flagging them would drop precision below 1.000 (invariant I9).
     ("build_id = aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde", false),
     ("sha256sum: aaaaaaaaaaaaaaaaaaaaB7cB7cB7cB7cB7cB7cde", false),
+    // Finding 2's own suggested negative: the '@' sits in the *path*, not the
+    // authority, because a '/' appears before it — structurally not a credential, and
+    // exactly the shape a naive "look for user:pass@" rule would have false-positived
+    // on.
+    ("http://host/a:b@c", false),
+    // A username with no password, and a plain URL with no userinfo at all.
+    ("https://readonly@cdn.example.com/assets", false),
+    ("https://example.com/docs/getting-started", false),
+    // The word "Basic"/"Digest" with no token-shaped value after it.
+    ("Basic training starts Monday", false),
+    ("run a digest of the week's changes", false),
 ];
 
 struct Metrics {

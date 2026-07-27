@@ -111,7 +111,11 @@ fn match_root_at(line: &str, start: usize, root: KeywordRoot) -> Option<usize> {
 /// character. Every root begins and ends with a letter, so in practice this means "not
 /// glued to a longer identifier" — `MY_API_KEY` is deliberately *not* a match, matching
 /// the original `\b(…)\b`.
-fn is_word_bounded(line: &str, start: usize, end: usize) -> bool {
+///
+/// `pub(crate)`: shared with [`crate::patterns::credentials`], which needs the exact
+/// same boundary rule for `BASIC`/`DIGEST` — a second, drifted copy of a security
+/// boundary check is the precise failure class Finding 1 (2026-07-27 audit) came from.
+pub(crate) fn is_word_bounded(line: &str, start: usize, end: usize) -> bool {
     let before_is_word = line[..start].chars().next_back().is_some_and(is_word_char);
     let after_is_word = line[end..].chars().next().is_some_and(is_word_char);
     !before_is_word && !after_is_word
@@ -141,7 +145,9 @@ pub(crate) fn contains_root(line: &str, roots: &[KeywordRoot]) -> bool {
 }
 
 /// Horizontal whitespace, the `\s*` around an assignment operator.
-fn skip_spaces(bytes: &[u8], from: usize) -> usize {
+///
+/// `pub(crate)`: shared with [`crate::patterns::credentials`] — see [`is_word_bounded`].
+pub(crate) fn skip_spaces(bytes: &[u8], from: usize) -> usize {
     let mut index = from;
     while index < bytes.len() && (bytes[index] == b' ' || bytes[index] == b'\t') {
         index += 1;
@@ -261,10 +267,17 @@ const BEARER: &str = "BEARER";
 
 /// Minimum token length for a `BEARER` mention to count, from the original's `{16,}`.
 /// Short words after `Bearer` are prose, not credentials.
-const BEARER_MIN_TOKEN_LEN: usize = 16;
+///
+/// `pub(crate)`: [`crate::patterns::credentials::find_http_auth_tokens`] reuses this
+/// exact threshold for `Basic`/`Digest`, rather than defining its own copy that could
+/// silently drift from this one.
+pub(crate) const BEARER_MIN_TOKEN_LEN: usize = 16;
 
 /// A character permitted inside a bearer token: `[A-Za-z0-9._\-+/=]`.
-fn is_bearer_token_char(byte: u8) -> bool {
+///
+/// `pub(crate)`: shared with [`crate::patterns::credentials`] — see
+/// [`BEARER_MIN_TOKEN_LEN`]. `Basic`/`Digest` tokens use the same alphabet.
+pub(crate) fn is_bearer_token_char(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+' | b'/' | b'=')
 }
 
