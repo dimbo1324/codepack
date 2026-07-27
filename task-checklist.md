@@ -1,85 +1,71 @@
 # Task Checklist
 
-**Task:** Audit and harden the developer script orchestrator (`dev_tools_scripts_runner.py`
-and `scripts/`): fix what is broken, make the failures actionable, close the security and
-robustness gaps.
+**Task:** Stage S13 — direct AI integration. Close the loop "export → answer" without
+manual copy-paste, both over an API and by handing the bundle to a local coding agent.
 **Date:** 2026-07-27
-**Branch:** fix/dev-scripts-hardening
+**Branch:** feat/s13-ai-integration
 
-Owner report: "некоторые скрипты не работают, или работают коряво", plus an explicit ask
-to cover the security angles. Every item below was reproduced before it was written down
-— no speculative fixes.
+## Owner decisions taken before starting (recorded in the decisions log)
 
-## Defects found, with the evidence
+- **Both shapes.** API integration (BLUEPRINT §B.8) **and** a no-network handoff to a
+  local agent (Claude Code / Codex), which are different problems: an agent already
+  reads the filesystem, so shipping it a bundle over HTTP would be absurd.
+- **Anthropic first, trait for the rest.** Closes Q2 partially: one working provider
+  plus the abstraction, so a second arrives as a module rather than a rewrite.
+- **One question, one answer, saved into the bundle** — no chat UI in this stage.
+- **Summary and confirmation before sending** — counts and size, not a per-file list.
 
-- [+] **D1 — every script crashes on a legacy console code page.** Reproduced: cp866
-      crash on the em dash, ascii crash, cp1251 fine. Cyrillic was never the cause.
-- [+] **D2 — `clean-project` refuses with no remedy.** Reproduced end to end by unsetting
-      `core.longpaths` and re-running against the real pnpm tree.
-- [+] **D3 — `doctor` gives a false all-clear on git hooks.** Reproduced: `core.hooksPath`
-      unset in this clone, doctor green.
-- [+] **D4 — Windows paths mangled in the interactive prompt.** Reproduced:
-      `--out C:\Users\dev\build` → `['--out', 'C:Usersdevbuild']`.
-- [+] **D5 — `EOFError` uncaught.** Reproduced with a stream that claims to be a tty.
-- [+] **D6 — no subprocess timeout.**
-- [+] **D7 — undecodable paths cannot be distinguished** from real ones.
-- [+] **D8 — `remove_all` never proved containment.**
-- [+] **D9 — `run_steps` hid the steps it skipped.**
-- [+] **D10 — dead code in safety-relevant paths** (unreachable shim suffix, no-op
-      `except OSError: raise`, mutable-default `type: ignore`, deprecated `onerror`).
-- [+] **D11 — `prune_empty_dirs` descended into `.git`/`node_modules`/`target`.**
+## What bounds this task
+
+- [ ] **Invariant I1.** `codepack-ai` is the only crate permitted a network client.
+      Enforced by a gate check, not by convention — the same reasoning that made the
+      desktop enforce filesystem isolation with capabilities instead of a rule.
+- [ ] **Stage order.** S13 comes after S12, which is `готов (частично)`; Q19/Q20 stay
+      open and are not touched here.
+- [ ] **No key ever reaches a file, a log, history, or an export** (the stage's own
+      "готово, когда" criterion).
 
 ## Implementation
 
-- [+] **Encoding** — `_toolkit/terminal.py`: a degrading error handler on stdout/stderr,
-      installed from `scripts/__init__.py` so it precedes any print. Terminals keep their
-      encoding and degrade `—`→`--`; redirected streams switch to UTF-8.
-- [+] **doctor** — checks `core.hooksPath` and, on Windows, `core.longpaths`; both are
-      warnings naming the exact command. Version probes now time out.
-- [+] **clean-project** — recognises the known git warnings and prints the cure; refuses
-      on undecodable paths; proves containment before deleting; `onexc`.
-- [+] **processes** — timeouts, `capture_bytes`, `NOT_FOUND`/`TIMED_OUT`, dead branch gone.
-- [+] **interactive/execution** — EOF leaves cleanly at all three prompts and at the
-      confirm prompt; `split_arguments` keeps Windows backslashes.
-- [+] **steps** — skipped steps are named "not run (earlier step failed)".
-- [+] Tests: 40 → 78, wired into `selftest` and therefore the gate.
+### `crates/codepack-ai` (new crate)
+
+- [ ] `provider.rs` — the `AiProvider` trait plus request/response types; nothing in it
+      names a vendor
+- [ ] `providers/anthropic.rs` — Messages API over raw HTTP (`ureq`: blocking, rustls,
+      no async runtime — `reqwest` would drag tokio into a tree that has none)
+- [ ] `keys.rs` — API key stored only in the OS credential store (`keyring`), never in
+      `Config`
+- [ ] `plan.rs` — the `SendPlan` the UI shows for confirmation: provider, model, files,
+      bytes, estimated tokens, redaction state, critical-finding count
+- [ ] **Refuse to send a bundle carrying critical findings** unless explicitly
+      overridden; this product exists to stop that leak, so the default cannot be "send"
+- [ ] `handoff.rs` — the offline path: write a ready-to-use prompt beside the extracted
+      bundle and hand back the command to run, with no network and no key
+
+### Wiring
+
+- [ ] `Config` gains AI fields (`#[serde(default)]`, no `schema_version` bump — additive)
+- [ ] Desktop commands, all thin over the crate; key never crosses back to the frontend
+- [ ] Frontend page: pick prompt, review the plan, confirm, read the answer
+- [ ] i18n keys in both `en.ts` and `ru.ts`
+
+### Guard
+
+- [ ] A gate step proving no crate other than `codepack-ai` declares an HTTP client
 
 ## Verification
 
-- [+] Each fix carries a test; the `prune_empty_dirs` one was checked against a
-      deliberately re-broken copy and does fail without the fix
-- [+] `selftest` green (78 tests)
-- [+] Every catalog script launched: doctor, selftest, clean-project, format-code --check,
-      install-hooks, help. `doctor` → `install-hooks` → `doctor` closes the loop
-- [+] `cargo xtask gate` green end to end
-- [-] `dev-run` and `build-installer` **not** executed. Both do a full release build of
-      the desktop app; neither was touched by this task beyond the shared toolkit, which
-      the other six exercise. Not run, not claimed.
-- [+] Self-review of the diff, which caught two defects I had introduced (see below)
-
-## Defects found in my own diff during review
-
-- [+] The 30 s capture timeout also applied to `git status` in the deletion planner. On a
-      kernel-sized tree with antivirus that is ordinary, so a healthy slow run would have
-      become a refusal. Given its own 600 s bound with the reasoning written down.
-- [+] Pruning `dirs` before recording them made a directory whose only child is a skipped
-      one look empty, so a dry run would have promised a removal an apply cannot perform.
-      The unpruned list is now what the emptiness test reads.
-- [+] A stale comment left claiming `topdown=False` after the walk became top-down.
+- [ ] Unit tests for the trait, the plan, the refusal rule, key handling
+- [ ] A test asserting the key appears in no artifact, log, or history row
+- [ ] `cargo xtask gate` green
+- [ ] Real end-to-end call against the Anthropic API **only if** the owner supplies a
+      key; otherwise the network path is tested against a stub and that is stated
+      plainly rather than implied
 
 ## Completion
 
-- [+] `.ai/project/11-commands.md` updated (two factual corrections), `.ai/CHANGELOG.md`
-      entry added, `AGENTS.md` regenerated
-- [+] `docs/decisions/open-questions.md`: the output-degradation decision and the
-      fail-closed decision on undecodable paths
-- [+] Checklist filled `+`/`-`, final report in Russian
-
-## Debt this task leaves
-
-- `AGENTS.md` is at **30.0 KiB of its 30 KiB budget**. My addition to `11-commands.md` had
-  to be cut twice to fit. The next module edit will not fit at all; a module needs
-  tightening or moving to the extended tier before then.
-- `dev-run` and `build-installer` have no tests and were not run here.
-- The Windows-junction gap in `discovery` is unchanged: `is_symlink()` reports False for
-  junctions, so they are traversed. That errs toward protecting more, not less.
+- [ ] `ROADMAP.md` S13 `**Status.**` line (Russian), §1 table updated
+- [ ] `docs/architecture/overview.md`, `invariants.md` (I1 now has an enforced exception)
+- [ ] `docs/decisions/open-questions.md`: Q2 resolution, the HTTP-client choice, the
+      critical-findings refusal
+- [ ] Checklist filled `+`/`-`, final report in Russian
