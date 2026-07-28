@@ -41,6 +41,9 @@ pub(crate) enum Command {
     History(HistoryArgs),
     /// Check the environment and report what is available.
     Doctor,
+    /// Strip comments (tree-sitter) and reformat with a `PATH` tool into a separate
+    /// destination folder. A standalone action, not part of `export`'s pipeline.
+    Sanitize(SanitizeArgs),
 }
 
 /// Settings shared by the commands that read a project.
@@ -97,6 +100,23 @@ pub(crate) struct PreviewArgs {
 pub(crate) struct ScanArgs {
     #[command(flatten)]
     pub project: ProjectArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SanitizeArgs {
+    /// Source project directory to read from. Never written to.
+    #[arg(long)]
+    pub source: PathBuf,
+
+    /// Destination directory the sterile copy is written into. Must not be the same as,
+    /// or nested inside, `--source`.
+    #[arg(long)]
+    pub out: PathBuf,
+
+    /// How aggressively to exclude sensitive files. Defaults to `safe`, matching every
+    /// other command that reads a project.
+    #[arg(long, value_enum)]
+    pub safe_mode: Option<SafeMode>,
 }
 
 #[derive(Debug, Args)]
@@ -194,6 +214,7 @@ mod tests {
             vec!["codepack", "scan", "."],
             vec!["codepack", "history"],
             vec!["codepack", "doctor"],
+            vec!["codepack", "sanitize", "--source", ".", "--out", "../out"],
         ] {
             assert!(
                 Cli::try_parse_from(&argv).is_ok(),
@@ -209,6 +230,9 @@ mod tests {
             vec!["codepack", "export", ".", "--json"],
             vec!["codepack", "doctor", "--json"],
             vec!["codepack", "history", "--json"],
+            vec![
+                "codepack", "sanitize", "--source", ".", "--out", "../out", "--json",
+            ],
         ] {
             assert!(
                 Cli::try_parse_from(&argv).is_ok(),

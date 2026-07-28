@@ -604,3 +604,73 @@ fn an_explicit_out_inside_the_project_is_refused() {
         stderr(&output)
     );
 }
+
+// --- `sanitize` (the "Sterile copy" standalone action) -----------------------------
+
+#[test]
+fn sanitize_strips_comments_and_redacts_a_planted_secret() {
+    let sandbox = Sandbox::new().with_secret();
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    // Quote style may differ (`ruff`/`black`, if present on the developer's `PATH`,
+    // normalise quotes) — the content, not the exact formatter output, is what matters
+    // here; formatter-specific behavior is covered in `codepack-sanitize`'s own tests.
+    let written = std::fs::read_to_string(sandbox.out().join("src/main.py")).unwrap();
+    assert!(
+        written.contains("print(") && written.contains("hello"),
+        "written content: {written:?}"
+    );
+
+    // .env is excluded by safe mode, exactly like a normal export, and never appears in
+    // the destination folder at all.
+    assert!(!sandbox.out().join(".env").exists());
+
+    assert!(sandbox.out().join("STERILE_COPY_REPORT.json").is_file());
+    assert!(sandbox.out().join("STERILE_COPY_REPORT.md").is_file());
+}
+
+#[test]
+fn sanitize_destination_inside_the_source_is_refused() {
+    let sandbox = Sandbox::new();
+    let inside = sandbox.project().join("sterile");
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &inside.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 1);
+    assert!(
+        stderr(&output).contains("refusing"),
+        "stderr:\n{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn sanitize_json_output_is_a_versioned_envelope() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+        "--json",
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    let payload = json(&output);
+    assert_eq!(payload["command"], "sanitize");
+    assert!(payload["summary"]["total_files"].as_u64().unwrap() > 0);
+}

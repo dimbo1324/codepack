@@ -4,6 +4,7 @@ pub(crate) mod doctor;
 pub(crate) mod export;
 pub(crate) mod history;
 pub(crate) mod preview;
+pub(crate) mod sanitize;
 pub(crate) mod scan;
 
 use std::path::{Path, PathBuf};

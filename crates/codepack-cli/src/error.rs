@@ -55,6 +55,9 @@ pub(crate) enum CliError {
 
     #[error(transparent)]
     Storage(#[from] codepack_storage::StorageError),
+
+    #[error(transparent)]
+    Sanitize(#[from] codepack_sanitize::SanitizeError),
 }
 
 impl CliError {
