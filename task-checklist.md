@@ -67,12 +67,17 @@ task (unlike the previous task, where publish was not requested).
 
 ## Verification
 
-- [ ] Full `cargo xtask gate` green after all three slices land
-- [ ] `cargo test --workspace` green
+- [+] Full `cargo xtask gate` green after all three slices landed together: fmt,
+      clippy `-D warnings`, 56 test binaries (`cargo test --workspace`, none
+      failed), `cargo deny check` (advisories/bans/licenses/sources all ok),
+      frontend format/typecheck (136 files, 0 errors)/lint, the `scripts/` test
+      suite, `sync-agents --check` (29.0 KiB, in sync), network isolation
+- [+] `cargo test --workspace` green (covered by the full gate run above)
 
 ## Completion
 
-- [ ] `docs/architecture/overview.md` updated where relevant
-- [ ] Checklist filled `+`/`-`, final report in Russian
-- [ ] Merge to `main` (fast-forward), push to `origin/main`, delete this branch
-      locally and (if pushed as its own branch) on the remote
+- [+] `docs/architecture/overview.md` updated (`codepack-cli` row for
+      `completions`, `codepack-sanitize` row for Kotlin/`ktlint`)
+- [+] Checklist filled `+`/`-`, final report in Russian
+- [+] Merge to `main` (fast-forward), push to `origin/main`, delete this branch
+      locally (never pushed as its own remote branch, so nothing to delete there)
