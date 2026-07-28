@@ -101,28 +101,31 @@ pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyRepor
 }
 
 /// Invariant analogous to I2: a sterile copy must never be written into, or as an
-/// ancestor of, the project it reads from. Compared after canonicalization (both sides
-/// must be real, existing paths) — the same pattern `codepack-cli`'s `--out` guard uses
-/// for the export pipeline's own I2.
+/// ancestor of, the project it reads from. The overlap check runs against a
+/// *prospective* resolution of `destination_root` before anything is created on disk —
+/// `create_dir_all` must never run first, or a rejected call could still leave a stray
+/// directory inside the source tree it was never allowed to touch.
 fn validate_destination(source_root: &Path, destination_root: &Path) -> Result<(PathBuf, PathBuf)> {
     if !source_root.is_dir() {
         return Err(SanitizeError::SourceNotADirectory {
             path: source_root.to_path_buf(),
         });
     }
+
+    let canonical_source = canonicalize(source_root)?;
+    let prospective_destination = resolve_prospective_path(destination_root)?;
+    if prospective_destination.starts_with(&canonical_source) {
+        return Err(SanitizeError::DestinationInsideSource {
+            source_root: canonical_source,
+            destination: prospective_destination,
+        });
+    }
+
     std::fs::create_dir_all(destination_root).map_err(|source| SanitizeError::Write {
         path: destination_root.to_path_buf(),
         source,
     })?;
-
-    let canonical_source = canonicalize(source_root)?;
     let canonical_destination = canonicalize(destination_root)?;
-    if canonical_destination.starts_with(&canonical_source) {
-        return Err(SanitizeError::DestinationInsideSource {
-            source_root: canonical_source,
-            destination: canonical_destination,
-        });
-    }
     Ok((canonical_source, canonical_destination))
 }
 
@@ -131,6 +134,42 @@ fn canonicalize(path: &Path) -> Result<PathBuf> {
         path: path.to_path_buf(),
         source,
     })
+}
+
+/// Resolves `path` to an absolute, symlink-free form without creating anything on disk:
+/// canonicalizes the longest existing ancestor (root always qualifies, so this never
+/// fails for that reason), then appends the not-yet-created suffix components in order.
+/// None of those suffix components can be symlinks (they don't exist yet), so the result
+/// is exactly what `canonicalize` would return once the path is actually created.
+fn resolve_prospective_path(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|source| SanitizeError::Read {
+                path: path.to_path_buf(),
+                source,
+            })?
+            .join(path)
+    };
+
+    let mut suffix = Vec::new();
+    let mut ancestor = absolute.as_path();
+    while !ancestor.exists() {
+        match (ancestor.file_name(), ancestor.parent()) {
+            (Some(name), Some(parent)) => {
+                suffix.push(name.to_owned());
+                ancestor = parent;
+            }
+            _ => break,
+        }
+    }
+
+    let mut resolved = canonicalize(ancestor)?;
+    for component in suffix.into_iter().rev() {
+        resolved.push(component);
+    }
+    Ok(resolved)
 }
 
 /// The plan stores backslash-joined relative paths regardless of platform (a documented
@@ -299,6 +338,21 @@ mod tests {
             error,
             SanitizeError::DestinationInsideSource { .. }
         ));
+    }
+
+    #[test]
+    fn a_rejected_overlapping_destination_is_never_created_inside_the_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("out").join("nested");
+        let error = run_sterile_copy(&options(dir.path(), &nested)).unwrap_err();
+        assert!(matches!(
+            error,
+            SanitizeError::DestinationInsideSource { .. }
+        ));
+        assert!(
+            !dir.path().join("out").exists(),
+            "the overlap guard must reject before creating anything on disk"
+        );
     }
 
     #[test]
