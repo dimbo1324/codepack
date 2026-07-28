@@ -81,9 +81,34 @@ review pass per this session's own instructions.
       `node_modules` at first; installed it), `pnpm --filter @codepack/ui
       typecheck` (136 files, 0 errors), `pnpm --filter @codepack/ui lint` (clean),
       `pnpm format` (Prettier clean)
-- [-] Full `cargo xtask gate` — not re-run end-to-end in this session (the prior
-      backend-only session already ran and recorded it green); the frontend and
-      `codepack-desktop` pieces it covers were verified directly above instead
+- [+] Independent quality review (`codepack-quality-reviewer`) of the full diff
+      against `main`: redaction reuse, safety-mode reuse, I2 overlap guard,
+      tree-sitter fail-safe, string/regex-literal survival, formatter-never-fails,
+      per-file cancellation, no Tauri permission widening, dependency graph,
+      lock-poison handling, scope discipline, and the honesty of every
+      self-reported gap were all traced in the actual code, not trusted from the
+      prior sessions' reports. One moderate finding (below), one low (a test-count
+      typo in this file, now corrected: `codepack-desktop` unit tests are 71, not
+      72 — the extra count in the earlier line included a separate end-to-end
+      binary)
+- [+] **Fixed the moderate finding**: `validate_destination` ran `create_dir_all`
+      on the destination *before* checking for source/destination overlap, so a
+      rejected call could still leave a stray directory inside the immutable
+      source tree (mirrors an identical, pre-existing ordering in
+      `codepack-cli`'s own `export --out` guard on `main` — reproduced faithfully,
+      not introduced new, but still worth closing here). Fixed by resolving the
+      destination to its prospective canonical path lexically (walk up to the
+      nearest existing ancestor, canonicalize that, append the not-yet-created
+      suffix — which cannot contain symlinks since it doesn't exist yet) *before*
+      any directory is created. New test
+      `a_rejected_overlapping_destination_is_never_created_inside_the_source`
+      asserts nothing was created, not just that the right error came back.
+- [+] Full `cargo xtask gate` re-run end-to-end after the fix: fmt, clippy,
+      `cargo test --workspace` (every crate, including 39/39 in
+      `codepack-sanitize`, 29/29 in `codepack-cli`), `cargo deny check`, frontend
+      format/typecheck (136 files, 0 errors)/lint, the `scripts/` test suite (78
+      tests), `sync-agents --check` (29.0 KiB, in sync), network isolation — all
+      green
 - [+] Manual dev run: `pnpm --dir apps/desktop exec tauri dev` failed on this
       pnpm/corepack version with `--dir` (`Cannot read properties of undefined`,
       an environment issue unrelated to this change); running `pnpm exec tauri
