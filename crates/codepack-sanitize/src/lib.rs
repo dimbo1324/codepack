@@ -19,6 +19,7 @@
 //! leave the project (invariant I3).
 
 mod error;
+mod format;
 mod language;
 mod options;
 mod report;

@@ -2,9 +2,8 @@
 //!
 //! scanner plan (safe file selection) → safety-skip predicate → read content → redact
 //! secrets (invariant I3, before anything is written) → strip comments via tree-sitter →
-//! write to `destination_root`, mirroring the relative path from `source_root`.
-//!
-//! (The formatter layer lands in a follow-up commit — this one is strip-only.)
+//! format via a `PATH` tool if one is found → write to `destination_root`, mirroring the
+//! relative path from `source_root`.
 //!
 //! This never goes through `codepack-engine`'s 8-step pipeline (it is not one of its
 //! steps, does not touch the ZIP/archive contract, and produces none of the existing
@@ -21,6 +20,7 @@ use codepack_scanner::{
 use codepack_security::{redact_secrets, should_skip_file_for_safety};
 
 use crate::error::{Result, SanitizeError};
+use crate::format::format_source;
 use crate::language::detect_language;
 use crate::options::{FileOutcome, SterileCopyOptions, SterileCopyReport, SterileCopySummary};
 use crate::report::write_report;
@@ -218,16 +218,30 @@ fn process_file(
         );
     };
 
-    // No formatter layer yet (added in a follow-up commit) — every successfully
-    // stripped file is reported as `StrippedOnlyNoFormatterFound` for now.
-    finish(
-        destination_root,
-        relative,
-        stripped.as_bytes(),
-        FileOutcome::StrippedOnlyNoFormatterFound {
-            language: language.label().to_string(),
-        },
-    )
+    let file_name = relative
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    match format_source(language, &file_name, &stripped) {
+        Some((formatted, formatter)) => finish(
+            destination_root,
+            relative,
+            formatted.as_bytes(),
+            FileOutcome::StrippedAndFormatted {
+                language: language.label().to_string(),
+                formatter,
+            },
+        ),
+        None => finish(
+            destination_root,
+            relative,
+            stripped.as_bytes(),
+            FileOutcome::StrippedOnlyNoFormatterFound {
+                language: language.label().to_string(),
+            },
+        ),
+    }
 }
 
 fn finish(
