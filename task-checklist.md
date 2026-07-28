@@ -15,9 +15,10 @@ before implementation; owner decisions on method (tree-sitter, PATH-based format
 scanner's full stack list, standalone UI action) are recorded in
 `docs/decisions/open-questions.md` (Q24) before any code is written.
 
-This session covered the **backend only** (crate, CLI). Frontend (Tauri command, UI
-page) is explicitly delegated to a follow-up task per the task instructions — the
-branch is left as-is for it, not merged.
+The first session on this branch covered the **backend only** (crate, CLI). This
+follow-up session adds the **frontend** (Tauri command, UI page) that first session
+explicitly delegated forward. The branch is still left unmerged, for a final quality
+review pass per this session's own instructions.
 
 ## Preparation
 
@@ -50,33 +51,54 @@ branch is left as-is for it, not merged.
       test (both "cancelled before the plan is built" and "cancelled inside the
       per-file loop")
 
-## Frontend (delegated to codepack-desktop-ui — NOT done in this task)
+## Frontend (`codepack-desktop-ui` — this session)
 
-- [-] F1 — Tauri command `commands/sanitize.rs` + progress event — not started;
-      explicitly out of scope for this task per its own instructions
-- [-] F2 — `SterileCopyPage.svelte` + navigation entry + `api/types.ts`
-      additions — not started, same reason
+- [+] F1 — Tauri command `commands/sanitize.rs`: `start_sanitize`/`cancel_sanitize`,
+      background-thread pattern mirroring `commands/export`, `sanitize:finished`
+      event. No `sanitize:progress` — `codepack_sanitize::run_sterile_copy` reports
+      no intermediate progress today, so no such event would ever fire; noted
+      honestly rather than faked. Registered in `lib.rs`'s `invoke_handler` (21
+      commands total); `capabilities/default.json` unchanged — no new webview
+      permission was needed (folder pickers reuse `dialog:allow-open`, already
+      granted)
+- [+] F2 — `SterileCopyPage.svelte`: source/destination folder pickers, safety-mode
+      `Segmented`, run/cancel button, summary `Stat` row, per-file outcome list.
+      Own top-level nav entry (`nav.section.tools`, not nested in the wizard or the
+      insight group) — `stores/wizard.svelte.ts` gained a `"sterile"` step and
+      `STANDALONE_STEPS`. `api/types.ts` + `api/client.ts` additions
+      (`SanitizeReport`/`SanitizeFinishedEvent`, `startSanitize`/`cancelSanitize`/
+      `onSanitizeFinished`). i18n: `nav.sterile`, `nav.section.tools`, and a
+      `sterile.*` block in both `en.ts` and `ru.ts` (reused `security.safeMode.*`
+      for the safety-mode labels rather than duplicating them)
 
 ## Verification
 
-- [+] `cargo xtask gate` green (full gate, including `cargo deny`, `sync-agents
-      --check`, the `scripts/` suite; frontend steps skipped with a notice —
-      `apps/desktop/ui/node_modules` is absent in this environment, which the
-      gate itself treats as acceptable outside `CI`)
-- [+] `cargo test --workspace` green: 38 new `codepack-sanitize` tests, 29
-      `codepack-cli` end-to-end tests (3 new for `sanitize`) — no existing test
-      anywhere in the workspace was weakened or deleted
-- [-] `svelte-check` clean for the new page/command — no page/command exists yet
-      (frontend out of scope)
-- [-] Manual run in the dev app — no UI entry point exists yet; the CLI was
-      exercised manually instead (`codepack sanitize --source ... --out ...`
-      against a real mixed-language scratch folder, confirmed stripped +
-      formatted output and a written `STERILE_COPY_REPORT.md/.json`)
+- [+] `cargo build -p codepack-desktop`, `cargo test -p codepack-desktop` (72
+      passed, including a new `commands::sanitize::tests` unit test), `cargo
+      clippy -p codepack-desktop --all-targets -- -D warnings`, `cargo fmt --all
+      --check` — all green
+- [+] `pnpm install --frozen-lockfile` (this session's environment had no
+      `node_modules` at first; installed it), `pnpm --filter @codepack/ui
+      typecheck` (136 files, 0 errors), `pnpm --filter @codepack/ui lint` (clean),
+      `pnpm format` (Prettier clean)
+- [-] Full `cargo xtask gate` — not re-run end-to-end in this session (the prior
+      backend-only session already ran and recorded it green); the frontend and
+      `codepack-desktop` pieces it covers were verified directly above instead
+- [+] Manual dev run: `pnpm --dir apps/desktop exec tauri dev` failed on this
+      pnpm/corepack version with `--dir` (`Cannot read properties of undefined`,
+      an environment issue unrelated to this change); running `pnpm exec tauri
+      dev` from `apps/desktop` directly (`.ai/project/15-command-reference.md`'s
+      documented working directory) built and launched `codepack-desktop.exe`
+      cleanly, watching `codepack-sanitize` among the crates for changes, no
+      startup error. Could not click through the running window from this tool
+      environment (no GUI interaction capability here) — process was inspected
+      via the log and process list, then terminated
 
 ## Completion
 
-- [+] `docs/architecture/overview.md` updated with the new crate and the
-      `codepack-cli` `sanitize` subcommand
+- [+] `docs/architecture/overview.md` updated: the desktop-app row gets the new
+      `commands::sanitize` pair and `sanitize:finished`, the frontend row gets the
+      new ninth page and its nav placement
 - [+] Checklist filled `+`/`-`, final report in Russian per this project's
       documentation-language policy
 - [+] Report any languages from the scanner's stack list left uncovered (Batch 2 /
