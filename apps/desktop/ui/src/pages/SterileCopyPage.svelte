@@ -10,6 +10,7 @@
   import {
     cancelSanitize,
     onSanitizeFinished,
+    onWindowDragDrop,
     pickProjectDirectory,
     startSanitize,
   } from "$lib/api/client";
@@ -59,17 +60,43 @@
     error: "danger",
   };
 
+  let sourceDragging = $state(false);
+
+  // Registered/torn down with the component's own lifecycle rather than with an
+  // explicit route check: `App.svelte` only mounts this page while
+  // `wizard.step === "sterile"`, so listening here already means "only while this
+  // page is the active view" — the same guarantee the sidebar-driven pages rely on
+  // for `onSanitizeFinished` below. `App.svelte`'s own drag-and-drop handler stays
+  // silent while this page is active, so a single drop is acted on exactly once.
   onMount(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenFinished: (() => void) | undefined;
+    let unlistenDrop: (() => void) | undefined;
     (async () => {
-      unlisten = await onSanitizeFinished((event) => {
+      unlistenFinished = await onSanitizeFinished((event) => {
         if (event.run_id !== wizard.sterileRunId) return;
         wizard.sterileRunning = false;
         wizard.sterileResult = event.report;
         wizard.sterileError = event.error;
       });
+      unlistenDrop = await onWindowDragDrop((phase, paths) => {
+        if (wizard.sterileRunning) return;
+        if (phase === "enter") {
+          sourceDragging = true;
+        } else if (phase === "leave") {
+          sourceDragging = false;
+        } else {
+          sourceDragging = false;
+          // Same single-path rule as the project-open drop handler: take the first
+          // path, never guess among several.
+          const dropped = paths[0];
+          if (dropped) wizard.sterileSource = dropped;
+        }
+      });
     })();
-    return () => unlisten?.();
+    return () => {
+      unlistenFinished?.();
+      unlistenDrop?.();
+    };
   });
 
   async function chooseSource(): Promise<void> {
@@ -123,7 +150,7 @@
 
   <section class="card">
     <div class="card__body stack">
-      <div class="picker-row">
+      <div class="picker-row" class:picker-row--dragging={sourceDragging}>
         <span class="picker-row__icon"><Icon name="folder" size={16} /></span>
         <div class="picker-row__text">
           <p class="picker-row__label">{t("sterile.source")}</p>
@@ -259,6 +286,14 @@
     align-items: center;
     gap: var(--space-5);
     flex-wrap: wrap;
+    border-radius: var(--radius-md);
+  }
+
+  /* Drop affordance for the source field only — the destination stays picker-only,
+     so it never grows this state. */
+  .picker-row--dragging {
+    outline: 2px dashed var(--accent);
+    outline-offset: 4px;
   }
 
   .picker-row__icon {

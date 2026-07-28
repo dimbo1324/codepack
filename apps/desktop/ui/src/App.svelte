@@ -107,6 +107,10 @@
       );
       unlisteners.push(
         await onWindowDragDrop((phase, paths) => {
+          // The Sterile-copy page owns drag-and-drop for its own source field while
+          // it is the active view (see `SterileCopyPage.svelte`); this handler stays
+          // silent there so a drop is not acted on twice.
+          if (wizard.step === "sterile") return;
           if (phase === "enter") {
             dragging = true;
           } else if (phase === "leave") {

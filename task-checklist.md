@@ -41,13 +41,19 @@ task (unlike the previous task, where publish was not requested).
 
 ## 3 — Drag-and-drop on the Sterile-copy page
 
-- [ ] Wire the existing app-level drag-and-drop handler
+- [+] Wire the existing app-level drag-and-drop handler
       (`client.ts::onWindowDragDrop`) into `SterileCopyPage.svelte` for the source
       folder field (destination folder stays picker-only — dropping a folder to
       *write into* is a different, riskier action than dropping one to *read from*)
-- [ ] Only take effect when the Sterile-copy page is the active view, matching the
-      existing single-path-if-multiple-dropped rule from the 2026-07-27 decision
-- [ ] `pnpm --filter @codepack/ui typecheck`/`lint` clean
+- [+] Only take effect when the Sterile-copy page is the active view, matching the
+      existing single-path-if-multiple-dropped rule from the 2026-07-27 decision.
+      `App.svelte` mounts `SterileCopyPage` only while `wizard.step === "sterile"`,
+      so the page's own `onMount`/cleanup already scopes the listener; `App.svelte`'s
+      own drag-drop handler was additionally given a one-line guard (`if (wizard.step
+      === "sterile") return;`) so a single drop is never acted on by both handlers at
+      once (this scoping did not pre-exist as assumed in the plan — the global
+      handler previously fired unconditionally on every page)
+- [+] `pnpm --filter @codepack/ui typecheck`/`lint` clean
 
 ## Verification
 
