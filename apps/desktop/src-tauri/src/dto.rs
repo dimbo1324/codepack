@@ -215,3 +215,49 @@ pub struct ProjectProfileSummary {
     pub folders: usize,
     pub total_size_bytes: u64,
 }
+
+// --- Sterile copy -------------------------------------------------------------------
+
+/// The aggregate counts from `codepack_sanitize::SterileCopySummary`, reshaped with
+/// `serde`'s default field names so `types.ts` reads it unchanged.
+#[derive(Debug, Clone, Serialize)]
+pub struct SanitizeSummary {
+    pub total_files: usize,
+    pub stripped_and_formatted: usize,
+    pub stripped_only_no_formatter_found: usize,
+    pub skipped_unsupported_language: usize,
+    pub skipped_sensitive_or_redacted: usize,
+    pub errors: usize,
+}
+
+/// One file's disposition. `outcome` is the same fixed label
+/// `codepack_sanitize::FileOutcome::label()` already gives the CLI's `--json` output, so
+/// the two front ends agree on the vocabulary without either depending on the other.
+#[derive(Debug, Clone, Serialize)]
+pub struct SanitizeFileOutcome {
+    pub path: String,
+    pub outcome: &'static str,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SanitizeReport {
+    pub source: String,
+    pub destination: String,
+    pub safety_mode: String,
+    pub summary: SanitizeSummary,
+    pub files: Vec<SanitizeFileOutcome>,
+}
+
+/// A `sanitize:finished` event. Exactly one of `report`/`error` is set.
+///
+/// There is no `sanitize:progress` counterpart to `export:progress`:
+/// `codepack_sanitize::run_sterile_copy` processes every file in one `rayon` sweep and
+/// reports no intermediate progress today, so nothing would ever be sent on such a
+/// channel. Adding one that never fires would be a UI promise the backend cannot keep.
+#[derive(Debug, Clone, Serialize)]
+pub struct SanitizeFinishedEvent {
+    pub run_id: String,
+    pub report: Option<SanitizeReport>,
+    pub error: Option<String>,
+}

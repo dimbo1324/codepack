@@ -646,6 +646,7 @@ dependencies = [
  "codepack-archive",
  "codepack-core",
  "codepack-engine",
+ "codepack-sanitize",
  "codepack-scanner",
  "codepack-security",
  "codepack-storage",

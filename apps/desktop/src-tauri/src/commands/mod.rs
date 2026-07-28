@@ -14,6 +14,7 @@ pub mod app_info;
 pub mod export;
 pub mod history;
 pub mod project;
+pub mod sanitize;
 pub mod settings;
 pub mod watch;
 pub mod window;

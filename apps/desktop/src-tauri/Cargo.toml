@@ -33,6 +33,7 @@ tauri-build.workspace = true
 [dependencies]
 codepack-core.workspace = true
 codepack-engine.workspace = true
+codepack-sanitize.workspace = true
 codepack-scanner.workspace = true
 codepack-security.workspace = true
 codepack-storage.workspace = true
