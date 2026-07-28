@@ -78,6 +78,20 @@ fn candidates_for(language: Language, file_name: &str) -> Vec<Candidate> {
             label: "shfmt",
             args: Vec::new(),
         }],
+        // ktlint (github.com/ktlint/ktlint, MIT) reads `--stdin` and writes the formatted
+        // content to stdout under `--format`/`-F` (`KtlintCommandLine.format`, verified
+        // against its source 2026-07-28 rather than assumed) — the same stdin-in/
+        // stdout-out shape as every other entry in this table. `--stdin-path` carries the
+        // real file name so ktlint tells a `.kts` script apart from plain `.kt`.
+        Language::Kotlin => vec![Candidate {
+            binary: "ktlint",
+            label: "ktlint",
+            args: vec![
+                "--stdin".to_string(),
+                "--format".to_string(),
+                format!("--stdin-path={file_name}"),
+            ],
+        }],
         Language::Java | Language::CSharp | Language::Php | Language::Ruby | Language::Makefile => {
             Vec::new()
         }
@@ -171,6 +185,18 @@ mod tests {
             .expect("ruff was just confirmed to be on PATH");
         assert_eq!(label, "ruff format");
         assert_eq!(formatted, "x = 1\ny = 2\n");
+    }
+
+    #[test]
+    fn kotlin_formats_when_ktlint_is_on_path() {
+        if find_on_path("ktlint").is_none() {
+            return;
+        }
+        let (formatted, label) =
+            format_source(Language::Kotlin, "Main.kt", "fun main( ){\nval x=1\n}\n")
+                .expect("ktlint was just confirmed to be on PATH");
+        assert_eq!(label, "ktlint");
+        assert!(formatted.contains("fun main()"));
     }
 
     #[test]

@@ -170,6 +170,18 @@ tree-sitter-bash = "0.25"
 # `tree-sitter-grammars` (community org tree-sitter itself points integrators at for
 # grammars it does not maintain directly), MIT, same as every grammar above.
 tree-sitter-make = "1.1"
+# 2026-07-28 (Q24 follow-up): Batch 2's Kotlin closed after a real version/license check,
+# not an assumption. The crate literally named `tree-sitter-kotlin` (fwcd/tree-sitter-
+# kotlin, last published 2024-08-03) pins `tree-sitter >= 0.21, < 0.23` directly against
+# its own `Language` return type and cannot be raised to this workspace's `tree-sitter`
+# 0.26 without a second, incompatible copy of the core crate — a real incompatibility,
+# not a maintenance judgment call. `tree-sitter-kotlin-ng` is the `tree-sitter-grammars`
+# org's fork (github.com/tree-sitter-grammars/tree-sitter-kotlin), MIT, and — like every
+# Batch 1 grammar above — depends on the version-independent `tree-sitter-language`
+# crate rather than `tree-sitter` itself, so it builds against 0.26 unmodified. Last
+# published 2025-01-09, comparable to `tree-sitter-ruby` (2024-11-11) already pinned
+# above; not abandoned by this codebase's own bar for the rest of Batch 1.
+tree-sitter-kotlin-ng = "1.1"
 # codepack-sanitize's own crate, depended on only by codepack-cli (and, in a later task,
 # the desktop shell) — never by codepack-engine (see the decision record for why).
 codepack-sanitize = { path = "crates/codepack-sanitize" }

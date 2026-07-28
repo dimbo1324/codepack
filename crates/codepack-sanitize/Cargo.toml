@@ -29,6 +29,7 @@ tree-sitter-c.workspace = true
 tree-sitter-cpp.workspace = true
 tree-sitter-bash.workspace = true
 tree-sitter-make.workspace = true
+tree-sitter-kotlin-ng.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

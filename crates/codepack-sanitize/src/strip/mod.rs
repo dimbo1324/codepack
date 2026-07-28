@@ -34,6 +34,7 @@ fn ts_language(language: Language) -> tree_sitter::Language {
         Language::Cpp => tree_sitter_cpp::LANGUAGE.into(),
         Language::Shell => tree_sitter_bash::LANGUAGE.into(),
         Language::Makefile => tree_sitter_make::LANGUAGE.into(),
+        Language::Kotlin => tree_sitter_kotlin_ng::LANGUAGE.into(),
     }
 }
 
@@ -44,7 +45,7 @@ fn ts_language(language: Language) -> tree_sitter::Language {
 fn comment_kinds(language: Language) -> &'static [&'static str] {
     match language {
         Language::JavaScript | Language::TypeScript | Language::Tsx => &["comment", "html_comment"],
-        Language::Rust | Language::Java => &["line_comment", "block_comment"],
+        Language::Rust | Language::Java | Language::Kotlin => &["line_comment", "block_comment"],
         Language::Python
         | Language::Go
         | Language::CSharp
@@ -234,6 +235,15 @@ mod tests {
         assert!(!stripped.contains("a real comment"));
         assert!(!stripped.contains("#!/bin/bash"));
         assert!(stripped.contains("\"# not a comment\""));
+    }
+
+    #[test]
+    fn kotlin_comments_are_removed_but_strings_survive() {
+        let source = "fun main() {\n    // a line comment\n    val s = \"// not a comment\"\n    /* a block */\n    val n = 1\n}\n";
+        let stripped = strip_comments(Language::Kotlin, source).expect("valid kotlin parses");
+        assert!(!stripped.contains("a line comment"));
+        assert!(!stripped.contains("a block"));
+        assert!(stripped.contains("\"// not a comment\""));
     }
 
     #[test]

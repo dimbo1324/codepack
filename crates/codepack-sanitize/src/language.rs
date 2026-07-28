@@ -1,10 +1,12 @@
 //! Batch 1 language detection (`docs/decisions/open-questions.md`, 2026-07-28): the
 //! twelve stacks the owner named for the first version of the sterile copy — JS/TS,
-//! Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Shell, Makefile. Batch 2 (Dart/
-//! Flutter, Swift, Kotlin, Assembly, Groovy) is explicitly deferred (Q24) — every file
-//! in one of those stacks, or in any stack this crate has no grammar for at all, comes
-//! back `None` here and is reported as `FileOutcome::SkippedUnsupportedLanguage`, never
-//! silently dropped.
+//! Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Shell, Makefile — plus Kotlin, added
+//! 2026-07-28 as the first Batch 2 language closed out of Q24 after a real version/
+//! license check of its grammar crate (see the workspace `Cargo.toml` comment next to
+//! `tree-sitter-kotlin-ng`). Dart/Flutter, Swift, Assembly and Groovy remain deferred —
+//! every file in one of those stacks, or in any stack this crate has no grammar for at
+//! all, comes back `None` here and is reported as `FileOutcome::SkippedUnsupportedLanguage`,
+//! never silently dropped.
 //!
 //! This is a separate, narrower map from `codepack-reports`' `LANGUAGE_BY_EXTENSION`
 //! (which this crate is not even allowed to depend on — dependencies point strictly
@@ -29,6 +31,7 @@ pub enum Language {
     Cpp,
     Shell,
     Makefile,
+    Kotlin,
 }
 
 impl Language {
@@ -49,6 +52,7 @@ impl Language {
             Self::Cpp => "C++",
             Self::Shell => "Shell",
             Self::Makefile => "Makefile",
+            Self::Kotlin => "Kotlin",
         }
     }
 }
@@ -85,6 +89,7 @@ pub fn detect_language(relative_path: &Path) -> Option<Language> {
         "cpp" | "cxx" | "cc" | "hpp" | "hh" | "hxx" => Some(Language::Cpp),
         "sh" | "bash" | "zsh" => Some(Language::Shell),
         "mk" | "mak" => Some(Language::Makefile),
+        "kt" | "kts" => Some(Language::Kotlin),
         _ => None,
     }
 }
@@ -126,6 +131,8 @@ mod tests {
             ("main.hpp", Language::Cpp),
             ("run.sh", Language::Shell),
             ("build.mk", Language::Makefile),
+            ("Main.kt", Language::Kotlin),
+            ("build.gradle.kts", Language::Kotlin),
         ];
         for (path, expected) in cases {
             assert_eq!(detect_language(Path::new(path)), Some(expected), "{path}");
@@ -137,7 +144,6 @@ mod tests {
         for path in [
             "main.dart",
             "App.swift",
-            "Main.kt",
             "boot.s",
             "Build.gradle",
             "notes.txt",
@@ -164,6 +170,7 @@ mod tests {
             Language::Cpp,
             Language::Shell,
             Language::Makefile,
+            Language::Kotlin,
         ];
         let mut labels: Vec<&str> = all.iter().map(|l| l.label()).collect();
         labels.sort_unstable();
