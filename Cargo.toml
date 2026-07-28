@@ -147,6 +147,31 @@ ureq = { version = "3", default-features = false, features = [
 # Default features are the per-platform native stores (Credential Manager, Keychain,
 # Secret Service) — exactly the three BLUEPRINT §D.4 names, so nothing to narrow here.
 keyring = "4"
+# 2026-07-28 (codepack-sanitize, "Sterile copy" — docs/decisions/open-questions.md):
+# real-grammar comment stripping, chosen explicitly over regex by the owner. `tree-sitter`
+# itself and every Batch 1 grammar below are maintained under the `tree-sitter`/
+# `tree-sitter-grammars` GitHub orgs and published MIT — verified against crates.io at
+# the time this dependency was added, not assumed from memory (`.ai/project/12-domain-
+# rules.md`/`deny.toml` both gate on license).
+tree-sitter = "0.26"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.25"
+tree-sitter-go = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-java = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-php = "0.24"
+tree-sitter-ruby = "0.23"
+tree-sitter-c = "0.24"
+tree-sitter-cpp = "0.23"
+tree-sitter-bash = "0.25"
+# `tree-sitter-grammars` (community org tree-sitter itself points integrators at for
+# grammars it does not maintain directly), MIT, same as every grammar above.
+tree-sitter-make = "1.1"
+# codepack-sanitize's own crate, depended on only by codepack-cli (and, in a later task,
+# the desktop shell) — never by codepack-engine (see the decision record for why).
+codepack-sanitize = { path = "crates/codepack-sanitize" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
