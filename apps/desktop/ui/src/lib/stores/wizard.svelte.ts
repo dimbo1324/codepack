@@ -8,6 +8,7 @@ import type {
   ExportReport,
   PreviewReport,
   ProjectContext,
+  SanitizeReport,
   ScanReport,
 } from "$lib/api/types";
 import { parseStep, PIPELINE_STEP_COUNT } from "$lib/util/pipeline";
@@ -21,6 +22,7 @@ export const STEPS = [
   "result",
   "history",
   "analytics",
+  "sterile",
 ] as const;
 
 export type Step = (typeof STEPS)[number];
@@ -32,6 +34,12 @@ export type Step = (typeof STEPS)[number];
 export const WIZARD_STEPS: Step[] = ["project", "settings", "security", "preview", "export"];
 
 export const INSIGHT_STEPS: Step[] = ["result", "history", "analytics"];
+
+/** "Sterile copy" is its own standalone action, not a wizard step or an insight view: it
+ * has its own source folder (not necessarily the project the wizard has open) and its
+ * own result (a folder of cleaned source, not an archive or a set of reports) — the
+ * placement the stage planner recorded on 2026-07-28. */
+export const STANDALONE_STEPS: Step[] = ["sterile"];
 
 class WizardState {
   step = $state<Step>("project");
@@ -82,6 +90,17 @@ class WizardState {
 
   watchActive = $state(false);
   watchChangedPaths = $state<string[]>([]);
+
+  /** State for the standalone "Sterile copy" action. Kept separate from the export
+   * journey's fields above: its source is any folder the user picks, not necessarily
+   * `wizard.project`, and it produces no archive/report artifacts of its own. */
+  sterileSource = $state<string | null>(null);
+  sterileDestination = $state<string | null>(null);
+  sterileSafetyMode = $state("safe");
+  sterileRunId = $state<string | null>(null);
+  sterileRunning = $state(false);
+  sterileResult = $state<SanitizeReport | null>(null);
+  sterileError = $state<string | null>(null);
 }
 
 export const wizard = new WizardState();
@@ -94,7 +113,7 @@ export function goTo(step: Step): void {
  * than a bare boolean is the point: a disabled navigation item that does not say what is
  * missing makes the user hunt for the prerequisite. */
 export function blockedReason(step: Step): "project" | "export" | null {
-  if (step === "project") return null;
+  if (step === "project" || step === "sterile") return null;
   if (!wizard.project) return "project";
   if ((step === "result" || step === "analytics") && !wizard.exportResult) return "export";
   return null;

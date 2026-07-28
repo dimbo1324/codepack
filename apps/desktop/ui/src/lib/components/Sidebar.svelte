@@ -13,6 +13,7 @@
     blockedReason,
     goTo,
     INSIGHT_STEPS,
+    STANDALONE_STEPS,
     wizard,
     WIZARD_STEPS,
     type Step,
@@ -29,6 +30,7 @@
     result: "nav.result",
     history: "nav.history",
     analytics: "nav.analytics",
+    sterile: "nav.sterile",
   };
 
   const icons: Record<Step, IconName> = {
@@ -40,6 +42,7 @@
     result: "package",
     history: "clock",
     analytics: "chart",
+    sterile: "file",
   };
 
   /** A workflow step counts as visited once the user has moved past it, which is the
@@ -104,6 +107,27 @@
     <p class="nav__heading">{t("nav.section.insights")}</p>
     <ul>
       {#each INSIGHT_STEPS as step (step)}
+        {@const blocked = blockedReason(step)}
+        <li>
+          <button
+            class="nav__item nav__item--plain"
+            class:is-active={wizard.step === step}
+            class:is-blocked={blocked !== null}
+            aria-current={wizard.step === step ? "page" : undefined}
+            aria-disabled={blocked !== null}
+            title={blocked ? `${t(labels[step])} — ${t(`nav.locked.${blocked}`)}` : t(labels[step])}
+            onclick={() => open(step)}
+          >
+            <span class="nav__icon" aria-hidden="true"><Icon name={icons[step]} size={16} /></span>
+            <span class="nav__label">{t(labels[step])}</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+
+    <p class="nav__heading">{t("nav.section.tools")}</p>
+    <ul>
+      {#each STANDALONE_STEPS as step (step)}
         {@const blocked = blockedReason(step)}
         <li>
           <button

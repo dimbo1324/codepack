@@ -20,6 +20,7 @@ import type {
   PreviewReport,
   ProjectContext,
   ProjectProfileSummary,
+  SanitizeFinishedEvent,
   ScanReport,
 } from "./types";
 
@@ -180,6 +181,30 @@ export interface WatchChangedEvent {
 
 export function onWatchChanged(handler: (event: WatchChangedEvent) => void): Promise<UnlistenFn> {
   return listen<WatchChangedEvent>("watch:changed", (event) => handler(event.payload));
+}
+
+// --- Sterile copy ----------------------------------------------------------------
+
+/** Starts a "Sterile copy" run on a background thread and returns immediately with a
+ * run id. Unlike `startExport`, there is no progress event — only
+ * `onSanitizeFinished` — because `codepack-sanitize` reports no intermediate progress
+ * of its own (see `SanitizeFinishedEvent`'s own doc comment in `./types`). */
+export function startSanitize(
+  sourceRoot: string,
+  destinationRoot: string,
+  safetyMode: string,
+): Promise<string> {
+  return invoke("start_sanitize", { sourceRoot, destinationRoot, safetyMode });
+}
+
+export function cancelSanitize(runId: string): Promise<void> {
+  return invoke("cancel_sanitize", { runId });
+}
+
+export function onSanitizeFinished(
+  handler: (event: SanitizeFinishedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<SanitizeFinishedEvent>("sanitize:finished", (event) => handler(event.payload));
 }
 
 // --- Window chrome ---------------------------------------------------------------

@@ -32,6 +32,7 @@
   import ResultPage from "./pages/ResultPage.svelte";
   import SecurityPage from "./pages/SecurityPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
+  import SterileCopyPage from "./pages/SterileCopyPage.svelte";
 
   let appInfo = $state<AppInfo | null>(null);
   let startupError = $state<string | null>(null);
@@ -162,6 +163,8 @@
             <HistoryPage {appInfo} />
           {:else if wizard.step === "analytics"}
             <AnalyticsPage />
+          {:else if wizard.step === "sterile"}
+            <SterileCopyPage />
           {/if}
         </div>
       </main>

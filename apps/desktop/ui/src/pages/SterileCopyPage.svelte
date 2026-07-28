@@ -1,0 +1,329 @@
+<script lang="ts">
+  // "Sterile copy": a standalone action, not a step of the export wizard — its own
+  // source folder (not necessarily `wizard.project`), its own destination folder, and
+  // its own result (cleaned source, not an archive or reports). See `nav.section.tools`
+  // in the sidebar and `docs/decisions/open-questions.md` (2026-07-28) for why this is a
+  // separate page rather than an option inside Export.
+  //
+  // Unlike the Export page, there is no step-by-step progress: `codepack-sanitize`
+  // processes the whole file set in one pass and reports only the finished event.
+  import {
+    cancelSanitize,
+    onSanitizeFinished,
+    pickProjectDirectory,
+    startSanitize,
+  } from "$lib/api/client";
+  import type { SanitizeFileOutcome, SanitizeOutcome } from "$lib/api/types";
+  import Callout from "$lib/components/Callout.svelte";
+  import Icon from "$lib/components/Icon.svelte";
+  import Segmented, { type SegmentOption } from "$lib/components/Segmented.svelte";
+  import Stat from "$lib/components/Stat.svelte";
+  import type { TranslationKey } from "$lib/i18n/en";
+  import { t } from "$lib/i18n/index.svelte";
+  import { reportError } from "$lib/stores/toasts.svelte";
+  import { wizard } from "$lib/stores/wizard.svelte";
+
+  import { onMount } from "svelte";
+
+  const safeModes: SegmentOption<string>[] = $derived([
+    {
+      value: "safe",
+      label: t("security.safeMode.safe"),
+      hint: t("security.safeMode.hint.safe"),
+    },
+    {
+      value: "balanced",
+      label: t("security.safeMode.balanced"),
+      hint: t("security.safeMode.hint.balanced"),
+    },
+    {
+      value: "full",
+      label: t("security.safeMode.full"),
+      hint: t("security.safeMode.hint.full"),
+    },
+  ]);
+
+  const outcomeLabels: Record<SanitizeOutcome, TranslationKey> = {
+    stripped_and_formatted: "sterile.outcome.stripped_and_formatted",
+    stripped_only_no_formatter_found: "sterile.outcome.stripped_only_no_formatter_found",
+    skipped_unsupported_language: "sterile.outcome.skipped_unsupported_language",
+    skipped_sensitive_or_redacted: "sterile.outcome.skipped_sensitive_or_redacted",
+    error: "sterile.outcome.error",
+  };
+
+  const outcomeTone: Record<SanitizeOutcome, "success" | "muted" | "warning" | "danger"> = {
+    stripped_and_formatted: "success",
+    stripped_only_no_formatter_found: "muted",
+    skipped_unsupported_language: "muted",
+    skipped_sensitive_or_redacted: "warning",
+    error: "danger",
+  };
+
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      unlisten = await onSanitizeFinished((event) => {
+        if (event.run_id !== wizard.sterileRunId) return;
+        wizard.sterileRunning = false;
+        wizard.sterileResult = event.report;
+        wizard.sterileError = event.error;
+      });
+    })();
+    return () => unlisten?.();
+  });
+
+  async function chooseSource(): Promise<void> {
+    const chosen = await pickProjectDirectory();
+    if (chosen) wizard.sterileSource = chosen;
+  }
+
+  async function chooseDestination(): Promise<void> {
+    const chosen = await pickProjectDirectory();
+    if (chosen) wizard.sterileDestination = chosen;
+  }
+
+  async function begin(): Promise<void> {
+    if (!wizard.sterileSource || !wizard.sterileDestination) return;
+    wizard.sterileResult = null;
+    wizard.sterileError = null;
+    wizard.sterileRunning = true;
+    try {
+      wizard.sterileRunId = await startSanitize(
+        wizard.sterileSource,
+        wizard.sterileDestination,
+        wizard.sterileSafetyMode,
+      );
+    } catch (error) {
+      wizard.sterileRunning = false;
+      reportError("sterile.startFailed", error);
+    }
+  }
+
+  async function stop(): Promise<void> {
+    if (!wizard.sterileRunId) return;
+    try {
+      await cancelSanitize(wizard.sterileRunId);
+    } catch (error) {
+      reportError("sterile.cancelFailed", error);
+    }
+  }
+
+  function detailOf(file: SanitizeFileOutcome): string | null {
+    return file.detail;
+  }
+</script>
+
+<div class="stack page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{t("sterile.title")}</h1>
+      <p class="page-lede">{t("sterile.lede")}</p>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card__body stack">
+      <div class="picker-row">
+        <span class="picker-row__icon"><Icon name="folder" size={16} /></span>
+        <div class="picker-row__text">
+          <p class="picker-row__label">{t("sterile.source")}</p>
+          {#if wizard.sterileSource}
+            <p class="path selectable">{wizard.sterileSource}</p>
+          {:else}
+            <p class="text-muted text-sm">{t("sterile.source.missing")}</p>
+          {/if}
+        </div>
+        <button class="btn" onclick={chooseSource} disabled={wizard.sterileRunning}>
+          {wizard.sterileSource ? t("sterile.source.change") : t("sterile.source.choose")}
+        </button>
+      </div>
+
+      <div class="picker-row">
+        <span class="picker-row__icon"><Icon name="download" size={16} /></span>
+        <div class="picker-row__text">
+          <p class="picker-row__label">{t("sterile.destination")}</p>
+          {#if wizard.sterileDestination}
+            <p class="path selectable">{wizard.sterileDestination}</p>
+          {:else}
+            <p class="text-muted text-sm">{t("sterile.destination.missing")}</p>
+          {/if}
+        </div>
+        <button class="btn" onclick={chooseDestination} disabled={wizard.sterileRunning}>
+          {wizard.sterileDestination
+            ? t("sterile.destination.change")
+            : t("sterile.destination.choose")}
+        </button>
+      </div>
+
+      <Segmented
+        label={t("sterile.safetyMode")}
+        options={safeModes}
+        value={wizard.sterileSafetyMode}
+        disabled={wizard.sterileRunning}
+        onselect={(value) => (wizard.sterileSafetyMode = value)}
+      />
+
+      <div class="launch">
+        <button
+          class="btn btn--primary btn--lg"
+          onclick={begin}
+          disabled={wizard.sterileRunning || !wizard.sterileSource || !wizard.sterileDestination}
+        >
+          {#if wizard.sterileRunning}
+            <span class="spinner"></span>
+            {t("sterile.running")}
+          {:else}
+            <Icon name="play" size={15} />
+            {t("sterile.start")}
+          {/if}
+        </button>
+
+        {#if wizard.sterileRunning}
+          <button class="btn btn--danger btn--lg" onclick={stop}>
+            {t("sterile.cancel")}
+          </button>
+          <span class="text-muted text-sm">{t("sterile.noProgress")}</span>
+        {/if}
+      </div>
+    </div>
+  </section>
+
+  {#if wizard.sterileError}
+    <Callout tone="danger" title={t("sterile.failed")}>{wizard.sterileError}</Callout>
+  {/if}
+
+  {#if wizard.sterileResult}
+    {@const result = wizard.sterileResult}
+    <section class="card">
+      <div class="card__header">
+        <h2 class="card__title">{t("sterile.summary.title")}</h2>
+      </div>
+      <div class="card__body">
+        <div class="stat-grid">
+          <Stat label={t("sterile.summary.total")} value={result.summary.total_files} />
+          <Stat
+            tone="success"
+            label={t("sterile.summary.strippedAndFormatted")}
+            value={result.summary.stripped_and_formatted}
+          />
+          <Stat
+            label={t("sterile.summary.strippedOnly")}
+            value={result.summary.stripped_only_no_formatter_found}
+          />
+          <Stat
+            label={t("sterile.summary.unsupported")}
+            value={result.summary.skipped_unsupported_language}
+          />
+          <Stat
+            tone="warning"
+            label={t("sterile.summary.sensitive")}
+            value={result.summary.skipped_sensitive_or_redacted}
+          />
+          <Stat tone="danger" label={t("sterile.summary.errors")} value={result.summary.errors} />
+        </div>
+      </div>
+    </section>
+
+    <section class="card card--flush">
+      <div class="card__header">
+        <h2 class="card__title">{t("sterile.files.title")}</h2>
+      </div>
+      {#if result.files.length === 0}
+        <p class="log-empty">{t("sterile.files.empty")}</p>
+      {:else}
+        <ul class="file-list">
+          {#each result.files as file (file.path)}
+            <li class="file-row">
+              <span class="badge badge--{outcomeTone[file.outcome]}">
+                {t(outcomeLabels[file.outcome])}
+              </span>
+              <span class="file-row__path selectable">{file.path}</span>
+              {#if detailOf(file)}
+                <span class="text-muted text-sm">{detailOf(file)}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {/if}
+</div>
+
+<style>
+  .page {
+    height: 100%;
+  }
+
+  .picker-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    flex-wrap: wrap;
+  }
+
+  .picker-row__icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken);
+    color: var(--fg-muted);
+  }
+
+  .picker-row__text {
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .picker-row__label {
+    font-size: var(--text-base);
+    font-weight: var(--weight-medium);
+  }
+
+  .launch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    padding-top: var(--space-3);
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-6);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .file-row__path {
+    flex: 1;
+    min-width: 220px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    word-break: break-all;
+  }
+
+  .log-empty {
+    padding: var(--space-9) var(--space-6);
+    color: var(--fg-muted);
+    font-size: var(--text-base);
+    text-align: center;
+  }
+</style>

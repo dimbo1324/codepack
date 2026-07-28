@@ -203,3 +203,44 @@ export interface ProjectProfileSummary {
 export interface CommandError {
   message: string;
 }
+
+// --- Sterile copy ------------------------------------------------------------------
+
+export type SanitizeOutcome =
+  | "stripped_and_formatted"
+  | "stripped_only_no_formatter_found"
+  | "skipped_unsupported_language"
+  | "skipped_sensitive_or_redacted"
+  | "error";
+
+export interface SanitizeSummary {
+  total_files: number;
+  stripped_and_formatted: number;
+  stripped_only_no_formatter_found: number;
+  skipped_unsupported_language: number;
+  skipped_sensitive_or_redacted: number;
+  errors: number;
+}
+
+export interface SanitizeFileOutcome {
+  path: string;
+  outcome: SanitizeOutcome;
+  detail: string | null;
+}
+
+export interface SanitizeReport {
+  source: string;
+  destination: string;
+  safety_mode: string;
+  summary: SanitizeSummary;
+  files: SanitizeFileOutcome[];
+}
+
+/** A `sanitize:finished` event payload. Exactly one of `report`/`error` is set. There is
+ * no `sanitize:progress` counterpart to `ExportProgressEvent`: the backend runs the
+ * whole file pass in one sweep and reports no intermediate progress today. */
+export interface SanitizeFinishedEvent {
+  run_id: string;
+  report: SanitizeReport | null;
+  error: string | null;
+}
