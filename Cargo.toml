@@ -91,6 +91,7 @@ codepack-storage = { path = "crates/codepack-storage" }
 # fuzzy-matching machinery a CI-facing tool does not need and which would make output
 # depend on whether stdout is a TTY.
 clap = { version = "4.5", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
+clap_complete = "4.5"
 # S10: `.codepack.toml`, the versioned per-project configuration (BLUEPRINT §B.7,
 # decision Q6). TOML rather than JSON because this file is written by hand, by humans,
 # and lives in the user's repository next to their other tool configuration.

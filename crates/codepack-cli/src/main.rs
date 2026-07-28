@@ -49,6 +49,7 @@ fn main() -> std::process::ExitCode {
         Command::History(args) => commands::history::run(&args, format),
         Command::Doctor => commands::doctor::run(format),
         Command::Sanitize(args) => commands::sanitize::run(&args, format),
+        Command::Completions(args) => Ok(commands::completions::run(&args)),
     };
 
     if let Err(error) = &result {

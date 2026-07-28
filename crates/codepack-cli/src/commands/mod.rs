@@ -1,5 +1,6 @@
 //! One module per command, plus the setup they share.
 
+pub(crate) mod completions;
 pub(crate) mod doctor;
 pub(crate) mod export;
 pub(crate) mod history;

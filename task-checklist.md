@@ -14,11 +14,16 @@ task (unlike the previous task, where publish was not requested).
 
 ## 1 — CLI shell completions
 
-- [ ] Add `clap_complete` dependency to `codepack-cli`
-- [ ] `codepack completions <shell>` subcommand (bash/zsh/fish/powershell/elvish),
-      writes the generated script to stdout
-- [ ] Test: generation succeeds for each supported shell without panicking
-- [ ] `cargo xtask gate` green for this slice
+- [+] Add `clap_complete` dependency to `codepack-cli` (workspace dep, MIT/Apache-2.0
+      like `clap` itself; `cargo deny check` clean)
+- [+] `codepack completions <shell>` subcommand (bash/zsh/fish/powershell/elvish),
+      writes the generated script to stdout; no `--json` form — a completion script
+      is not a report
+- [+] Test: generation succeeds for each supported shell without panicking (unit test
+      in `commands/completions.rs`) plus an end-to-end CLI test running the real
+      binary for all five shells
+- [+] `cargo fmt`/`clippy -D warnings`/`cargo test -p codepack-cli` green for this
+      slice
 
 ## 2 — Kotlin in `codepack-sanitize`
 

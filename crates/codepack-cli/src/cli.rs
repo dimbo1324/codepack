@@ -44,6 +44,15 @@ pub(crate) enum Command {
     /// Strip comments (tree-sitter) and reformat with a `PATH` tool into a separate
     /// destination folder. A standalone action, not part of `export`'s pipeline.
     Sanitize(SanitizeArgs),
+    /// Print a shell completion script to stdout.
+    Completions(CompletionsArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CompletionsArgs {
+    /// Which shell to generate a completion script for.
+    #[arg(value_enum)]
+    pub shell: clap_complete::Shell,
 }
 
 /// Settings shared by the commands that read a project.

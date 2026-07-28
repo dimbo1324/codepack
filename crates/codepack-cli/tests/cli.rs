@@ -437,6 +437,21 @@ fn help_and_version_work_and_exit_zero() {
     }
 }
 
+#[test]
+fn completions_prints_a_script_for_every_supported_shell() {
+    let sandbox = Sandbox::new();
+    for shell in ["bash", "zsh", "fish", "powershell", "elvish"] {
+        let output = sandbox.run(&["completions", shell]);
+        assert_eq!(code(&output), 0, "for shell {shell}");
+        let script = stdout(&output);
+        assert!(!script.is_empty(), "for shell {shell}");
+        assert!(
+            script.contains("codepack"),
+            "the generated script should reference the binary name for {shell}"
+        );
+    }
+}
+
 /// Every path under `root`, recursively. A non-recursive listing would not notice a
 /// file written into a subdirectory, which is exactly what "writes nothing anywhere"
 /// has to rule out.
