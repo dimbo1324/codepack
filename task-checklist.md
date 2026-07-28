@@ -27,17 +27,27 @@ task (unlike the previous task, where publish was not requested).
 
 ## 2 — Kotlin in `codepack-sanitize`
 
-- [ ] Verify `tree-sitter-kotlin` crate: current version, license, maintenance —
-      confirm before adding (Q24 flagged Batch 2 crates as needing this check)
-- [ ] Add Kotlin to `language.rs`'s supported set (`.kt`/`.kts` extensions)
-- [ ] Kotlin comment-stripping test (line `//` and block `/* */`, string/literal
+- [+] Verify `tree-sitter-kotlin` crate: current version, license, maintenance —
+      confirm before adding (Q24 flagged Batch 2 crates as needing this check).
+      Found the crate literally named `tree-sitter-kotlin` (fwcd, last published
+      2024-08-03) pins `tree-sitter >= 0.21, < 0.23`, incompatible with this
+      workspace's `tree-sitter` 0.26 — a real type incompatibility, not assumed.
+      Used `tree-sitter-kotlin-ng` instead (`tree-sitter-grammars` org fork,
+      v1.1.0, MIT, published 2025-01-09, depends on the version-independent
+      `tree-sitter-language` crate like every Batch 1 grammar) — builds clean
+- [+] Add Kotlin to `language.rs`'s supported set (`.kt`/`.kts` extensions)
+- [+] Kotlin comment-stripping test (line `//` and block `/* */`, string/literal
       survival, following the existing Batch 1 test pattern)
-- [ ] Formatter table entry if a safe stdin-invocable Kotlin formatter exists
-      (`ktlint`); if not, honestly falls back to `StrippedOnlyNoFormatterFound`
-      like Java/C#/PHP/Ruby already do
-- [ ] Update `docs/decisions/open-questions.md` Q24 — Kotlin moves from "deferred"
+- [+] Formatter table entry: `ktlint` has a real stdin-in/stdout-out mode
+      (`--stdin --format --stdin-path=<name>`, verified against
+      `KtlintCommandLine.kt` source) — added with a real-binary-guarded test
+      following the gofmt/ruff pattern
+- [+] Update `docs/decisions/open-questions.md` Q24 — Kotlin moves from "deferred"
       to "closed", the rest of Batch 2 (Dart/Swift/Assembly/Groovy) stays open
-- [ ] `cargo xtask gate` green for this slice
+- [+] `cargo fmt -p codepack-sanitize`/`clippy -D warnings`/`cargo test
+      -p codepack-sanitize`/`cargo deny check` all green for this slice (did not
+      run the full `cargo xtask gate`, since sections 1 and 3 of this checklist
+      were out of scope for this task and are mid-flight on this branch)
 
 ## 3 — Drag-and-drop on the Sterile-copy page
 
