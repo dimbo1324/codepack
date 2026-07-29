@@ -53,7 +53,7 @@ pub enum SanitizeError {
     /// read from would modify it (invariant I2), and on a second run would try to pack
     /// itself.
     #[error(
-        "refusing to write the archive to {archive}: it is inside the source project          {source_root}. Choose a path outside it."
+        "refusing to write the archive to {archive}: it is inside the source project {source_root}. Choose a path outside it."
     )]
     ArchiveInsideSource {
         source_root: PathBuf,
