@@ -58,6 +58,14 @@ impl StagedContent {
 ///
 /// Fails when `project_root` is not inside a git repository: answering "nothing staged"
 /// there would be a lie that reads exactly like a clean result.
+///
+/// **The diff is scoped to `project_root`.** `Repository::discover` walks upward, so in
+/// a monorepo the repository root is usually an ancestor of the project being scanned;
+/// without a pathspec the diff would return every staged path in the whole repository
+/// while the report still named the project the user asked about. That over-reports
+/// rather than under-reports, so it never lets a secret through, but it makes the
+/// command unusable exactly where it is most wanted — a per-package pre-commit hook in
+/// a monorepo — and it makes the `project` field of the JSON report untrue.
 pub(crate) fn collect(project_root: &Path) -> Result<StagedContent> {
     let repository = Repository::discover(project_root).map_err(|error| {
         CliError::message(format!(
@@ -78,6 +86,9 @@ pub(crate) fn collect(project_root: &Path) -> Result<StagedContent> {
     };
 
     let mut options = DiffOptions::new();
+    if let Some(scope) = scope_pathspec(&repository, project_root) {
+        options.pathspec(scope);
+    }
     let diff = repository
         .diff_tree_to_index(head_tree.as_ref(), None, Some(&mut options))
         .map_err(|error| git_error("compare the index against HEAD", &error))?;
@@ -131,6 +142,36 @@ pub(crate) fn collect(project_root: &Path) -> Result<StagedContent> {
 
 fn git_error(action: &str, error: &git2::Error) -> CliError {
     CliError::message(format!("cannot {action}: {}", error.message()))
+}
+
+/// `project_root` expressed relative to the repository's working directory, in the
+/// forward-slash form git pathspecs use.
+///
+/// Returns `None` when the project *is* the repository root (no narrowing needed), when
+/// the repository has no working directory (bare), or when the two cannot be related —
+/// in which case scanning the whole repository is the safe direction to fail.
+fn scope_pathspec(repository: &Repository, project_root: &Path) -> Option<String> {
+    let workdir = repository.workdir()?;
+    // Both sides are canonicalised so that a path reached through a symlinked or
+    // shortened parent still matches the workdir prefix. On failure, fall back to the
+    // path as given rather than silently widening the scope to the whole repository.
+    let workdir = std::fs::canonicalize(workdir).unwrap_or_else(|_| workdir.to_path_buf());
+    let project =
+        std::fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
+
+    let relative = project.strip_prefix(&workdir).ok()?;
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    let mut pathspec = String::new();
+    for component in relative.components() {
+        if !pathspec.is_empty() {
+            pathspec.push('/');
+        }
+        pathspec.push_str(&component.as_os_str().to_string_lossy());
+    }
+    Some(pathspec)
 }
 
 #[cfg(test)]
@@ -283,6 +324,58 @@ mod tests {
             staged.root().to_path_buf()
         };
         assert!(!root.exists(), "staged content outlived its handle");
+    }
+
+    #[test]
+    fn a_sibling_packages_staged_file_is_not_collected_for_this_project() {
+        // Review finding: `Repository::discover` walks upward, so scanning `mono/appA`
+        // used to return every staged path in `mono`, including `appB`'s — while the
+        // report still said the project was `appA`.
+        let dir = tempfile::tempdir().unwrap();
+        let repository = repository_with_commit(dir.path());
+
+        for package in ["appA", "appB"] {
+            std::fs::create_dir_all(dir.path().join(package)).unwrap();
+            std::fs::write(
+                dir.path().join(package).join("config.txt"),
+                format!("{package} config\n"),
+            )
+            .unwrap();
+        }
+        stage(&repository, "appA");
+        stage(&repository, "appB");
+
+        let staged = collect(&dir.path().join("appA")).unwrap();
+
+        let names: Vec<String> = staged
+            .relative_files()
+            .iter()
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert_eq!(
+            names,
+            ["appA/config.txt"],
+            "only the scanned project's staged files belong in this result"
+        );
+    }
+
+    #[test]
+    fn scanning_the_repository_root_still_sees_every_staged_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let repository = repository_with_commit(dir.path());
+
+        std::fs::create_dir_all(dir.path().join("pkg")).unwrap();
+        std::fs::write(dir.path().join("pkg").join("a.txt"), "a\n").unwrap();
+        std::fs::write(dir.path().join("top.txt"), "top\n").unwrap();
+        stage(&repository, "pkg");
+        stage(&repository, "top.txt");
+
+        let staged = collect(dir.path()).unwrap();
+        assert_eq!(
+            staged.relative_files().len(),
+            2,
+            "narrowing must not kick in when the project is the repository root"
+        );
     }
 
     #[test]

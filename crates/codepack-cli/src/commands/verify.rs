@@ -26,6 +26,35 @@
 //! removed on every exit path. A bundle is by definition a file from somewhere else, so
 //! this is the one command in the binary whose input is genuinely untrusted; it does not
 //! get its own second implementation of that defence (invariant I7).
+//!
+//! ## Why findings are split into two groups
+//!
+//! A codepack bundle carries the exported project *and* codepack's own reports about it.
+//! Scanning both together and presenting one list makes every clean bundle look dirty:
+//! `06_security_scan.txt` contains the literal placeholder `<REDACTED_SECRET_LINE>`,
+//! which re-trips the keyword cascade, and `manifest.json` embeds absolute paths, which
+//! trip the entropy detector. Measured on a two-file toy project, that is two dozen
+//! findings for a bundle that is provably clean — and a verdict nobody can act on is
+//! worse than no verdict, because the reader learns to skim it.
+//!
+//! So a finding is kept out of the verdict when **either** of two things is true:
+//!
+//! * it sits in a file codepack generated from already-redacted data
+//!   ([`is_generated_artifact`]: `reports/insights/`, `manifest.json`,
+//!   `PROJECT_PROFILE.json`, `INDEX.md`, `reports/01_structure.txt`); or
+//! * the line it points at, *as it exists in the bundle*, holds nothing
+//!   credential-shaped ([`is_not_credential_shaped`]).
+//!
+//! The second test is what makes `reports/03_text_dump.txt` and `reports/02_git.txt`
+//! safe to leave in the verdict even though codepack writes them too. Those two carry
+//! the project's own bytes, so a redaction failure must be caught there — and it is,
+//! because a leaked value is credential-shaped, while a `<REDACTED_SECRET_LINE>` marker
+//! or a header sentence containing the word *Secret* is not.
+//!
+//! Nothing is hidden. Both groups are counted and both are printed; the split says
+//! *where* a finding is, and only the verdict is narrowed. A bundle that is not a
+//! codepack bundle has no recognisable generated paths, so all of it is content — the
+//! safe direction.
 
 use std::path::{Path, PathBuf};
 
@@ -45,8 +74,13 @@ pub(crate) struct VerifyReport {
     /// `zip`, `archive_set` or `directory` — what the path turned out to be.
     pub bundle_kind: &'static str,
     pub scanned_files: usize,
+    /// Counted over the exported content only — the numbers the verdict is based on.
     pub summary: Summary,
+    /// Findings in the exported project's own content. These drive the exit code.
     pub findings: Vec<ReportedFinding>,
+    /// Findings inside codepack's own generated reports and metadata. Reported in full,
+    /// but kept out of the verdict — see the module docs for why.
+    pub generated_findings: Vec<ReportedFinding>,
     pub suppressed: Vec<crate::allow::SuppressedFinding>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowlist: Option<String>,
@@ -141,6 +175,7 @@ fn build(bundle: &Path, allowlist_root: Option<&Path>) -> Result<VerifyReport> {
     Ok(assemble(
         bundle,
         opened.kind(),
+        root,
         relative_files.len(),
         &screened,
     ))
@@ -230,15 +265,32 @@ fn walk(root: &Path, directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
 fn assemble(
     bundle: &Path,
     bundle_kind: &'static str,
+    root: &Path,
     scanned_files: usize,
     screened: &crate::allow::Screened,
 ) -> VerifyReport {
-    let findings = &screened.findings;
-    let critical = findings
+    let (generated, content): (Vec<_>, Vec<_>) = screened.findings.iter().partition(|finding| {
+        is_generated_artifact(&finding.file)
+            || bundle_line(root, &finding.file, finding.line)
+                .is_some_and(|line| is_not_credential_shaped(&line))
+    });
+
+    let critical = content
         .iter()
         .filter(|finding| finding.severity == "critical")
         .count();
-    let count_of = |kind: FindingKind| findings.iter().filter(|f| f.kind == kind).count();
+    let count_of = |kind: FindingKind| content.iter().filter(|f| f.kind == kind).count();
+
+    let report = |finding: &codepack_security::Finding| ReportedFinding {
+        kind: kind_label(finding.kind),
+        severity: finding.severity.clone(),
+        confidence: finding.confidence.clone(),
+        file: finding.file.clone(),
+        line: finding.line,
+        rule: finding.rule.clone(),
+        message: finding.message.clone(),
+        fingerprint: crate::allow::fingerprint_of(finding),
+    };
 
     VerifyReport {
         bundle: bundle.display().to_string(),
@@ -248,22 +300,11 @@ fn assemble(
             sensitive_files: count_of(FindingKind::SensitiveFile),
             potential_secrets: count_of(FindingKind::PotentialSecret),
             risky_code: count_of(FindingKind::RiskyCode),
-            total_findings: findings.len(),
+            total_findings: content.len(),
             critical,
         },
-        findings: findings
-            .iter()
-            .map(|finding| ReportedFinding {
-                kind: kind_label(finding.kind),
-                severity: finding.severity.clone(),
-                confidence: finding.confidence.clone(),
-                file: finding.file.clone(),
-                line: finding.line,
-                rule: finding.rule.clone(),
-                message: finding.message.clone(),
-                fingerprint: crate::allow::fingerprint_of(finding),
-            })
-            .collect(),
+        findings: content.iter().map(|finding| report(finding)).collect(),
+        generated_findings: generated.iter().map(|finding| report(finding)).collect(),
         suppressed: screened.suppressed.clone(),
         allowlist: screened
             .allowlist_path
@@ -278,6 +319,97 @@ fn kind_label(kind: FindingKind) -> &'static str {
         FindingKind::PotentialSecret => "potential_secret",
         FindingKind::RiskyCode => "risky_code",
     }
+}
+
+/// Codepack's own redaction placeholders. Any of these in a line means that position
+/// was already redacted before the bundle was written.
+const REDACTION_PLACEHOLDERS: [&str; 3] =
+    ["<REDACTED_SECRET_LINE>", "<REDACTED_SECRET>", "<REDACTED>"];
+
+/// The shortest run of alphanumerics `verify` still treats as possibly-a-secret once
+/// placeholders are removed. Below this a leftover is a label or a word, not a
+/// credential; `codepack-security`'s own entropy detector uses a comparable floor.
+const RESIDUAL_SECRET_MIN_RUN: usize = 12;
+
+/// True when the **raw bundle line** a finding points at cannot be carrying a
+/// credential, so the scanner fired on something other than a secret.
+///
+/// The line as it sits in the bundle is the signal, not the finding's message:
+/// `Finding::message` is redacted on the way out for *every* finding, real or not, so it
+/// cannot tell the two apart. What the bundle actually contains can.
+///
+/// After codepack's own redaction markers are stripped, a line with no alphanumeric run
+/// at least [`RESIDUAL_SECRET_MIN_RUN`] long has nothing credential-shaped left in it.
+/// That single rule covers both ways a clean bundle used to look dirty:
+///
+/// * `<REDACTED_SECRET_LINE>` — redaction did its job, and the marker exists precisely
+///   because the secret is gone.
+/// * `Secret redaction is applied to command output.` — codepack's own report header,
+///   which trips the keyword cascade on the word *Secret* while holding no value at all.
+///
+/// A line where redaction genuinely failed still carries the raw value, that value has a
+/// long run, and the finding is reported — which is the case `verify` exists for.
+///
+/// Known limit, consistent with Q18: a short, word-shaped credential (`hunter2`) has no
+/// long run either and is dismissed here. Telling that apart from an ordinary word by
+/// shape alone is not possible, and the project already records that trade-off.
+fn is_not_credential_shaped(raw_line: &str) -> bool {
+    let mut residue = raw_line.to_string();
+    for placeholder in REDACTION_PLACEHOLDERS {
+        residue = residue.replace(placeholder, " ");
+    }
+
+    let mut run = 0usize;
+    for character in residue.chars() {
+        if character.is_ascii_alphanumeric() {
+            run += 1;
+            if run >= RESIDUAL_SECRET_MIN_RUN {
+                return false;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    true
+}
+
+/// Reads the 1-based `line` of `root/file`, when it can be read at all.
+///
+/// A file that cannot be read yields `None`, which classifies the finding as content —
+/// the safe direction, since an unreadable line is not evidence that redaction worked.
+fn bundle_line(root: &Path, file: &str, line: Option<usize>) -> Option<String> {
+    let line = line?;
+    let relative: PathBuf = file
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .split('/')
+        .collect();
+    let text = std::fs::read_to_string(root.join(relative)).ok()?;
+    text.lines().nth(line.checked_sub(1)?).map(str::to_string)
+}
+
+/// True when a bundle-relative path is a file codepack itself generated from
+/// already-redacted data, rather than a place the source project's bytes land.
+///
+/// `03_text_dump.txt` and `02_git.txt` are deliberately **not** in this set even though
+/// codepack writes them: the first concatenates the project's own file contents and the
+/// second carries git output, so a redaction failure would surface in exactly those two.
+/// Treating them as generated would blind the check where it matters most.
+fn is_generated_artifact(file: &str) -> bool {
+    // Findings report paths with backslashes and often a leading `.\`; normalise both
+    // before matching so the classification does not depend on that spelling.
+    let normalised = file.replace('\\', "/");
+    let path = normalised
+        .trim_start_matches("./")
+        .trim_start_matches('/')
+        .to_ascii_lowercase();
+
+    path.starts_with("reports/insights/")
+        || path == "manifest.json"
+        || path == "project_profile.json"
+        || path == "index.md"
+        || path == "reports/01_structure.txt"
+        || path == "report_plugins.json"
 }
 
 fn print_human(report: &VerifyReport) {
@@ -300,23 +432,38 @@ fn print_human(report: &VerifyReport) {
     output::line("");
 
     if report.findings.is_empty() {
-        output::line("Clean: nothing found in this bundle.");
-        return;
+        output::line("Clean: nothing found in this bundle's exported content.");
+    } else {
+        output::line(format!(
+            "{} finding(s) in exported content: {} sensitive file(s), {} potential secret(s), {} risky code",
+            report.summary.total_findings,
+            report.summary.sensitive_files,
+            report.summary.potential_secrets,
+            report.summary.risky_code
+        ));
+        if report.summary.critical > 0 {
+            output::line(format!("{} of them are critical.", report.summary.critical));
+        }
+        output::line("");
+        print_findings(&report.findings);
     }
 
-    output::line(format!(
-        "{} finding(s): {} sensitive file(s), {} potential secret(s), {} risky code",
-        report.summary.total_findings,
-        report.summary.sensitive_files,
-        report.summary.potential_secrets,
-        report.summary.risky_code
-    ));
-    if report.summary.critical > 0 {
-        output::line(format!("{} of them are critical.", report.summary.critical));
+    // Always mentioned, never silently dropped: a reader must be able to see that a
+    // second group exists and decide for themselves whether to look at it.
+    if !report.generated_findings.is_empty() {
+        output::line("");
+        output::line(format!(
+            "{} further finding(s) sit in codepack's own generated reports rather than in \
+             the exported content. These are usually redaction placeholders and embedded \
+             paths, and do not affect the verdict above.",
+            report.generated_findings.len()
+        ));
+        print_findings(&report.generated_findings);
     }
-    output::line("");
+}
 
-    for finding in &report.findings {
+fn print_findings(findings: &[ReportedFinding]) {
+    for finding in findings {
         let location = match finding.line {
             Some(line) => format!("{}:{}", finding.file, line),
             None => finding.file.clone(),
@@ -412,6 +559,140 @@ mod tests {
                 .iter()
                 .all(|file| !file.contains(dir.path().to_str().unwrap())),
             "paths must not leak the checking machine's layout: {files:?}"
+        );
+    }
+
+    #[test]
+    fn an_already_redacted_bundle_line_is_not_reported_as_a_secret() {
+        // The marker exists because the secret was removed; reporting it says the
+        // opposite of the truth about the one place there provably is no secret.
+        assert!(is_not_credential_shaped("<REDACTED_SECRET_LINE>"));
+        assert!(is_not_credential_shaped("- Secret redaction: <REDACTED>"));
+        assert!(is_not_credential_shaped("API_KEY=<REDACTED>"));
+        assert!(is_not_credential_shaped("  token: <REDACTED_SECRET>,"));
+    }
+
+    #[test]
+    fn codepack_s_own_report_header_prose_is_not_reported_as_a_secret() {
+        // Verbatim from `reports/02_git.txt`: codepack's own boilerplate trips its own
+        // keyword cascade on the word `Secret` while holding no value whatsoever.
+        assert!(is_not_credential_shaped(
+            "Secret redaction is applied to command output."
+        ));
+    }
+
+    #[test]
+    fn a_bundle_line_where_redaction_failed_is_still_reported() {
+        // The property that keeps the dismissal narrow: a raw value next to a marker
+        // survives stripping, so the finding stands.
+        assert!(!is_not_credential_shaped(
+            "API_KEY=<REDACTED> BACKUP_KEY=zZ9xQ7vLwPmR3sT8uAbCdEfGhIj"
+        ));
+        assert!(!is_not_credential_shaped(
+            "<REDACTED_SECRET_LINE> AKIAIOSFODNN7EXAMPLE"
+        ));
+    }
+
+    #[test]
+    fn a_bundle_line_carrying_a_raw_credential_is_never_dismissed() {
+        assert!(!is_not_credential_shaped(
+            "API_KEY=zZ9xQ7vLwPmR3sT8uAbCdEfGhIj"
+        ));
+        assert!(is_not_credential_shaped("nothing interesting here"));
+    }
+
+    #[test]
+    fn a_leaked_secret_in_the_text_dump_still_counts_towards_the_verdict() {
+        // The case the raw-line check must never dismiss: `03_text_dump.txt` is written
+        // by codepack, but it carries the project's own bytes, so a redaction failure
+        // there is a genuine leak and has to reach the verdict.
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            "reports/03_text_dump.txt",
+            "API_KEY=zZ9xQ7vLwPmR3sT8uAbCdEfGhIj\n",
+        );
+
+        let report = build(dir.path(), None).unwrap();
+        assert!(
+            !report.findings.is_empty(),
+            "an unredacted secret in the text dump is a real leak"
+        );
+    }
+
+    #[test]
+    fn an_already_redacted_text_dump_does_not_count_towards_the_verdict() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            "reports/03_text_dump.txt",
+            "API_KEY=<REDACTED_SECRET_LINE>\n",
+        );
+
+        let report = build(dir.path(), None).unwrap();
+        assert!(
+            report.findings.is_empty(),
+            "redaction having worked is not a finding, got {:?}",
+            report.findings
+        );
+    }
+
+    #[test]
+    fn codepack_s_own_reports_are_classified_as_generated() {
+        for path in [
+            r".\reports\insights\06_security_scan.txt",
+            "reports/insights/16_key_files_report.md",
+            r".\manifest.json",
+            "PROJECT_PROFILE.json",
+            r".\INDEX.md",
+            "reports/01_structure.txt",
+        ] {
+            assert!(
+                is_generated_artifact(path),
+                "{path} should not count towards the verdict"
+            );
+        }
+    }
+
+    #[test]
+    fn the_text_dump_and_git_report_stay_content_because_project_bytes_land_there() {
+        // The two files codepack writes that carry the source project's own content. A
+        // redaction failure surfaces here, so classifying them as generated would blind
+        // the check exactly where it matters.
+        assert!(!is_generated_artifact(r".\reports\03_text_dump.txt"));
+        assert!(!is_generated_artifact("reports/02_git.txt"));
+    }
+
+    #[test]
+    fn exported_project_files_are_content_even_under_a_reports_like_name() {
+        assert!(!is_generated_artifact(r".\demo\src\main.rs"));
+        assert!(!is_generated_artifact(r".\demo\reports\insights\thing.rs"));
+        assert!(!is_generated_artifact("some-project/manifest.json"));
+    }
+
+    #[test]
+    fn a_finding_in_a_generated_report_does_not_drive_the_verdict() {
+        let dir = tempfile::tempdir().unwrap();
+        // Exactly the shape that made every clean bundle read as dirty: the scanner's
+        // own placeholder text, sitting inside the scanner's own report.
+        write(
+            dir.path(),
+            "reports/insights/06_security_scan.txt",
+            "  [high] a.rs:1 (secret_like_line) — API_KEY=<REDACTED_SECRET_LINE>\n",
+        );
+        write(dir.path(), "demo/src/main.rs", "fn main() {}\n");
+
+        let report = build(dir.path(), None).unwrap();
+
+        assert!(
+            report.findings.is_empty(),
+            "verdict must come from exported content only, got {:?}",
+            report.findings
+        );
+        assert_eq!(report.summary.total_findings, 0);
+        assert!(
+            !report.generated_findings.is_empty(),
+            "but the finding must still be reported, not dropped"
         );
     }
 

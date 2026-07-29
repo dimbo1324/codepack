@@ -715,8 +715,19 @@ fn verify_reports_a_clean_bundle_as_clean() {
     );
     let payload = json(&verified);
     assert_eq!(payload["command"], "verify");
-    assert_eq!(payload["summary"]["critical"], 0);
     assert!(payload["scanned_files"].as_u64().unwrap() > 0);
+
+    // The assertion the command's name actually promises. Written weakly at first (only
+    // `critical == 0`), it passed while a real export produced two dozen findings from
+    // codepack's own reports — the reason those are now classified separately.
+    assert_eq!(
+        payload["findings"].as_array().unwrap().len(),
+        0,
+        "a clean project's bundle must report no findings in its exported content.\nstdout:\n{}",
+        stdout(&verified)
+    );
+    assert_eq!(payload["summary"]["total_findings"], 0);
+    assert_eq!(payload["summary"]["critical"], 0);
 }
 
 #[test]
