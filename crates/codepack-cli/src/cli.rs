@@ -46,6 +46,23 @@ pub(crate) enum Command {
     Sanitize(SanitizeArgs),
     /// Print a shell completion script to stdout.
     Completions(CompletionsArgs),
+    /// Re-scan an already-produced bundle and report what is actually inside it.
+    Verify(VerifyArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VerifyArgs {
+    /// The bundle to check: a `.zip`, an archive-set directory, or an extracted folder.
+    /// Which one it is gets decided by looking at it, not by a flag.
+    pub bundle: PathBuf,
+
+    /// Project whose `.codepack-allow` should be honoured while checking.
+    ///
+    /// Not inferred from the bundle: the bundle came from somewhere else, and letting a
+    /// received archive carry its own suppression list would let a sender decide what
+    /// the recipient is allowed to be told.
+    #[arg(long, value_name = "DIR")]
+    pub allowlist_root: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -109,6 +126,14 @@ pub(crate) struct PreviewArgs {
 pub(crate) struct ScanArgs {
     #[command(flatten)]
     pub project: ProjectArgs,
+
+    /// Scan only what is staged in git, reading the staged content itself.
+    ///
+    /// This is the pre-commit-hook mode: it answers "what is about to be committed",
+    /// which is not the same question as "what is in my working tree" once a staged
+    /// file has been edited again.
+    #[arg(long)]
+    pub staged: bool,
 }
 
 #[derive(Debug, Args)]

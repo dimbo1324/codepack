@@ -7,6 +7,7 @@ pub(crate) mod history;
 pub(crate) mod preview;
 pub(crate) mod sanitize;
 pub(crate) mod scan;
+pub(crate) mod verify;
 
 use std::path::{Path, PathBuf};
 

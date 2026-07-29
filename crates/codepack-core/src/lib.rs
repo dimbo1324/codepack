@@ -1,3 +1,4 @@
+pub mod allowlist;
 mod cancellation;
 pub mod classify;
 mod error;
@@ -9,6 +10,7 @@ mod types;
 pub mod config;
 pub mod profiles;
 
+pub use allowlist::{ALLOWLIST_FILE_NAME, AllowEntry, Allowlist, AllowlistError};
 pub use cancellation::CancellationToken;
 pub use classify::{
     BINARY_EXTENSIONS, BINARY_SAMPLE_BYTES, TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION,

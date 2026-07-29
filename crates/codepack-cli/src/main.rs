@@ -7,12 +7,14 @@
 // A CLI is expected to write to stdout; the workspace lint targets library crates.
 #![allow(clippy::print_stdout)]
 
+mod allow;
 mod cli;
 mod commands;
 mod error;
 mod exit;
 mod output;
 mod settings;
+mod staged;
 
 use clap::Parser;
 
@@ -50,6 +52,7 @@ fn main() -> std::process::ExitCode {
         Command::Doctor => commands::doctor::run(format),
         Command::Sanitize(args) => commands::sanitize::run(&args, format),
         Command::Completions(args) => Ok(commands::completions::run(&args)),
+        Command::Verify(args) => commands::verify::run(&args, format),
     };
 
     if let Err(error) = &result {

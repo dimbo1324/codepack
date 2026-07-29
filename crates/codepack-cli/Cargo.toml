@@ -24,9 +24,16 @@ codepack-sanitize.workspace = true
 codepack-security.workspace = true
 codepack-storage.workspace = true
 codepack-tokens.workspace = true
+# `verify` reuses S8's traversal-safe extraction rather than opening archives itself.
+codepack-archive.workspace = true
+# `scan --staged` reads staged blob content out of the index. Same read-only, no-network
+# feature set the rest of the workspace already pins.
+git2.workspace = true
+# Both `verify` and `scan --staged` materialise content into a temporary directory that
+# must disappear on every exit path; this is production use, not test-only.
+tempfile.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 # End-to-end tests open the produced bundle to prove a secret never entered it.
 zip.workspace = true
 # The history test asks the database directly whether a read-only command wrote to it;

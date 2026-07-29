@@ -689,3 +689,283 @@ fn sanitize_json_output_is_a_versioned_envelope() {
     assert_eq!(payload["command"], "sanitize");
     assert!(payload["summary"]["total_files"].as_u64().unwrap() > 0);
 }
+
+// --- verify: checking a bundle that already exists ---------------------------------
+
+#[test]
+fn verify_reports_a_clean_bundle_as_clean() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "export",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+        "--json",
+    ]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    let bundle = json(&output)["result_path"].as_str().unwrap().to_string();
+    let verified = sandbox.run(&["verify", &bundle, "--json"]);
+
+    assert_eq!(
+        code(&verified),
+        0,
+        "a bundle exported from a clean project must verify clean.\nstderr:\n{}",
+        stderr(&verified)
+    );
+    let payload = json(&verified);
+    assert_eq!(payload["command"], "verify");
+    assert_eq!(payload["summary"]["critical"], 0);
+    assert!(payload["scanned_files"].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn verify_finds_a_secret_that_reached_the_bundle() {
+    // `full` safe mode keeps the `.env` the other modes would drop, so this produces the
+    // situation `verify` exists to catch: a bundle that really does carry a credential.
+    let sandbox = Sandbox::new().with_secret();
+    let output = sandbox.run(&[
+        "export",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+        "--safe-mode",
+        "full",
+        "--json",
+    ]);
+    let bundle = json(&output)["result_path"].as_str().unwrap().to_string();
+
+    let verified = sandbox.run(&["verify", &bundle, "--json"]);
+    assert_eq!(
+        code(&verified),
+        3,
+        "a credential inside the bundle must gate a pipeline.\nstdout:\n{}",
+        stdout(&verified)
+    );
+    assert!(json(&verified)["summary"]["critical"].as_u64().unwrap() > 0);
+}
+
+#[test]
+fn verify_refuses_a_file_that_is_not_an_archive_instead_of_calling_it_clean() {
+    let sandbox = Sandbox::new();
+    let broken = sandbox.out().join("not-really.zip");
+    std::fs::write(&broken, b"definitely not a zip").unwrap();
+
+    let output = sandbox.run(&["verify", &broken.display().to_string()]);
+    assert_eq!(
+        code(&output),
+        1,
+        "an unreadable bundle must not read as clean.\nstdout:\n{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn verify_rejects_a_path_that_does_not_exist() {
+    let sandbox = Sandbox::new();
+    let missing = sandbox.out().join("no-such-bundle.zip");
+    assert_eq!(
+        code(&sandbox.run(&["verify", &missing.display().to_string()])),
+        1
+    );
+}
+
+// --- .codepack-allow: reviewed findings stop being re-reported ----------------------
+
+#[test]
+fn an_allowlisted_finding_is_suppressed_and_reported_as_suppressed() {
+    let sandbox = Sandbox::new().with_secret();
+    let first = sandbox.run(&["scan", &sandbox.project().display().to_string(), "--json"]);
+    assert_eq!(code(&first), 3);
+
+    let payload = json(&first);
+    let findings = payload["findings"].as_array().unwrap();
+    let fingerprint = findings[0]["fingerprint"].as_str().unwrap().to_string();
+    let before = findings.len();
+
+    std::fs::write(
+        sandbox.project().join(".codepack-allow"),
+        format!(
+            "[[allow]]\nfingerprint = \"{fingerprint}\"\nreason = \"reviewed: sample fixture\"\n"
+        ),
+    )
+    .unwrap();
+
+    let second = sandbox.run(&["scan", &sandbox.project().display().to_string(), "--json"]);
+    let payload = json(&second);
+
+    assert_eq!(
+        payload["findings"].as_array().unwrap().len(),
+        before - 1,
+        "the accepted finding should be gone from the list"
+    );
+    let suppressed = payload["suppressed"].as_array().unwrap();
+    assert_eq!(
+        suppressed.len(),
+        1,
+        "and counted as suppressed, not dropped"
+    );
+    assert_eq!(suppressed[0]["reason"], "reviewed: sample fixture");
+    assert!(
+        payload["allowlist"].is_string(),
+        "the file must be named in the report"
+    );
+}
+
+#[test]
+fn a_malformed_allowlist_fails_the_run_rather_than_being_ignored() {
+    let sandbox = Sandbox::new();
+    std::fs::write(
+        sandbox.project().join(".codepack-allow"),
+        "[[allow]]\nfingerprint = \"not-a-fingerprint\"\nreason = \"typo\"\n",
+    )
+    .unwrap();
+
+    let output = sandbox.run(&["scan", &sandbox.project().display().to_string()]);
+    assert_eq!(
+        code(&output),
+        1,
+        "a file that silently matches nothing would leave a reviewer misinformed.\nstderr:\n{}",
+        stderr(&output)
+    );
+}
+
+// --- scan --staged: the pre-commit guard -------------------------------------------
+
+/// Builds a git repository in `root` through `git2` — never by shelling out to `git`,
+/// which `.ai/project/12-domain-rules.md` forbids tests from depending on.
+fn init_repository_with_commit(root: &Path) -> git2::Repository {
+    let repository = git2::Repository::init(root).unwrap();
+    let mut index = repository.index().unwrap();
+    index
+        .add_all(["README.md"], git2::IndexAddOption::DEFAULT, None)
+        .unwrap();
+    index.write().unwrap();
+    let tree_id = index.write_tree().unwrap();
+    let signature = git2::Signature::now("Test", "test@example.local").unwrap();
+    {
+        let tree = repository.find_tree(tree_id).unwrap();
+        repository
+            .commit(Some("HEAD"), &signature, &signature, "seed", &tree, &[])
+            .unwrap();
+    }
+    repository
+}
+
+fn stage(repository: &git2::Repository, relative: &str) {
+    let mut index = repository.index().unwrap();
+    index
+        .add_all([relative], git2::IndexAddOption::DEFAULT, None)
+        .unwrap();
+    index.write().unwrap();
+}
+
+#[test]
+fn staged_scan_with_nothing_staged_exits_zero() {
+    let sandbox = Sandbox::new();
+    init_repository_with_commit(sandbox.project());
+
+    let output = sandbox.run(&["scan", &sandbox.project().display().to_string(), "--staged"]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("Nothing staged"),
+        "an empty result must say why.\nstdout:\n{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn staged_scan_gates_the_commit_on_a_critical_finding() {
+    let sandbox = Sandbox::new();
+    let repository = init_repository_with_commit(sandbox.project());
+
+    std::fs::write(
+        sandbox.project().join(".env"),
+        concat!("API_KEY=", "totally-fake-value-0002\n"),
+    )
+    .unwrap();
+    stage(&repository, ".env");
+
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--staged",
+        "--json",
+    ]);
+    assert_eq!(
+        code(&output),
+        3,
+        "a credential file about to be committed must stop the commit.\nstdout:\n{}",
+        stdout(&output)
+    );
+    assert_eq!(json(&output)["source"], "staged");
+}
+
+#[test]
+fn staged_scan_reports_a_high_finding_without_gating_on_it() {
+    // Honest coverage of the exit-code contract's edge, not an endorsement of it.
+    // `secret_like_line` is `high`, and exit code 3 is reserved for `critical`
+    // (`exit.rs`, fixed by ROADMAP §3), so a credential in a staged *script* is
+    // reported but does not by itself fail the hook. Whether a pre-commit guard should
+    // gate on `high` too is a real question, recorded in `open-questions.md` rather
+    // than answered by quietly widening a frozen contract.
+    let sandbox = Sandbox::new();
+    let repository = init_repository_with_commit(sandbox.project());
+
+    std::fs::write(
+        sandbox.project().join("deploy.sh"),
+        concat!("#!/bin/sh\nexport API_KEY=", "totally-fake-value-0004\n"),
+    )
+    .unwrap();
+    stage(&repository, "deploy.sh");
+
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--staged",
+        "--json",
+    ]);
+    let payload = json(&output);
+
+    assert_eq!(code(&output), 0, "high alone does not gate today");
+    assert_eq!(
+        payload["summary"]["potential_secrets"],
+        1,
+        "but it is still reported, never hidden.\nstdout:\n{}",
+        stdout(&output)
+    );
+    assert_eq!(payload["findings"][0]["severity"], "high");
+}
+
+#[test]
+fn staged_scan_ignores_a_secret_that_was_never_staged() {
+    // The property that makes this a pre-commit guard rather than a working-tree scan.
+    let sandbox = Sandbox::new();
+    init_repository_with_commit(sandbox.project());
+
+    std::fs::write(
+        sandbox.project().join("scratch.env"),
+        concat!("API_KEY=", "totally-fake-value-0003\n"),
+    )
+    .unwrap();
+
+    let output = sandbox.run(&["scan", &sandbox.project().display().to_string(), "--staged"]);
+    assert_eq!(
+        code(&output),
+        0,
+        "an unstaged file is not part of the commit being checked.\nstdout:\n{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn staged_scan_outside_a_repository_is_an_error_not_a_clean_result() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&["scan", &sandbox.project().display().to_string(), "--staged"]);
+    assert_eq!(
+        code(&output),
+        1,
+        "answering `clean` outside a repository would be a lie.\nstderr:\n{}",
+        stderr(&output)
+    );
+}

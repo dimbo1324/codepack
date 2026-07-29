@@ -21,9 +21,20 @@ pub(crate) struct ScanReport {
     /// Always `full`: a scan deliberately looks at everything the ignore rules include,
     /// not at what an export would keep. Reported so the output is self-explaining.
     pub safe_mode: String,
+    /// What the file set was drawn from: every file the ignore rules include, or only
+    /// what is staged in git. Reported so a consumer never has to infer which question
+    /// this result answers.
+    pub source: &'static str,
     pub scanned_files: usize,
     pub summary: Summary,
     pub findings: Vec<ReportedFinding>,
+    /// Findings accepted by `.codepack-allow`. Always present, even when empty: a
+    /// consumer must be able to tell "nothing was suppressed" from "this build of the
+    /// report cannot suppress anything".
+    pub suppressed: Vec<crate::allow::SuppressedFinding>,
+    /// Where the allowlist was read from, when one was used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowlist: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,11 +60,19 @@ pub(crate) struct ReportedFinding {
     /// Already redacted by `codepack-security` before it ever reaches here — invariant
     /// I3 forbids a raw secret value in any output, and that includes this one.
     pub message: String,
+    /// Stable identity of this finding, for pasting into `.codepack-allow`. Reported so
+    /// nobody has to derive it by hand — deriving it by hand is how a typo gets into a
+    /// file whose entries silently match nothing.
+    pub fingerprint: String,
 }
 
 pub(crate) fn run(args: &ScanArgs, format: Format) -> Result<Outcome> {
     let context = commands::prepare(&args.project)?;
-    let report = build(&context)?;
+    let report = if args.staged {
+        build_staged(&context)?
+    } else {
+        build(&context)?
+    };
 
     if format.is_json() {
         output::emit_json("scan", &report)?;
@@ -124,29 +143,91 @@ fn build(context: &ProjectContext) -> Result<ScanReport> {
         &cancel,
     )?;
 
-    Ok(assemble(context, relative_files.len(), &result))
+    let screened = screen_with_allowlist(&context.root, &result)?;
+    Ok(assemble(
+        context,
+        "project",
+        relative_files.len(),
+        &screened,
+    ))
 }
 
-fn assemble(context: &ProjectContext, scanned_files: usize, result: &ScanResult) -> ScanReport {
-    let critical = result
-        .findings
+/// Scans only what is staged in git, reading the staged content itself.
+///
+/// The allowlist is still read from the real project root, not from the temporary
+/// directory the staged blobs were unpacked into: `.codepack-allow` is a property of the
+/// repository, and a staged scan that ignored it would report findings a team has
+/// already accepted — the exact noise this feature exists to remove.
+fn build_staged(context: &ProjectContext) -> Result<ScanReport> {
+    let cancel = CancellationToken::new();
+    let staged = crate::staged::collect(&context.root)?;
+
+    let result = if staged.is_empty() {
+        ScanResult::default()
+    } else {
+        let options = SecurityOptions::from(&Config {
+            text_file_size_limit_enabled: false,
+            ..context.config.clone()
+        });
+        scan_project(
+            staged.root(),
+            staged.relative_files(),
+            options.max_bytes_per_file,
+            &cancel,
+        )?
+    };
+
+    let screened = screen_with_allowlist(&context.root, &result)?;
+    Ok(assemble(
+        context,
+        "staged",
+        staged.relative_files().len(),
+        &screened,
+    ))
+}
+
+fn screen_with_allowlist(
+    project_root: &std::path::Path,
+    result: &ScanResult,
+) -> Result<crate::allow::Screened> {
+    Ok(match crate::allow::load(project_root)? {
+        Some((path, index)) => crate::allow::screen(result, &path, &index),
+        None => crate::allow::Screened::unfiltered(result),
+    })
+}
+
+/// Builds the report from the findings that **survived** the allowlist.
+///
+/// The summary counts are recomputed from the survivors rather than copied from
+/// `ScanResult::summary`, which still counts suppressed findings. A report whose header
+/// disagreed with its own list would be worse than having no header.
+fn assemble(
+    context: &ProjectContext,
+    source: &'static str,
+    scanned_files: usize,
+    screened: &crate::allow::Screened,
+) -> ScanReport {
+    let findings = &screened.findings;
+    let critical = findings
         .iter()
         .filter(|finding| finding.severity == "critical")
         .count();
 
+    let count_of = |kind: FindingKind| findings.iter().filter(|f| f.kind == kind).count();
+
     ScanReport {
         project: context.root.display().to_string(),
         safe_mode: "full".to_string(),
+        source,
         scanned_files,
         summary: Summary {
-            sensitive_files: result.summary.sensitive_files,
-            potential_secrets: result.summary.potential_secrets,
-            risky_code: result.summary.risky_code,
-            total_findings: result.summary.total_findings,
+            sensitive_files: count_of(FindingKind::SensitiveFile),
+            potential_secrets: count_of(FindingKind::PotentialSecret),
+            risky_code: count_of(FindingKind::RiskyCode),
+            total_findings: findings.len(),
             critical,
         },
-        findings: result
-            .findings
+        findings: findings
             .iter()
             .map(|finding| ReportedFinding {
                 kind: kind_label(finding.kind),
@@ -156,8 +237,14 @@ fn assemble(context: &ProjectContext, scanned_files: usize, result: &ScanResult)
                 line: finding.line,
                 rule: finding.rule.clone(),
                 message: finding.message.clone(),
+                fingerprint: crate::allow::fingerprint_of(finding),
             })
             .collect(),
+        suppressed: screened.suppressed.clone(),
+        allowlist: screened
+            .allowlist_path
+            .as_ref()
+            .map(|path| path.display().to_string()),
     }
 }
 
@@ -179,13 +266,18 @@ fn to_relative_path(relative: &str) -> std::path::PathBuf {
 fn print_human(report: &ScanReport) {
     output::line(format!("Project:   {}", report.project));
     output::line(format!(
-        "Scanned:   {} file(s) in {} mode",
-        report.scanned_files, report.safe_mode
+        "Scanned:   {} {} file(s) in {} mode",
+        report.scanned_files, report.source, report.safe_mode
     ));
+    print_suppression_notice(report);
     output::line("");
 
     if report.findings.is_empty() {
-        output::line("No findings.");
+        if report.source == "staged" && report.scanned_files == 0 {
+            output::line("Nothing staged; there is nothing to check.");
+        } else {
+            output::line("No findings.");
+        }
         return;
     }
 
@@ -209,6 +301,34 @@ fn print_human(report: &ScanReport) {
         output::line(format!(
             "  [{}] {} ({}) — {}",
             finding.severity, location, finding.rule, finding.message
+        ));
+        // The fingerprint is printed with the finding, not in a separate block, so
+        // accepting one is a copy of the line you are already looking at.
+        output::line(format!("           fingerprint: {}", finding.fingerprint));
+    }
+}
+
+/// Says how many findings the allowlist accepted, and from which file.
+///
+/// Printed on every run that used an allowlist, including when it suppressed nothing.
+/// A reader must never have to wonder whether a quiet report is quiet because there was
+/// nothing to say or because something was hidden.
+fn print_suppression_notice(report: &ScanReport) {
+    let Some(path) = &report.allowlist else {
+        return;
+    };
+    if report.suppressed.is_empty() {
+        output::line(format!("Allowlist: {path} (nothing suppressed)"));
+        return;
+    }
+    output::line(format!(
+        "Allowlist: {path} — {} finding(s) accepted and not shown below:",
+        report.suppressed.len()
+    ));
+    for entry in &report.suppressed {
+        output::line(format!(
+            "  [{}] {} ({}) — {}",
+            entry.severity, entry.file, entry.rule, entry.reason
         ));
     }
 }

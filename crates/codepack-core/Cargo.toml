@@ -16,6 +16,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 crossbeam-channel.workspace = true
+# `.codepack-allow` fingerprints. A cryptographic hash rather than a cheap one because a
+# collision does not produce a wrong number on a screen — it silently withholds a real
+# secret finding. Already a workspace dependency (`codepack-diff` hashes snapshots).
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
