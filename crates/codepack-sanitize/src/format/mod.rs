@@ -1,6 +1,6 @@
 //! External-formatter layer: reformats already-stripped source with whatever the
 //! table below names, if and only if it is found on `PATH` (never vendored — owner
-//! decision, `docs/decisions/open-questions.md`, 2026-07-28).
+//! decision, `docs/__arch__/open-questions.md`, 2026-07-28).
 //!
 //! A missing binary, a failed spawn, or a non-zero exit is never a hard error for the
 //! run: [`format_source`] returns `None` in every one of those cases and the caller

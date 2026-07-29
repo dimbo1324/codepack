@@ -1,7 +1,7 @@
 //! Byte and token accounting, and context-budget selection
 //! (BLUEPRINT §B.2/§B.3/§E.1/§E.5).
 //!
-//! ## Scope boundary (stage S6, `ROADMAP.md`)
+//! ## Scope boundary (stage S6, `docs/__arch__/ROADMAP.md`)
 //!
 //! This crate has no dependency on any other `codepack-*` crate — it is a pure,
 //! config-agnostic computation library. It never computes a per-file "importance"

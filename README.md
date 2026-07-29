@@ -1,174 +1,214 @@
 # codepack
 
-Безопасный снимок проекта для передачи ИИ-ассистенту и человеку.
+**Turn a source folder into a clean, safe snapshot you can hand to anyone.**
 
-Берёт папку с исходниками и делает из неё **чистый архив плюс набор отчётов**, который
-не стыдно отдать наружу: коллеге, джуну, нетехническому заказчику или языковой модели.
-Главная ценность — **не дать утечь секретам**: ключам, токенам, паролям, `.env`.
+Point it at a project and it produces an archive plus a set of reports fit to give to a
+colleague, a new joiner, a non-technical stakeholder, or a language model. The point is
+not compression — it is **not leaking your secrets** when a project leaves your machine:
+API keys, tokens, passwords, `.env` files.
 
-Это не архиватор и не генератор README. Это безопасная передача контекста, и весь
-анализ идёт **локально** — ничего никуда не отправляется.
-
----
-
-## Что уже работает
-
-Приложение собрано и им можно пользоваться. Есть два способа: настольное приложение
-и консольная утилита; обе работают поверх одного и того же движка, а не одна через
-другую.
-
-**Настольное приложение** (Windows 10/11): мастер экспорта, дерево предпросмотра с
-ручными переопределениями, панель результатов, история прогонов, наблюдение за папкой,
-темы, русский и английский интерфейс без перезапуска, значок в трее.
-
-**Консоль** — бинарь `codepack`:
-
-| Команда | Что делает |
-|---|---|
-| `export` | Полный пайплайн: план → копирование → структура → Git → текстовый дамп → аналитика → манифест → архив |
-| `preview` | Что попало бы в экспорт. Не пишет **ничего** |
-| `scan` | Поиск секретов и рискованного кода. `--staged` — режим pre-commit-хука |
-| `verify` | Перепроверка уже собранного бандла — единственная проверка, доступная получателю |
-| `explain <файл>` | Почему конкретный файл попал или не попал в экспорт |
-| `sanitize` | «Стерильная копия»: код без комментариев, переформатированный, опционально в `.7z` |
-| `history` | Прошлые прогоны |
-| `doctor` | Диагностика окружения |
-| `completions <shell>` | Скрипт автодополнения |
-
-Коды возврата — контракт, на него можно завязывать пайплайны:
-`0` успех · `1` ошибка · `2` неверные аргументы · `3` найдены критические секреты.
-Реальная ошибка всегда старше «найдены секреты». У каждой команды есть `--json` —
-машиночитаемый вывод с версией схемы, только в stdout; прогресс и ошибки идут в stderr.
+Everything runs **locally**. Nothing is uploaded, ever.
 
 ---
 
-## Установка
+## Contents
 
-Готовый установщик собирается из репозитория:
+- [What you get](#what-you-get)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Archive formats](#archive-formats)
+- [Sterile copy](#sterile-copy)
+- [Pre-commit use](#pre-commit-use)
+- [Guarantees](#guarantees)
+- [Documentation](#documentation)
+- [Developing](#developing)
 
-```powershell
+---
+
+## What you get
+
+Two ways to use it, both over the same engine — neither is a wrapper around the other.
+
+**Desktop app** (Windows 10/11). An export wizard, a preview tree where you can override
+what goes in and what stays out, a results panel, run history, folder watching, light and
+dark themes, English and Russian interfaces switchable without a restart, and a tray icon.
+
+**Command line** — the `codepack` binary. Nine commands, a stable exit-code contract, and
+`--json` on everything.
+
+A finished export contains the selected source files, a directory structure report, git
+history and optionally a patch, a full text dump, roughly thirty analysis reports, an
+`AI_CONTEXT` folder written for a language model, a security scan (including SARIF), and
+a manifest describing all of it.
+
+> **Screenshots.** Not included yet. They were attempted for this release and abandoned:
+> capturing a window on Windows grabs whatever is actually on top of that screen region,
+> which risks putting unrelated private content into a public repository. Add them by
+> running the app and capturing its window deliberately.
+
+## Install
+
+Build the installer from the repository:
+
+```bash
 cargo xtask package
 ```
 
-NSIS-`.exe` появится в `target/release/bundle/nsis/`.
+The NSIS `.exe` lands in `target/release/bundle/nsis/`.
 
-Подпись, нотаризация, `SHA256SUMS.txt` и автообновление **пока не сделаны** — это
-этап S14 в [ROADMAP.md](ROADMAP.md). Установщик работает, но Windows покажет
-предупреждение о неизвестном издателе.
+The build is **not code-signed yet**, so Windows SmartScreen will warn about an unknown
+publisher. Signing, notarisation, checksums and auto-update are planned but not done.
 
----
+For the command line only:
 
-## Быстрый старт
+```bash
+cargo build --release -p codepack-cli
+```
 
-```powershell
+## Quick start
+
+See what an export would include, without writing anything:
+
+```bash
 codepack preview .
 ```
 
-Посмотреть, что вообще попадёт в экспорт, ничего не записывая. Дальше:
+Then produce the bundle:
 
-```powershell
-codepack export . --preset "Claude Code" --out ..\out
+```bash
+codepack export . --preset "Claude Code" --out ../out
 ```
 
-Пресетов шесть: `Claude Code`, `ChatGPT`, `Code Review`, `Security Audit`,
-`Онбординг` и `PR Review` (только незакоммиченные изменения — для обсуждения одного
-пул-реквеста, а не всего проекта).
+Six presets ship: `Claude Code`, `ChatGPT`, `Code Review`, `Security Audit`, `Онбординг`
+(onboarding), and `PR Review` — the last narrowing the export to uncommitted changes, for
+discussing one pull request rather than a whole project.
 
-Бюджет токенов можно задать числом или **именем модели** — таблица контекстных окон
-внутри, и её можно расширить своим файлом без пересборки:
+A token budget can be a number or a **model name**, resolved through a built-in table you
+can extend with your own file — no rebuild needed:
 
-```powershell
+```bash
 codepack export . --budget Claude
 codepack export . --budget 200k
 ```
 
-Перед коммитом:
+If a file is missing from the bundle and you cannot see why:
 
-```powershell
+```bash
+codepack explain src/main.rs
+```
+
+It answers with one of four verdicts — included, excluded (naming the rule), not in the
+diff selection, or not planned at all (naming the skipped directory) — and all four are a
+success, because "it was excluded, here is why" is the explanation working.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `export` | The full pipeline: plan → copy → structure → git → text dump → analytics → manifest → archive |
+| `preview` | What an export would include. Writes **nothing** |
+| `scan` | Find secrets and risky code. `--staged` is the pre-commit mode |
+| `verify` | Re-scan a bundle that already exists — the only check its recipient can run |
+| `explain <file>` | Why one file did or did not make it into the export |
+| `sanitize` | Sterile copy: code with comments stripped and reformatted, optionally archived |
+| `history` | Previous runs |
+| `doctor` | Environment diagnostics |
+| `completions <shell>` | A shell completion script |
+
+**Exit codes are a contract** you can build a pipeline on: `0` success, `1` error,
+`2` bad arguments, `3` critical secrets found. A real failure always outranks "secrets
+found" — a run that broke never reports `3`, because that would tell your pipeline the
+scan result can be trusted when it cannot.
+
+**`--json`** works on every command. It carries a schema version, goes only to stdout, and
+leaves progress and errors on stderr, so `codepack export --json | jq` does not break on
+the first log line.
+
+## Archive formats
+
+ZIP by default, everywhere. 7z is available when you want smaller archives. RAR is offered
+in the interface but **not implemented** — there is no permissively licensed RAR encoder to
+depend on, so it is reserved and refused with a message rather than silently producing a
+ZIP with the wrong extension.
+
+```bash
+codepack export . --archive-format 7z
+codepack sanitize --source . --archive ../clean.zip
+```
+
+For `sanitize`, the file extension picks the container; `--archive-format` overrides it.
+
+## Sterile copy
+
+A standalone action, not a step of the export: it builds a copy of the project with
+comments removed by real parsers (tree-sitter, never regular expressions) and the code
+reformatted wherever a suitable formatter is found on your `PATH`.
+
+```bash
+codepack sanitize --source . --archive ../project-sterile.zip
+```
+
+`--out` is only needed if you also want the folder. With just `--archive`, the copy is made
+in a temporary directory that cleans itself up, and one file is the whole result. You can
+ask for both:
+
+```bash
+codepack sanitize --source . --out ../sterile --archive ../project-sterile.zip
+```
+
+The archive contains exactly the files this run produced, plus
+`STERILE_COPY_REPORT.json`/`.md` — so whoever receives it gets the account of what was
+stripped, skipped and redacted alongside the code it describes.
+
+## Pre-commit use
+
+```bash
 codepack scan --staged
 ```
 
-Читает содержимое **из индекса**, а не из рабочего дерева, — потому что коммит
-собирается из индекса, и эти две вещи расходятся, как только staged-файл
-отредактировали снова.
+This reads content **from the git index**, not from your working tree — a commit is built
+from the index, and the two diverge the moment a staged file is edited again.
 
-Разобранные и принятые находки складываются в `.codepack-allow` рядом с проектом.
-Отпечаток считается по правилу, файлу и **уже отредактированному** сообщению —
-сам секрет в него не входит никогда. Подавленные находки продолжают считаться и
-печататься, а не исчезают молча.
+Findings you have reviewed and accepted go in a `.codepack-allow` file beside the project.
+The fingerprint is computed from the rule, the file, and the **already-redacted** message —
+the secret itself is never an input. Suppressed findings are still counted and printed, so
+they never disappear silently.
 
-Если непонятно, почему файла нет в архиве:
+## Guarantees
 
-```powershell
-codepack explain src\main.rs
-```
+These are held by tests, not by promises in this file:
 
----
+- **Privacy is absolute.** No crate reaches the network except the explicit, user-initiated
+  AI integration. A quality-gate step reads every manifest and fails the build otherwise.
+- **The source is immutable.** An export never writes inside the folder it reads.
+- **Secrets never reach output.** Not a report, a log, the database, or an archive — never
+  in the clear.
+- **Byte figures are preserved.** Token counts were added alongside, not instead.
+- **Symlinks are never followed**, and extraction is path-traversal safe.
 
-## Стерильная копия и `.7z`
+The full registry, with the reasoning behind each one, is in
+[docs/architecture/invariants.md](docs/architecture/invariants.md).
 
-Отдельное действие, не шаг экспорта: строит копию проекта, где комментарии сняты
-настоящими парсерами (tree-sitter, не регулярками), а код переформатирован, если на
-`PATH` нашёлся подходящий форматтер.
+## Documentation
 
-```powershell
-codepack sanitize --source . --archive ..\proj-sterile.7z
-```
-
-`--out` нужен, только если нужна ещё и папка: с одним `--archive` копия делается во
-временном каталоге, который сам убирается, а результатом остаётся один файл.
-Можно и то и другое сразу:
-
-```powershell
-codepack sanitize --source . --out ..\sterile --archive ..\proj-sterile.7z
-```
-
-В архив попадают ровно те файлы, которые записал этот прогон, плюс
-`STERILE_COPY_REPORT.json`/`.md` — отчёт о том, что было вырезано, пропущено и
-отредактировано, едет вместе с кодом, который он описывает.
-
-В настольном приложении то же самое — на странице «Стерильная копия» есть
-необязательный выбор файла архива.
-
----
-
-## Гарантии
-
-Их держат тесты, а не обещания в этом файле:
-
-- **Приватность абсолютная.** Сети нет ни в одном крейте, кроме явной интеграции с ИИ,
-  которую запускает пользователь. Проверяется отдельным шагом гейта качества.
-- **Исходник неизменен.** Экспорт никогда не пишет внутрь исходной папки.
-- **Секрет не попадает в вывод.** Ни в отчёт, ни в лог, ни в базу, ни в архив — нигде
-  в неотредактированном виде.
-- **Байты остаются.** Токены добавлены, а не заменили размеры в байтах.
-- **Символические ссылки не разыменовываются**, распаковка защищена от выхода за
-  пределы каталога.
-
----
-
-## Документы
-
-| Документ | О чём |
+| Document | What it answers |
 |---|---|
-| [BLUEPRINT.md](BLUEPRINT.md) | Что за продукт, как устроен, вся логика и форматы |
-| [ROADMAP.md](ROADMAP.md) | Этапы реализации и текущий прогресс |
-| [docs/architecture/overview.md](docs/architecture/overview.md) | Что реально собрано прямо сейчас |
-| [docs/architecture/invariants.md](docs/architecture/invariants.md) | Что не должно сломаться никогда |
-| [docs/decisions/open-questions.md](docs/decisions/open-questions.md) | Решения владельца и открытые вопросы |
-| [AGENTS.md](AGENTS.md) / [CLAUDE.md](CLAUDE.md) | Правила работы для ИИ-агентов |
+| [docs/architecture/overview.md](docs/architecture/overview.md) | What is actually built, and how the pieces fit |
+| [docs/architecture/invariants.md](docs/architecture/invariants.md) | What must never break, and why |
 
----
+## Developing
 
-## Разработка
-
-```powershell
-python dev_tools_scripts_runner.py list   # каталог рутинных задач
-cargo xtask gate                          # полный гейт качества
-cargo xtask fmt                           # форматирование Rust и фронтенда
-pnpm desktop:dev                          # приложение с горячей перезагрузкой
+```bash
+python dev_tools_scripts_runner.py list   # the catalogue of routine jobs
+cargo xtask gate                          # the full quality gate
+cargo xtask fmt                           # format Rust and the frontend
+pnpm desktop:dev                          # run the app with hot reload
 ```
 
-Целевая платформа сейчас — **только Windows 10/11**. macOS и Linux остаются
-продуктовой целью (BLUEPRINT §B.4), но временно отключены; см.
-`docs/decisions/open-questions.md`.
+`cargo xtask gate` is the check that must pass: formatting, clippy with warnings denied,
+tests, dependency audit, frontend checks, the dev-script suite, agent-rule sync, and
+network isolation.
+
+Target platform is **Windows 10/11**. macOS and Linux remain a goal; the disabled code is
+marked rather than deleted.

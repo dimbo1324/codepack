@@ -1,6 +1,6 @@
 //! Process exit codes — a contract, not an implementation detail.
 //!
-//! `ROADMAP.md` §3 fixes these four values for stage S10. A CI pipeline branches on
+//! `docs/__arch__/ROADMAP.md` §3 fixes these four values for stage S10. A CI pipeline branches on
 //! them, so changing a number later breaks other people's scripts exactly the way
 //! changing an artifact format does.
 

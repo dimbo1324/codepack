@@ -36,7 +36,7 @@
 //! reports: those produce artifacts whose shape is a contract (invariant I5) and whose
 //! output is pinned by golden parity tests, and quietly shrinking them from a
 //! convenience file would be a much larger promise than this feature is making. See
-//! `docs/decisions/open-questions.md` for whether that boundary should ever move.
+//! `docs/__arch__/open-questions.md` for whether that boundary should ever move.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

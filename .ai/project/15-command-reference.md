@@ -59,6 +59,26 @@ rather than sweeping its unstaged half into the commit, and skips Prettier with 
 when `node_modules` is absent. `git commit --no-verify` bypasses it once — the gate still
 checks formatting later.
 
+## Adding or changing a dev script
+
+New routine work gets a new script: `scripts/<name>/__main__.py` plus one entry in
+`scripts/runner/config/scripts.json` — adding a script changes no Python in
+`scripts/runner/`. Settings live in each script's own `config/*.json`; scripts never
+import each other, only `scripts/_toolkit`. Resolve tools through
+`_toolkit/processes.py` (a bare `"pnpm"` does not resolve on Windows), and let genuinely
+Windows-only work refuse with a reason instead of failing part-way.
+
+## `clean-project`, and per-clone git settings
+
+`clean-project` is a dry run by default; it never touches `.env`, signing material,
+local databases, or a nested git repository — judging a directory by its contents, since
+git reports a wholly untracked one as a single entry. Read its `config/clean.json`
+first. It refuses to plan when `git status` cannot see the whole tree, and names the fix.
+
+**Per-clone git settings**, checked by `doctor` as warnings: `core.hooksPath` at
+`.githooks` (run `install-hooks`), and on Windows `core.longpaths true`, without which
+`clean-project` cannot plan.
+
 ## Other tools
 
 `cargo deny check` needs the `cargo-deny` binary installed separately (`cargo install
@@ -72,7 +92,7 @@ it because the references are committed. Run it when legacy's own output *should
 ## Platform notes
 
 Target: **Windows 10/11**. macOS and Linux are out of scope for now — BLUEPRINT §B.4
-still calls them a product goal; see `docs/decisions/open-questions.md` for the decision
+still calls them a product goal; see `docs/__arch__/open-questions.md` for the decision
 and Q21 for what must be re-diagnosed before they return.
 
 - Windows: long paths and antivirus interfere with temporary directories; prefer a

@@ -792,7 +792,7 @@ erDiagram
 (`APPDATA`/`LOCALAPPDATA`/`HOME`/`USERPROFILE`/`XDG_CONFIG_HOME`), без крейта
 `directories`/`dirs` — он тянет MPL-2.0-зависимость (`option-ext`), и владелец
 предпочёл избежать copyleft вместо разрешения лицензии (решение от 2026-07-22,
-`docs/decisions/open-questions.md`). Для секретов ОС — крейт `keyring`.
+`open-questions.md`). Для секретов ОС — крейт `keyring`.
 **API-ключи никогда не пишутся в обычные файлы настроек.**
 
 ## D.5 Форматы артефактов (контракты остаются)

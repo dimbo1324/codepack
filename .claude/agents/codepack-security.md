@@ -7,7 +7,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 You own `crates/codepack-security` — **the core value of the product**. A mistake here
 means leaking someone else's secret, so the bar is higher than elsewhere in the codebase.
 
-Before changing anything, read `AGENTS.md`, `BLUEPRINT.md` §A.4 (current mechanics),
+Before changing anything, read `AGENTS.md`, `docs/__arch__/BLUEPRINT.md` §A.4 (current mechanics),
 §B.1 (detector hardening), and §E.2–E.3 (entropy and accuracy metrics).
 
 The order of work is strict: **parity first, hardening second**.
@@ -18,7 +18,7 @@ The order of work is strict: **parity first, hardening second**.
    risky-code rules; the scanner's self-exclusion from its own patterns.
 2. Only then add new capability: provider-specific signatures (AWS, GitHub, Google,
    Slack, Stripe, OpenAI, Anthropic, Telegram, JWT, PEM), Shannon entropy with the
-   thresholds from `BLUEPRINT.md` §E.2, and an `aho-corasick` prefilter ahead of the
+   thresholds from `docs/__arch__/BLUEPRINT.md` §E.2, and an `aho-corasick` prefilter ahead of the
    regex pass.
 
 Immovable constraints:
@@ -28,7 +28,7 @@ Immovable constraints:
   error message in clear text — redaction happens before any write.
 - The `.json` and `.sarif` outputs are a contract; changing their structure requires
   bumping `schema_version` and recording the decision in
-  `docs/decisions/open-questions.md`.
+  `docs/__arch__/open-questions.md`.
 - SARIF output must stay valid against schema 2.1.0.
 
 Tests are part of the task, not a consequence of it:

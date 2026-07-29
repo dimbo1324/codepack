@@ -1,4 +1,4 @@
-//! Batch 1 language detection (`docs/decisions/open-questions.md`, 2026-07-28): the
+//! Batch 1 language detection (`docs/__arch__/open-questions.md`, 2026-07-28): the
 //! twelve stacks the owner named for the first version of the sterile copy — JS/TS,
 //! Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Shell, Makefile — plus Kotlin, added
 //! 2026-07-28 as the first Batch 2 language closed out of Q24 after a real version/

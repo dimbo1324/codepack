@@ -20,18 +20,18 @@ reproduce its results, never its structure.
   directory lists, safety-mode rules.
 - You need an exact artifact format: `manifest.json`, `PROJECT_PROFILE.json`, SARIF,
   report section names and ordering.
-- Behavior is ambiguous and `BLUEPRINT.md` does not answer it decisively.
+- Behavior is ambiguous and `docs/__arch__/BLUEPRINT.md` does not answer it decisively.
 - You need a golden reference for a parity test.
 
 ## How to work with it
 
-1. Look in `BLUEPRINT.md` first — it documents the legacy logic in full. The archive is
+1. Look in `docs/__arch__/BLUEPRINT.md` first — it documents the legacy logic in full. The archive is
    for when literal precision is required.
 2. Extract into a **temporary directory outside the repository**. Never extract into the
    working tree and never commit extracted content.
 3. Take facts only: values, formats, step ordering.
 4. Do not carry the Python architecture into Rust. Layering and module organization are
-   defined by `ROADMAP.md` and the domain rules module.
+   defined by `docs/__arch__/ROADMAP.md` and the domain rules module.
 
 ## Where things lived in the legacy version
 

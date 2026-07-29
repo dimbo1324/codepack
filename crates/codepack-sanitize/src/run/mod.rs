@@ -7,7 +7,7 @@
 //!
 //! This never goes through `codepack-engine`'s 8-step pipeline (it is not one of its
 //! steps, does not touch the ZIP/archive contract, and produces none of the existing
-//! ~30 report artifacts) — see `docs/decisions/open-questions.md`, 2026-07-28.
+//! ~30 report artifacts) — see `docs/__arch__/open-questions.md`, 2026-07-28.
 
 use std::path::{Path, PathBuf};
 
@@ -330,7 +330,7 @@ fn process_file(
             relative,
             redacted.as_bytes(),
             FileOutcome::SkippedUnsupportedLanguage {
-                reason: "not one of the Batch 1 languages (docs/decisions/open-questions.md, Q24)"
+                reason: "not one of the Batch 1 languages (docs/__arch__/open-questions.md, Q24)"
                     .to_string(),
             },
         );

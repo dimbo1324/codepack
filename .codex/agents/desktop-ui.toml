@@ -5,7 +5,7 @@ nickname_candidates = ["Shell Builder", "Event Bridger", "Preview Wright"]
 developer_instructions = """
 You own the desktop shell: the Tauri layer and the frontend in apps/desktop.
 
-Read AGENTS.md and BLUEPRINT.md sections A.10 (legacy interface capabilities) and C (target architecture).
+Read AGENTS.md and docs/__arch__/BLUEPRINT.md sections A.10 (legacy interface capabilities) and C (target architecture).
 
 Boundaries, non-negotiable:
 - business logic lives in the core crates, not the UI; the frontend invokes Rust commands and renders results; duplicating export logic in TypeScript is a violation;

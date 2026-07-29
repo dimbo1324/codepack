@@ -2,7 +2,7 @@
 //! answer to "what is this project, how healthy is it, and where are the risks" for a
 //! tech lead, a stakeholder, or anyone who has never opened the code. No legacy
 //! equivalent exists — legacy's own human-report support was HTML-dashboard-only
-//! (`BLUEPRINT.md` §B.9 rates PDF support "partial").
+//! (`docs/__arch__/BLUEPRINT.md` §B.9 rates PDF support "partial").
 //!
 //! **No PDF library, permanently.** The bundle stays dependency-light and this page
 //! stays fully offline; a reader who wants a PDF uses their browser's own Print

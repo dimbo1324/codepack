@@ -12,11 +12,11 @@ conversation overrides everything.
 
 This project is built almost entirely by AI agents, so sessions often begin with no
 context. Before any work, run the **orientation ritual** from
-`@.ai/project/13-progress-tracking.md`: git status and log → `ROADMAP.md` (the first
+`@.ai/project/13-progress-tracking.md`: git status and log → `docs/__arch__/ROADMAP.md` (the first
 stage without a `**Status.**` line is next) → `docs/architecture/overview.md` →
-`task-checklist.md` → `docs/decisions/open-questions.md`.
+`task-checklist.md` → `docs/__arch__/open-questions.md`.
 
-The product intent is described in full in `BLUEPRINT.md`. The legacy Python
+The product intent is described in full in `docs/__arch__/BLUEPRINT.md`. The legacy Python
 implementation is archived at `docs/__arch__/codepack-main.zip` and serves as the
 behavioral reference.
 

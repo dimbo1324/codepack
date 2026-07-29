@@ -25,7 +25,7 @@ pub struct SterileCopyOptions {
 }
 
 /// What happened to one file. Every included file gets exactly one of these — never
-/// silently dropped, per `docs/decisions/open-questions.md` (2026-07-28).
+/// silently dropped, per `docs/__arch__/open-questions.md` (2026-07-28).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileOutcome {
     /// Comments were stripped and an external formatter on `PATH` reformatted the
@@ -44,7 +44,7 @@ pub enum FileOutcome {
     SkippedSensitiveOrRedacted,
     /// Copied through unmodified (after redaction) because tree-sitter could not fully
     /// parse it (an `ERROR` node was present) or its bytes were not valid UTF-8 — the
-    /// fail-safe default from `docs/decisions/open-questions.md` Q24: never strip under
+    /// fail-safe default from `docs/__arch__/open-questions.md` Q24: never strip under
     /// uncertain parse conditions.
     Error { message: String },
 }

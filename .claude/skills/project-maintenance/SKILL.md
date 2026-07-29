@@ -52,10 +52,10 @@ cargo xtask sync-agents --check   # verify it is in sync
 
 ## State documents
 
-- Stage completed → `**Status.**` line under that stage in `ROADMAP.md` (in Russian, to
+- Stage completed → `**Status.**` line under that stage in `docs/__arch__/ROADMAP.md` (in Russian, to
   match the file) plus the §1 table.
 - System shape changed → `docs/architecture/overview.md`.
-- Owner decision → `docs/decisions/open-questions.md`.
+- Owner decision → `docs/__arch__/open-questions.md`.
 - New invariant → `docs/architecture/invariants.md`.
 - Task closed → `task-checklist.md` with honest `+`/`-` marks.
 

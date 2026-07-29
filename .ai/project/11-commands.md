@@ -16,26 +16,14 @@ With no arguments and no terminal it runs `quality-gate` rather than blocking on
 which is what makes it usable by an agent. The scripts wrap the `cargo xtask` commands
 below instead of reimplementing them, so both doors reach the same code.
 
-**`clean-project` deletes files.** Dry run by default; never touches `.env`, signing
-material, local databases, or a nested git repository — judging a directory by its
-contents, since git reports a wholly untracked one as a single entry. Read its
-`config/clean.json` first. It refuses to plan when `git status` cannot see the whole
-tree, and names the fix.
+**`clean-project` deletes files.** Dry run by default. Read `config/clean.json`, and
+`15-command-reference.md`, before running it for real.
 
-**Per-clone git settings**, checked by `doctor` as warnings: `core.hooksPath` at
-`.githooks` (run `install-hooks`), and on Windows `core.longpaths true`, without which
-`clean-project` cannot plan.
-
-**Standing duty — keep the scripts accurate and portable.** They are infrastructure
-everyone relies on, so a task that changes how the project is built, checked, formatted,
-run, or cleaned updates the matching script *in that same task*; a script describing a
-workflow that no longer exists is worse than none. New routine work gets a new script:
-`scripts/<name>/__main__.py` plus one entry in `scripts/runner/config/scripts.json` —
-adding a script changes no Python in `scripts/runner/`. Settings live in each script's
-own `config/*.json`; scripts never import each other, only `scripts/_toolkit`. Resolve
-tools through `_toolkit/processes.py` (a bare `"pnpm"` does not resolve on Windows), and
-let genuinely Windows-only work refuse with a reason instead of failing part-way. Run
-`selftest` after touching anything under `scripts/`.
+**Standing duty — keep the scripts accurate and portable.** A task that changes how the
+project is built, checked, formatted, run, or cleaned updates the matching script *in
+that same task*; a script describing a workflow that no longer exists is worse than none.
+Run `selftest` after touching anything under `scripts/`. How to add one, and the
+portability rules, are in `15-command-reference.md`.
 
 ## Main entry point — the xtask runner
 

@@ -20,7 +20,7 @@ cargo xtask sync-agents
 
 ## Agents
 
-- `codepack-stage-planner` — scope a `ROADMAP.md` stage before any code is written.
+- `codepack-stage-planner` — scope a `docs/__arch__/ROADMAP.md` stage before any code is written.
 - `codepack-core-engine` — core crates: types, scanner, diff, storage, tokens, archive,
   engine.
 - `codepack-security` — safety modes, redaction, detector.

@@ -5,7 +5,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
 You implement the core crates of codepack. Before changing behavior, read `AGENTS.md`
-and the relevant section of `BLUEPRINT.md` — it documents the legacy logic including
+and the relevant section of `docs/__arch__/BLUEPRINT.md` — it documents the legacy logic including
 constants, formulas, and formats.
 
 Work inside `crates/codepack-core`, `-scanner`, `-diff`, `-storage`, `-tokens`,

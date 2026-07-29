@@ -5,7 +5,7 @@ description: Use to plan and execute one ROADMAP stage (S0–S14) end to end —
 
 # Executing a Roadmap Stage
 
-One `ROADMAP.md` stage is one task. Do not merge two stages into one task, and do not
+One `docs/__arch__/ROADMAP.md` stage is one task. Do not merge two stages into one task, and do not
 skip the S0→S14 order without an owner decision.
 
 ## 1. Orientation (mandatory, no skipping)
@@ -15,9 +15,9 @@ git status --short --branch
 git log --oneline -15
 ```
 
-Then read, in order: `ROADMAP.md` §1 and the `**Status.**` lines (the first stage
+Then read, in order: `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines (the first stage
 without one is yours), `docs/architecture/overview.md`, `task-checklist.md`,
-`docs/decisions/open-questions.md`.
+`docs/__arch__/open-questions.md`.
 
 If `task-checklist.md` still has open `[ ]` items from a previous session, resolve them
 first.
@@ -43,7 +43,7 @@ git checkout -b feat/s<N>-short-description
 ## 4. Implementation — parity before novelty
 
 Reproduce the legacy behavior first, then add new capability. Facts come from
-`BLUEPRINT.md`; when literal precision is needed, use the `legacy-lookup` skill.
+`docs/__arch__/BLUEPRINT.md`; when literal precision is needed, use the `legacy-lookup` skill.
 
 Delegate to the specialist subagents: `codepack-core-engine`, `codepack-security`,
 `codepack-reports`, `codepack-desktop-ui`.
@@ -63,7 +63,7 @@ finalizing.
 ## 6. Completion
 
 - Mark checklist items `+`/`-` honestly.
-- Add the `**Status.**` line under the stage in `ROADMAP.md` (in Russian, matching that
+- Add the `**Status.**` line under the stage in `docs/__arch__/ROADMAP.md` (in Russian, matching that
   file) and update the §1 table.
 - Update `docs/architecture/overview.md` if the system's shape changed.
 - If the stage exposed stale or missing rules, apply the `rules-evolution` skill.

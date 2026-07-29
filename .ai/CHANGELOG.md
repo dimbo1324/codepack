@@ -8,6 +8,23 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+### 2026-07-30 — internal vs external documents
+
+**What changed.** `BLUEPRINT.md`, `ROADMAP.md` and `docs/decisions/open-questions.md`
+moved into `docs/__arch__/` and are now labelled *internal*: Russian, for whoever builds
+this, never linked from anything a user reads. `README.md`,
+`docs/architecture/overview.md` and `docs/architecture/invariants.md` are *external*:
+English, with `README.md` as the hub every other external document hangs off.
+`10-project-map.md` gained the split and a rewritten language policy;
+`13-progress-tracking.md` gained the duty to keep `README.md` current and to decide a new
+document's audience before its location.
+
+**Why.** Owner decision. The two audiences were mixed: a stage plan and a product
+specification sat beside the file a first-time user opens, and the external documents
+were in a language a general audience cannot read.
+
+**Who decided.** Owner, 2026-07-30.
+
 ### 2026-07-27 — `doctor` проверяет настройки git, `clean-project` объясняет отказ
 
 **Что.** `11-commands.md`: два уточнения по фактам. `clean-project` теперь называет
@@ -114,7 +131,7 @@ dev`, которая никогда не работала. `.ai/project/10-proje
 том, что это команда для машины разработчика: ей нужен Python, CI её никогда не
 запускает, а перегенерировать эталоны ради зелёного теста запрещено.
 
-**Почему.** Команда появилась вместе с golden-паритетом (`ROADMAP.md` §8), но модуль
+**Почему.** Команда появилась вместе с golden-паритетом (`docs/__arch__/ROADMAP.md` §8), но модуль
 правил о ней не знал. `sync-agents --check` такой пробел не ловит по построению —
 он проверяет синхронность `AGENTS.md` с модулями, а не полноту самих модулей.
 Прецедент ровно тот же, что с `cargo xtask deny` 2026-07-22.
@@ -145,7 +162,7 @@ regenerate `AGENTS.md`. References in `.ai/README.md` and `.claude/settings.json
 updated. `universal/08-rules-evolution.md` and `project/14-legacy-reference.md` marked
 `<!-- tier: extended -->` with an `> **Essence.**` line each.
 
-**Why.** Stage S0 (`ROADMAP.md` §2) requires the temporary Python sync script to be
+**Why.** Stage S0 (`docs/__arch__/ROADMAP.md` §2) requires the temporary Python sync script to be
 retired in favor of `cargo xtask`. Separately, module growth since the previous entry
 pushed the assembled `AGENTS.md` to 31.7 KiB, over the 30 KiB budget — `sync-agents
 --check` was failing.

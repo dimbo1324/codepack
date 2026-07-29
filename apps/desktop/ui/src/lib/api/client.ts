@@ -1,6 +1,6 @@
 // The single choke point through which the frontend talks to the Rust backend.
 //
-// Invariant (`ROADMAP.md` §3: "изоляция — UI не имеет прямого доступа к ФС"): no
+// Invariant (`docs/__arch__/ROADMAP.md` §3: "изоляция — UI не имеет прямого доступа к ФС"): no
 // other module in this package may import `@tauri-apps/api/core` or a filesystem
 // plugin directly. Every file operation the UI needs — picking a folder, reading a
 // project, writing an archive — is a named function here, backed by a

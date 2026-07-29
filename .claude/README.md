@@ -20,7 +20,7 @@ it by hand). Subagents should read `AGENTS.md` — it is the compiled single-fil
 Do task-owning work on the main thread; spawn a subagent only for independent work that
 does not need the main thread's full context:
 
-- `codepack-stage-planner` — scope a `ROADMAP.md` stage before any code is written:
+- `codepack-stage-planner` — scope a `docs/__arch__/ROADMAP.md` stage before any code is written:
   boundaries, parity requirements, risks, acceptance criteria.
 - `codepack-core-engine` — core crates: types, scanner, diff, storage, tokens, archive,
   orchestrator.

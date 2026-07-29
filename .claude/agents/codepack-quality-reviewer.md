@@ -28,7 +28,7 @@ Check against this list:
    not only between steps.
 7. **Documentation drift.** If the system's shape changed, is
    `docs/architecture/overview.md` updated? If a stage completed, is there a
-   `**Status.**` line in `ROADMAP.md`? If a rule module changed, is `.ai/CHANGELOG.md`
+   `**Status.**` line in `docs/__arch__/ROADMAP.md`? If a rule module changed, is `.ai/CHANGELOG.md`
    updated and `AGENTS.md` regenerated?
 8. **Leftovers.** Debug remnants, temp files, commented-out code, comments that restate
    a function name.

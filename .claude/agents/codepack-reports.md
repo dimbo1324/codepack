@@ -6,7 +6,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You implement `crates/codepack-reports`: analytical reports and context packs.
 
-Before starting, read `AGENTS.md` and `BLUEPRINT.md` §A.7 — the full report catalog with
+Before starting, read `AGENTS.md` and `docs/__arch__/BLUEPRINT.md` §A.7 — the full report catalog with
 exact file names and the purpose of each.
 
 Key requirements:

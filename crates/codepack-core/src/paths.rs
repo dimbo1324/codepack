@@ -13,7 +13,7 @@ const DB_FILE_NAME: &str = "codepack.db";
 /// Which OS layout to resolve application directories for (BLUEPRINT §D.4).
 ///
 /// TODO(cross-platform): `Mac` and `Linux` are commented out, not removed. Owner decision
-/// 2026-07-26 (`docs/decisions/open-questions.md`) narrows the build scope to Windows
+/// 2026-07-26 (`docs/__arch__/open-questions.md`) narrows the build scope to Windows
 /// 10/11; BLUEPRINT §B.4 still declares cross-platform a product goal, so the layouts
 /// stay here as the specification of what has to come back. Restoring them means
 /// uncommenting the variants, the `current_os` detection, the `layout` arms, the

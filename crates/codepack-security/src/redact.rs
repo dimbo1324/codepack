@@ -51,7 +51,7 @@
 //! passwords, and every provider/Telegram signature the scanner already recognises.
 //! Entropy is the one deliberate exclusion — see that function's doc comment for why.
 //!
-//! Owner decision 2026-07-27 (`docs/decisions/open-questions.md`): this widening is
+//! Owner decision 2026-07-27 (`docs/__arch__/open-questions.md`): this widening is
 //! intentional and diverges from legacy, which redacted keyword-only. Golden parity is
 //! unaffected — `03_text_dump.txt` is checked for presence only, never byte-compared
 //! (decision 2026-07-25).
@@ -130,7 +130,7 @@ fn replace_match(matched: &str) -> String {
 
 /// Replaces every span [`find_redaction_spans`] finds with a redacted placeholder.
 /// Applied to file content before it is included in an export or copied to the
-/// clipboard — see `BLUEPRINT.md` §A.4.2.
+/// clipboard — see `docs/__arch__/BLUEPRINT.md` §A.4.2.
 ///
 /// Works line by line because the shapes themselves are line-scoped: the original
 /// patterns excluded `\n` from every value character class, so a value could never span

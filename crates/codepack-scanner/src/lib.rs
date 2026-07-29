@@ -1,6 +1,6 @@
 //! Tree walking, ignore rules, stack detection, and export planning.
 //!
-//! ## Scope boundary (stage S2, `ROADMAP.md` §2)
+//! ## Scope boundary (stage S2, `docs/__arch__/ROADMAP.md` §2)
 //!
 //! [`build_export_plan`] applies **only** base-ignore pruning (`IGNORED_DIR_NAMES`),
 //! stack-detected extra ignore directories ([`detect_stacks`]), and

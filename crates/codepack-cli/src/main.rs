@@ -1,4 +1,4 @@
-//! Headless command-line interface for codepack (stage S10, `ROADMAP.md` §3).
+//! Headless command-line interface for codepack (stage S10, `docs/__arch__/ROADMAP.md` §3).
 //!
 //! Everything this file does is: parse arguments, dispatch, turn the result into an
 //! exit code. The work lives in [`commands`], and the contracts a caller depends on —
@@ -24,7 +24,7 @@ use crate::output::Format;
 fn main() -> std::process::ExitCode {
     // Argument errors exit with code 2. Handled explicitly rather than letting `clap`
     // call `exit` for us: the code is part of this binary's published contract
-    // (`ROADMAP.md` §3), so it should be visible here and not depend on a default in a
+    // (`docs/__arch__/ROADMAP.md` §3), so it should be visible here and not depend on a default in a
     // dependency that could change.
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,

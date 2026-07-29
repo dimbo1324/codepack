@@ -1,6 +1,6 @@
 //! Insight reports, AI context packs, and the HTML dashboard (BLUEPRINT §A.7).
 //!
-//! ## Scope boundary (stage S7, `ROADMAP.md`)
+//! ## Scope boundary (stage S7, `docs/__arch__/ROADMAP.md`)
 //!
 //! This crate never walks the filesystem itself: it consumes
 //! [`codepack_scanner::ExportPlan`]'s already-planned file list ([`context::Inventory`]

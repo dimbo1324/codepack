@@ -33,7 +33,7 @@ For an independent pass, delegate to the `codepack-quality-reviewer` subagent.
 6. **Cancellation.** Long loops check the cancellation token inside, not only between
    steps.
 7. **Documents.** Shape changed → `docs/architecture/overview.md` updated; stage
-   completed → `**Status.**` line in `ROADMAP.md`; rule module changed →
+   completed → `**Status.**` line in `docs/__arch__/ROADMAP.md`; rule module changed →
    `.ai/CHANGELOG.md` updated and `AGENTS.md` regenerated.
 8. **Leftovers.** Debug remnants, temp files, commented-out code, comments restating a
    function name.

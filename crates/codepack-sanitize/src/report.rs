@@ -1,7 +1,7 @@
 //! `STERILE_COPY_REPORT.json`/`.md` — a brand-new artifact contract (not an existing
 //! ~30-report format, invariant I5 does not apply to it), so it carries `schema_version`
 //! from its very first version rather than growing one retroactively (owner decision,
-//! `docs/decisions/open-questions.md`, 2026-07-28).
+//! `docs/__arch__/open-questions.md`, 2026-07-28).
 
 use std::path::Path;
 

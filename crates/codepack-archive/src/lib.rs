@@ -5,7 +5,7 @@
 //! I5), and [`pack_files`] is the small one — a caller-named list of files into one
 //! archive. Both honour [`ArchiveFormat`], and both default to ZIP.
 //!
-//! ## Scope boundary (stage S8, `ROADMAP.md`)
+//! ## Scope boundary (stage S8, `docs/__arch__/ROADMAP.md`)
 //!
 //! This crate depends only on `codepack-core`. It does not decide which files belong
 //! in the export — that already happened upstream (`codepack-scanner`'s planning,

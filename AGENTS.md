@@ -343,7 +343,7 @@ Rust workspace under `crates/`:
 - `codepack-storage` — SQLite: history, snapshots, findings, migrations.
 - `codepack-tokens` — bytes and tokens, budget mode.
 - `codepack-reports` — insight reports, AI context packs, dashboard.
-- `codepack-archive` — ZIP building, splitting, restore.
+- `codepack-archive` — archive building (ZIP/7z), splitting, restore.
 - `codepack-engine` — orchestrator of the eight-step pipeline.
 - `codepack-cli` — headless binary.
 - `xtask` — the project's task runner and quality gate.
@@ -351,42 +351,58 @@ Rust workspace under `crates/`:
 Other areas:
 
 - `apps/desktop/ui` — Svelte + Vite + TypeScript frontend (pnpm workspace).
-- `apps/desktop/src-tauri` — the Tauri shell (crate `codepack-desktop`, binary
-  `codepack-desktop`). It is a member of the same cargo workspace as `crates/*`, and it calls
-  `codepack-engine` directly rather than shelling out to `codepack-cli`: the two front
-  ends sit side by side over the engine (BLUEPRINT §C.2), not in a chain.
-  The webview holds **no filesystem permission** (`capabilities/default.json`); every
-  file operation is a `#[tauri::command]`, and the frontend's only route to the backend
-  is `ui/src/lib/api/client.ts`.
+- `apps/desktop/src-tauri` — the Tauri shell (crate/binary `codepack-desktop`), a member
+  of the same cargo workspace. It calls `codepack-engine` directly rather than shelling
+  out to `codepack-cli`: the two front ends sit side by side over the engine
+  (BLUEPRINT §C.2), not in a chain. The webview holds **no filesystem permission**
+  (`capabilities/default.json`); every file operation is a `#[tauri::command]`, and the
+  frontend's only route to the backend is `ui/src/lib/api/client.ts`.
 - `dev_tools_scripts_runner.py` (root) — a thin entry shim, nothing else.
 - `scripts/` — the Python dev-tools orchestrator. `runner/` is its own logic and
   hand-edited JSON catalog; one directory per script, each with its own `config/*.json`;
   `_toolkit/` is the only thing scripts share. Scripts never import each other.
-- `docs/` — state documents and decisions; `docs/__arch__/` — legacy archive.
+- `docs/` — see the internal/external split below.
 - `.ai/`, `.claude/`, `.codex/` — assistant rules and workspaces.
 
-The product intent lives in `BLUEPRINT.md`; the plan and progress live in `ROADMAP.md`.
 The full map of state documents is in the progress-tracking module.
+
+## Internal vs external documents
+
+Owner decision 2026-07-30. Two audiences; a document belongs to exactly one.
+
+**Internal — everything in `docs/__arch__/`, written in Russian.** For whoever builds
+this, never advertised to a user of the product: `BLUEPRINT.md` (the specification),
+`ROADMAP.md` (the plan and what is done), `open-questions.md` (owner decisions),
+`codepack-main.zip` (the legacy implementation). Nothing outside that directory links
+to them.
+
+**External — written in English.** For whoever picks the product up, including someone
+who has never seen this repository: `README.md`, `docs/architecture/overview.md`,
+`docs/architecture/invariants.md`. `README.md` is the hub — every external document is
+reachable from it, and it must not link to an internal one.
 
 ## Language policy
 
-- **Agent-facing infrastructure is English**: `.ai/`, `.claude/`, `.codex/`,
-  `CLAUDE.md`, `AGENTS.md`, `docs/` state documents, `task-checklist.md`, code, code
-  comments, commit messages, and test names.
-- **Owner-facing product documents are Russian**: `BLUEPRINT.md`, `ROADMAP.md`,
-  `README.md`. When you add a `**Status.**` line to `ROADMAP.md`, write it in Russian
-  to match the file.
+- **English**: `.ai/`, `.claude/`, `.codex/`, `CLAUDE.md`, `AGENTS.md`,
+  `task-checklist.md`, code, comments, commit messages, test names, and every external
+  document above.
+- **Russian**: the internal documents in `docs/__arch__/`. A `**Status.**` line added to
+  `ROADMAP.md` is Russian, matching that file.
 - **Reports to the owner are Russian.**
 
-Do not mix languages inside a single file.
+Do not mix languages inside a single file. An external document needing a term with no
+good Russian equivalent simply uses the English term — those files have no Russian
+readers by design.
 
 ## Documentation policy
 
-- `BLUEPRINT.md` is the product specification; it changes only when the product intent
-  changes, and only by owner agreement.
-- `ROADMAP.md` is the plan and progress record; update it when a stage completes.
-- New documents are created only on direct request. Exception: `docs/architecture/` and
-  `ROADMAP.md` must stay accurate when architecture or progress changes.
+- `docs/__arch__/BLUEPRINT.md` is the product specification; it changes only when the
+  product intent changes, and only by owner agreement.
+- `docs/__arch__/ROADMAP.md` is the plan and progress record; update it when a stage
+  completes.
+- New documents are created only on direct request. Exception: `docs/architecture/`,
+  `README.md` and `docs/__arch__/ROADMAP.md` must stay accurate when architecture or
+  progress changes.
 
 ## Product guardrails
 
@@ -397,8 +413,8 @@ Do not mix languages inside a single file.
   are an addition, never a replacement (owner decision).
 - **Parity before novelty.** Within a stage, reproduce the legacy behavior first, then
   add new capability.
-- **Stage order is binding** (`ROADMAP.md` §1, S0→S14). Skipping ahead requires an owner
-  decision recorded in `docs/decisions/open-questions.md`.
+- **Stage order is binding** (`docs/__arch__/ROADMAP.md` §1, S0→S14). Skipping ahead requires an owner
+  decision recorded in `docs/__arch__/open-questions.md`.
 - **Artifact formats are backward compatible**; changing one requires bumping
   `schema_version`.
 
@@ -424,26 +440,14 @@ With no arguments and no terminal it runs `quality-gate` rather than blocking on
 which is what makes it usable by an agent. The scripts wrap the `cargo xtask` commands
 below instead of reimplementing them, so both doors reach the same code.
 
-**`clean-project` deletes files.** Dry run by default; never touches `.env`, signing
-material, local databases, or a nested git repository — judging a directory by its
-contents, since git reports a wholly untracked one as a single entry. Read its
-`config/clean.json` first. It refuses to plan when `git status` cannot see the whole
-tree, and names the fix.
+**`clean-project` deletes files.** Dry run by default. Read `config/clean.json`, and
+`15-command-reference.md`, before running it for real.
 
-**Per-clone git settings**, checked by `doctor` as warnings: `core.hooksPath` at
-`.githooks` (run `install-hooks`), and on Windows `core.longpaths true`, without which
-`clean-project` cannot plan.
-
-**Standing duty — keep the scripts accurate and portable.** They are infrastructure
-everyone relies on, so a task that changes how the project is built, checked, formatted,
-run, or cleaned updates the matching script *in that same task*; a script describing a
-workflow that no longer exists is worse than none. New routine work gets a new script:
-`scripts/<name>/__main__.py` plus one entry in `scripts/runner/config/scripts.json` —
-adding a script changes no Python in `scripts/runner/`. Settings live in each script's
-own `config/*.json`; scripts never import each other, only `scripts/_toolkit`. Resolve
-tools through `_toolkit/processes.py` (a bare `"pnpm"` does not resolve on Windows), and
-let genuinely Windows-only work refuse with a reason instead of failing part-way. Run
-`selftest` after touching anything under `scripts/`.
+**Standing duty — keep the scripts accurate and portable.** A task that changes how the
+project is built, checked, formatted, run, or cleaned updates the matching script *in
+that same task*; a script describing a workflow that no longer exists is worse than none.
+Run `selftest` after touching anything under `scripts/`. How to add one, and the
+portability rules, are in `15-command-reference.md`.
 
 ## Main entry point — the xtask runner
 
@@ -544,7 +548,7 @@ These sharpen the universal rules for this codebase. Stricter wins.
 
 Report file names, JSON manifest structures, and SARIF output are a **contract**.
 Changing one requires bumping `schema_version` and recording the decision in
-`docs/decisions/open-questions.md`.
+`docs/__arch__/open-questions.md`.
 
 ## Assistant workspaces
 
@@ -568,11 +572,11 @@ primary recovery mechanism after a lost conversation.
 
 | Question | File |
 |---|---|
-| What the product is: logic, formats, math | `BLUEPRINT.md` |
-| What is planned, in what order, what is done | `ROADMAP.md` |
+| What the product is: logic, formats, math | `docs/__arch__/BLUEPRINT.md` |
+| What is planned, in what order, what is done | `docs/__arch__/ROADMAP.md` |
 | What is actually built right now | `docs/architecture/overview.md` |
 | What must never break | `docs/architecture/invariants.md` |
-| Owner decisions and open questions | `docs/decisions/open-questions.md` |
+| Owner decisions and open questions | `docs/__arch__/open-questions.md` |
 | What the current or last task was | `task-checklist.md` |
 | What actually happened recently | `git log --oneline -15` |
 | How the rules themselves changed | `.ai/CHANGELOG.md` |
@@ -583,11 +587,11 @@ primary recovery mechanism after a lost conversation.
 In order, without skipping:
 
 1. `git status --short --branch` and `git log --oneline -15`.
-2. `ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
+2. `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
    line is done; **the first stage without one is next**.
 3. `docs/architecture/overview.md` — what exists in the code right now.
 4. `task-checklist.md` — what the previous task was and whether it finished cleanly.
-5. `docs/decisions/open-questions.md` — whether a decision changes the plan.
+5. `docs/__arch__/open-questions.md` — whether a decision changes the plan.
 6. Only then plan the new task.
 
 If the task touches behavior that existed in the legacy version, also consult the legacy
@@ -596,14 +600,20 @@ reference module.
 ## Update duties when finishing work
 
 - Completed a stage or a significant slice → add or refresh the `**Status.**` line under
-  that stage in `ROADMAP.md` (what shipped: crates, modules, commands, tests) and update
+  that stage in `docs/__arch__/ROADMAP.md` (what shipped: crates, modules, commands, tests) and update
   the status column in §1. Write it in Russian to match that file.
 - Changed the system's shape (new crate, new layer, new operational job) → update
   `docs/architecture/overview.md`.
 - Made or received an owner decision that constrains the future → record it in
-  `docs/decisions/open-questions.md`, not only in the chat.
+  `docs/__arch__/open-questions.md`, not only in the chat.
 - Introduced an invariant → record it in `docs/architecture/invariants.md`.
 - Changed a rule module → record it in `.ai/CHANGELOG.md` and regenerate `AGENTS.md`.
+- Changed what a user can do, install or run → update `README.md`, in English. It is the
+  external entry point, and a stale one is the first thing a new user reads.
+- Wrote a new document → decide which audience it serves *before* choosing where it
+  lives (see the internal/external split in the project map). An internal document goes
+  in `docs/__arch__/` and is written in Russian; an external one is English and
+  reachable from `README.md`.
 
 ## Drift guard
 

@@ -1,4 +1,4 @@
-// RU/EN switching without a restart (`ROADMAP.md` §3). `language` is a rune-backed
+// RU/EN switching without a restart (`docs/__arch__/ROADMAP.md` §3). `language` is a rune-backed
 // reactive value: every component that calls `t(key)` re-renders the moment it
 // changes, because Svelte 5 tracks the read of `language.current` inside `t`.
 //

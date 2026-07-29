@@ -1,145 +1,113 @@
-# Текущее состояние архитектуры
+# Architecture: what exists today
 
-> Этот документ описывает то, что **реально существует в коде**, а не то, что
-> запланировано. План — в `ROADMAP.md`, замысел — в `BLUEPRINT.md`.
+> This document describes what is **actually in the code**, not what is planned. It is
+> updated whenever the shape of the system changes: a new crate, a new layer, a new
+> operational job.
 >
-> Обновляется каждый раз, когда меняется форма системы: новый крейт, новый слой,
-> новая операционная задача.
+> Rewritten in English on 2026-07-30, when the documentation was split into internal and
+> external sets. The per-date engineering history that used to live here is in the git
+> log and in the internal plan; this file answers "what is built and how does it fit
+> together".
 
-**Дата последней ревизии:** 2026-07-26 (пятая ревизия — Windows-only, форматирование,
-установщик, single-instance)
+**Last revised:** 2026-07-30
+**Target platform:** Windows 10/11 only. macOS and Linux remain a product goal but are
+switched off; the disabled cross-platform code is marked `TODO(cross-platform)` rather
+than deleted, and lives in exactly one domain crate (`codepack-core::paths`).
 
-**Целевая платформа:** **только Windows 10/11.** Решение владельца 2026-07-26 сузило
-область сборки; матрица CI — один `windows-latest`, отключённый кроссплатформенный код
-помечен `TODO(cross-platform)` и не удалён (единственное место в домен-крейтах —
-`codepack-core::paths`). `cargo xtask package` собирает NSIS-установщик
-(`target/release/bundle/nsis/*.exe`) — это пункт S14, вытянутый вперёд осознанно.
-Приложение single-instance: повторный запуск ярлыка поднимает уже открытое окно, а не
-плодит второй процесс со вторым значком в трее.
+## The shape of the system
 
-**Состояние:** этапы S0–S9 завершены (S6+S7 и S8+S9 — каждая пара выполнена в одной
-ветке/задаче по явному указанию владельца). Все девять крейтов транша «Ядро»
-(`codepack-core`, `-scanner`, `-security`, `-diff`, `-storage`, `-tokens`, `-reports`,
-`-archive`, `-engine`) содержат реальную доменную логику — транш «Ядро» полностью
-собран, работоспособного движка без интерфейса уже достаточно для headless-экспорта.
-Этапы **S10 и S11 сданы**: `codepack-cli` — headless-бинарь, `apps/desktop` — Tauri-
-приложение. Обе точки входа транша «Интерфейс» существуют и работают над одним движком.
-Этап **S12 сдан частично** (`ROADMAP.md` — честный список того, что не вошло): три новых
-человеко-ориентированных отчёта поверх общего модуля синтеза, интерактивность дашборда,
-три новые desktop-команды. Плейсхолдеров в воркспейсе не осталось.
+```text
+codepack-core            domain types, config, paths, cancellation, time, classification
+   ↑
+codepack-scanner  codepack-security  codepack-diff  codepack-storage  codepack-tokens
+codepack-reports  codepack-archive   codepack-sanitize
+   ↑
+codepack-engine          the eight-step export pipeline
+   ↑                ↑
+codepack-cli      apps/desktop (Tauri + Svelte)
+```
 
-2026-07-25 проведена **закалка ядра** (`ROADMAP.md` §8): паритет с legacy теперь
-доказывается её реальным запуском (`tests/golden/` + `crates/codepack-engine/tests/golden.rs`
-на трёх фикстурах), семь найденных расхождений исправлены, а две возможности, сданные в
-S5/S6 без единого вызывающего (`fit_to_budget`, `cleanup_old_runs`), подключены к
-пайплайну. `ModelContextLimits` получил механизм загрузки из файла, но не вызывающего —
-потребитель таблицы появится в S11 (в legacy она использовалась только в GUI); то же
-относится к новому `codepack-core::profiles`.
+Dependencies point strictly downward and there are no cycles. The two front ends sit
+**side by side** over the engine — the desktop app calls `codepack-engine` directly, it
+does not shell out to the CLI. No `codepack-*` crate knows about Tauri or the frontend
+(invariant I8), so the whole core builds and tests headless.
 
-2026-07-25 (позже) проведён **аудит и модернизация без новых возможностей** — ревизия
-уже сданного транша «Ядро» по указанию владельца. Наблюдаемое поведение сохранено:
-golden 3/3, precision корпуса 1.000 (I9), 662 → 751 тест. Что изменилось структурно:
+## The crates
 
-- **Регулярные выражения убраны там, где они не разбирали синтаксис.** `codepack-security`
-  и `codepack-scanner` больше не зависят от `regex` в рантайме (только в dev-зависимостях,
-  как эталон для дифференциальных тестов). Провайдер-сигнатуры описаны данными
-  (`patterns/token_scan.rs`), risky-code — именованными формами кода
-  (`patterns/code_shape.rs`), keyword-каскад — корнями-словами (`patterns/keyword_scan.rs`),
-  glob `.exportignore` матчится напрямую. Регулярки `codepack-reports`, разбирающие
-  синтаксис исходников с захватами, **сохранены** — там они уместны.
-- **Дедупликация.** Алгоритм гражданской даты (6 копий в 5 крейтах) → `codepack-core::time`;
-  `format_bytes` (2 копии) → `codepack-tokens`; логика редакции `key=value` (2 копии) →
-  один хелпер с явными параметрами; набор маркеров TODO/FIXME (3 копии с разным составом)
-  и `SOURCE_CODE_EXTENSIONS` (2 копии) → по одному определению.
-- **Исправленные дефекты, найденные аудитом:** приоритет `|` над `\b` в
-  `23_refactoring_opportunities` (`PREFIXME` считался маркером `FIXME`); перекомпиляция
-  регулярок внутри цикла по файлам в двух отчётах; отсутствие абсолютной проверки
-  precision в корпус-тесте (проверялось только относительное сравнение режимов, то есть
-  одновременная деградация обоих прошла бы незамеченной).
-- **Магические числа названы:** ширины разделителей отчётов (100/120), порог «большого
-  файла» (100 МБ).
-
-## Что существует
-
-| Область | Состояние |
+| Crate | What it does |
 |---|---|
-| Cargo workspace (`Cargo.toml`, `resolver = "2"`) | **готов** |
-| `codepack-core` | **готов (S1)**: `Config` (26 полей legacy + `schema_version`), нормализация, миграция legacy-настроек, 5 AI-пресетов (данные), `AppPaths`, `CancellationToken`, `ProgressEvent`/`LogEvent`, 5 общих типов пайплайна (`ExportPaths`, `CopyStats`, `TextDumpStats`, `RiskPreviewReport`, `ArchiveBuildResult`). **2026-07-25**: `profiles/` — второй legacy-файл настроек (`~/.project_exporter_profiles.json`, Q8): загрузка/сохранение, слияние с встроенными профилями, применение переопределений; `Config` получил `history_keep_last_n` и `token_budget`; `AppPaths` — `user_profiles_file()`/`model_limits_file()`; `classify.rs` — единственное определение `TEXT_EXTENSIONS`/`BINARY_EXTENSIONS`/`TEXT_FILENAMES_WITHOUT_EXTENSION`/`should_consider_text_file`/`looks_binary` (Q7, дубль из `-scanner`/`-security` устранён); `time.rs` — единственная реализация гражданского календаря и UTC-форматирования на весь воркспейс (аудит 2026-07-25, заменил 6 копий в 5 крейтах; `i64` + `div_euclid` корректно обрабатывает даты до 1970, чего копии на `u64` не умели). **2026-07-26**: `SYSTEMS_TEXT_EXTENSIONS`/`SYSTEMS_TEXT_FILENAMES` — поддержка системного кода (ассемблер, device trees, линкер-скрипты, `Kconfig`/`Kbuild`); legacy-наборы не редактировались, новые списки объединяются при поиске, а тест закрепляет размеры 133/84/15 и отсутствие пересечений. **2026-07-29**: `allowlist.rs` — формат `.codepack-allow` (принятые после разбора находки) и рецепт отпечатка `sha256(rule, file, уже-отредактированное сообщение)`, усечённый до 16 hex; номер строки в отпечаток **не** входит, иначе добавленный выше импорт обесценивал бы весь файл. Секрет никогда не является входом (I3). Модуль только описывает файл и считает отпечатки — решение «что подавлять» принимает вызывающая сторона (сегодня это `codepack-cli`, см. Q26). **2026-07-29 (вторая партия)**: шестой AI-пресет `PR Review` — первая запись сверх пяти legacy-шных. Составлен целиком из существующего (`export_profile: "ai_review"` + `diff_export_mode: "uncommitted"` + git-патч), новых механик не вносит; от соседнего `Code Review` отличается **охватом**, а не безопасностью (`safe_export_mode` тот же `balanced`). Тест «ровно пять в legacy-порядке» разделён на два — «пять legacy-шных первыми» и «добавленное сверх legacy перечислено явно», чтобы граница между портированным и своим осталась видимой. 124 теста |
-| `codepack-scanner` | **готов (S2 + закалка 2026-07-25)**: базовое+стековое игнорирование директорий (`walk.rs`, `IgnoredDirMatcher`, `walkdir` без следования симлинкам; с 2026-07-26 запись может быть путём от корня, а не только именем — имя совпадает на любой глубине, путь ровно в одном месте, Q23), `.exportignore`/кастомные правила (`ignore/`, ручной `fnmatch`-эквивалент), детектор стеков (`stack.rs`; 12 legacy + 5 системных с 2026-07-26: Linux kernel, C/CMake, C/Meson, C/Autotools, C/Make), классификация текст/бинарь (`classify.rs`), `build_export_plan()`/`write_export_plan_files()` (`plan/`, JSON+Markdown, порядок полей — контракт I5). **2026-07-25**: план применяет safe-export-mode через предикат вызывающей стороны (`SafetyClassifier`, без зависимости на `codepack-security`); `PlanSummary` вернул `estimated_included_size`/`skipped_dirs_count`; порядок обхода воспроизводит `os.walk` + NTFS-коллацию. **Аудит 2026-07-25**: glob `.exportignore` матчится напрямую (`ignore/pattern.rs`), без трансляции в регекс — `regex` только в dev-зависимостях; порог «большого файла» назван. 106 тестов |
-| `codepack-security` | **готов (S3)**: три safe-режима (`policy/`), редактирование секретов с безбэкреференсным переписыванием legacy-регекса (`redact.rs`), эвристический сканер v3 (`scan/`) — sensitive-файлы, secret-каскад (4 уровня уверенности), 9 risky-code правил, плюс новое из BLUEPRINT §B.1: 11 провайдер-сигнатур (включая контекстную `aws-secret-access-key`, Q15), энтропия Шеннона, `aho-corasick`-предфильтр (`patterns/`). Выходы `.txt`/`.json`/SARIF 2.1.0 (`scan/write/`). Корпус-baseline (I9), перемерен 2026-07-25 после добавления `aws-secret-access-key`: parity P=1.000/R=0.278/F1=0.435, full P=1.000/R=1.000/F1=1.000 (precision держится на 1.000; parity-recall ниже прежних 0.312 только потому, что в корпус добавлены позитивы, которых keyword-каскад не видит по устройству). **Аудит 2026-07-25**: ни один детектор больше не использует регулярные выражения — провайдер-сигнатуры описаны данными (`patterns/token_scan.rs`), risky-code — формами кода (`patterns/code_shape.rs`), keyword-корни — списками слов (`patterns/keyword_scan.rs`); `regex` остался только dev-зависимостью как эталон дифференциальных тестов. Корпус-тест получил **абсолютную** проверку precision=1.000 (раньше сравнивались только режимы между собой, то есть одновременная деградация обоих прошла бы незамеченной). **Аудит 2026-07-27 (находки 1 и 2)**: `redact.rs` получил собственный, более широкий набор диапазонов редактирования (`find_redaction_spans`) — расширенный словарь ключевых слов сканера, провайдер-сигнатуры, Telegram, плюс новый `patterns/credentials.rs` (`find_url_credentials` — пароль по позиции в URL, не по форме, закрытие Q18; `find_http_auth_tokens` — `Bearer`/`Basic`/`Digest`); энтропия сознательно исключена из редактирования содержимого (риск ложных срабатываний неприемлем для немой перезаписи файла). Сканер получил два новых правила (`url-credentials`, `http-auth-credentials`) в каскаде после слабого keyword-совпадения и до энтропии — golden 3/3 не сдвинулся. 183 теста |
-| `codepack-diff` | **готов (S4)**: 4 режима diff (`all`/`last_export`/`git_ref`/`uncommitted`) через `git2` (только чтение, никогда сеть; с 2026-07-25 `git_ref` сравнивает `base..target`, а не только `base..HEAD` — Q9), снапшот проекта с потоковым SHA-256 (`snapshot/`), `last_export` берёт предыдущий снапшот аргументом (без хранилища — это S5), отчёт `29_export_comparison_report.md`. Первая C-зависимость воркспейса (`libgit2-sys`, vendored, без `https`/`ssh`/`cred`-фич). 46 тестов |
-| `codepack-storage` | **готов (S5)**: SQLite-схема из 7 таблиц + `schema_version` (BLUEPRINT §D.2/§D.3), `rusqlite` (bundled, вторая C-зависимость воркспейса после `git2`), встроенные пронумерованные миграции, `record_export_run()` — единственная точка записи (снапшот только вставляется, никогда не обновляется — структурная гарантия инварианта I6), `import_legacy_history()` (явный opt-in, воспроизводит найденный legacy-баг с «отравленным» пустым снапшотом как есть), per-project ретеншн (`cleanup_old_runs`, `ON DELETE CASCADE`), чтение истории (`list_export_runs`/`find_project_id` — добавлено в S10, первым потребителем). Крейт не имеет ни одной рантайм-зависимости от `codepack-core` — принимает путь к БД параметром. 26 тестов (включая WAL/конкурентный доступ на реальных файлах) |
-| `codepack-tokens` | **готов (S6)**: `format_bytes` (порт 1:1, инвариант I4), `estimate_tokens_fallback` (`max(1, round(B/3.5))` — легаси использует `round`, не `ceil`, как упрощает BLUEPRINT §E.1) и калиброванный `estimate_tokens_refined` (ASCII/кириллица-UTF8), обе публичны и не подменяют друг друга. `ModelContextLimits` (4 записи legacy + `load_or_default` — слияние с файлом-переопределением, битый файл = ошибка; потребитель таблицы — S11, legacy использовал её только в GUI). `fit_to_budget` — детерминированный жадный отбор по плотности ценности, `importance` — параметр вызывающей стороны (движок передаёт ранжирование из `16_key_files_report`). Чистый крейт без зависимости от `codepack-core` или любого другого `codepack-*`; с 2026-07-25 его `format_bytes` использует и `codepack-archive`, где раньше была копия. 22 теста |
-| `codepack-reports` | **готов (S7)**: ~26 пронумерованных отчётов + `PROJECT_PROFILE.json`/`REPORT_PLUGINS.json`/`AI_CONTEXT/`/`AI_PROMPTS/`/`REPORT_DASHBOARD.html`/writer-функции `manifest.json`/`INDEX.md`. Плагинный раннер с гейтингом по 5 профилям, `catch_unwind`+`Result`-отказоустойчивостью, `ERROR_<имя>.txt`. `06_security_scan.*` — тонкая обёртка над `codepack-security`; `05_git_deep`/`21_git_timeline_report` — только `git2`, без подпроцессов; RU/EN-локализация — пилот на одном отчёте (Q12); известный, раскрытый пробел — проверка отмены только между отчётами, не внутри их циклов (Q13). **Аудит 2026-07-25**: наборы маркеров TODO/FIXME и символов сведены в один модуль (`wordscan.rs`, строковый поиск вместо регекса) — попутно исправлен дефект приоритета `|`/`` и перекомпиляция регулярок внутри цикла по файлам; регулярки, разбирающие синтаксис исходников, сохранены. **S12**: три новых отчёта
-(`PROJECT_OVERVIEW.html`, `ONBOARDING_GUIDE.md`, `REVIEW_CHECKLIST.md`) через
-`group_h_human_jobs()`, общий модуль синтеза `humanize.rs` (читает только счётчики
-`ScanResult::summary` и уже посчитанные `project_health`/`key_files` структуры — никогда
-текст находок, инвариант I3) и общий `html.rs::escape_html`, вынесенный из `dashboard.rs`.
-Дашборд получил секцию «Explain in plain words» и инлайн-JS фильтр/поиск. 159 тестов |
-| `codepack-archive` | **готов (S8)**: логическая группировка на 14 групп (`entry.rs`, точный порт приоритета legacy), `First-Fit`-планирование частей (`plan.rs`, цель 500 МБ / жёсткий лимит 512 МБ / резерв 8 МБ, крупный файл — своя часть), сборка ZIP уровня deflate 6 с post-write перепланированием в split при превышении лимита (`build.rs`, `on_plan_ready`-хук вместо зависимости от `codepack-reports`), `27_archive_plan.md/.json` (`report.rs`), восстановление с защитой от path-traversal — двойная проверка (`ZipFile::enclosed_name()` + собственная лексическая проверка компонентов пути), `ARCHIVE_SET_MANIFEST.json`/`RESTORE_INSTRUCTIONS.md` (`restore.rs`). Зависит от `codepack-core` и `codepack-tokens` (`format_bytes`, вместо собственной копии — аудит 2026-07-25). **2026-07-29**: `sevenz.rs` — `pack_files`, упаковка **названного вызывающей стороной** списка файлов в один `.7z` (`sevenz-rust2`, чистый Rust, Apache-2.0; 7z — другой контейнер, `zip` его не пишет). Никакого плана, разбиения и отчёта — ZIP-контракт этапа S8 (I5) не тронут. Два свойства, обе — исправления по ревью: список членов приходит снаружи, а не берётся обходом каталога (обход затягивал в архив посторонние файлы, лежавшие в папке назначения и не прошедшие ни редакцию, ни фильтр безопасности, и упаковывал сам архив в себя); и архив собирается в `<имя>.partial` рядом с целью и переименовывается только при успехе, поэтому отмена или сбой оставляют прежний архив того же имени нетронутым — а отмена именно во время упаковки штатна, упаковка идёт последней. Отсутствующий в списке файл — ошибка, не молчаливый пропуск; символические ссылки не пакуются (I7). 50 тестов |
-| `codepack-engine` | **готов (S9)**: `plan_export` — планирование без записи отчётов, для `preview` (добавлено в S10). восьмишаговый оркестратор пайплайна (BLUEPRINT §A.2) — план → копирование → структура → Git → текстовый дамп → аналитика → манифест → архив (`orchestrator::run_export` — единственная публичная точка входа для будущего вызывающего). Три новых, ранее не существовавших шага реализованы здесь: копирование (`copy.rs`, фильтрация off `ExportPlan.included_files`, без второго независимого обхода дерева), структура/Git/текстовый дамп (`structure.rs`, `git_report.rs` — только чтение через `git2`, `text_dump.rs` — 6-кодировочная цепочка фолбэка через `encoding_rs`). Аналитика (`analytics.rs`) — единственная точка вызова `codepack_security::scan_project` во всём пайплайне. Отмена проверяется внутри циклов каждого шага, а не только между шагами (риск Q13 закрыт на уровне пайплайна, но не внутри `codepack-reports`); шаги 7-8 и запись истории всегда выполняются, даже при отмене — так же, как в legacy. Успешность прогона — точный порт legacy `successful = !cancelled && !cancel.is_cancelled() && copy_stats.errors == 0`, гейтит запись нового снапшота-базлайна (I6) через `codepack-storage::record_export_run`. Очистка staging-каталога гарантирована на любом пути выхода (RAII `StagingCleanupGuard`, найдено и исправлено независимым ревью — раньше протекала при ошибках на середине пайплайна). Самый широкий граф зависимостей в воркспейсе (все домен-крейты + `git2` + `encoding_rs`), но не более широкий, чем нужно — UI/сеть не подключены. **2026-07-25**: `budget.rs` (подключение `fit_to_budget`), вызов ретеншна истории, реальный `redacted_count`, golden-тест против исполненного legacy на трёх фикстурах. **Аудит 2026-07-25**: календарь берётся из `codepack-core::time`, ширины разделителей отчётов вынесены в `layout.rs`, `budget.rs` покрыт тестами (раньше — ни одного). 95 тестов (+ смок-тест на ≥50k файлов под `#[ignore]`) |
-| `codepack-cli` | **готов (S10)**: бинарь `codepack` — команды `export`/`preview`/`scan`/`history`/`doctor`/`sanitize`, флаги `--preset`/`--profile`/`--safe-mode`/`--diff`/`--budget`/`--out`/`--json`. Контракты этапа изолированы в собственных модулях: `exit.rs` (коды 0/1/2/3; реальная ошибка старше «найдены секреты»), `output.rs` (версионируемый `--json`-конверт, машинный вывод только в stdout, прогресс и ошибки — в stderr), `settings.rs` (четыре слоя конфигурации, побеждает более узкая область), `.codepack.toml` (Q6 — неизвестный ключ является ошибкой; с S11 живёт в `codepack-core::config::project`, потому что читателей стало двое). `scan` форсирует safe-режим в `full`, иначе он отвечал бы «находок нет» на репозиторий с `.env`. `preview` не пишет ничего. **2026-07-28**: `sanitize --source <path> --out <path> [--safe-mode <mode>]` (с 2026-07-29 ещё `--archive <файл>`, а `--out` становится необязательным, если задан `--archive`: копия уходит во временный каталог рядом с архивом, который сам убирается, и результатом остаётся один файл — ровно та жалоба, ради которой это сделано. `destination` в `--json` тогда отсутствует, а не называет уже удалённый путь) — тонкая обёртка над `codepack-sanitize` (см. ниже), собственной бизнес-логики не несёт. `completions <shell>` — печатает скрипт автодополнения (`bash`/`zsh`/`fish`/`powershell`/`elvish`) через `clap_complete`, без `--json`-формы (это не отчёт, а шелл-скрипт для `source`). **2026-07-29**: `verify <bundle>` — перепроверка уже собранного бандла (`.zip`, набор частей или распакованная папка; тип определяется осмотром, а не флагом), распаковка через `codepack_archive::extract_zip_safely` (та же проверка path-traversal из S8, а не вторая реализация), сканирование содержимого, те же коды возврата. Полезна вдвойне: получателю бандла это единственная проверка, которую он вообще может выполнить. Находки делятся на «содержимое экспорта» (вердикт и код возврата считаются по ним) и «собственные сгенерированные отчёты codepack» — без этого деления любой чистый бандл выдавал ~24 находки на собственных плейсхолдерах редакции и путях в `manifest.json` (найдено ревью, Q27); обе группы печатаются, сужен только вердикт. `scan --staged` — режим pre-commit-хука: читает **содержимое из индекса**, а не рабочего дерева (`staged.rs`, `git2`, блобы материализуются во временный каталог), потому что коммит собирается из индекса и эти две вещи расходятся, как только staged-файл отредактировали снова; diff сужается pathspec'ом до сканируемого проекта (`Repository::discover` идёт вверх, и без этого в монорепозитории возвращались staged-файлы соседних пакетов — найдено ревью); вне репозитория — ошибка, а не «чисто». **Гейтит только по `critical`** (замороженный контракт кодов возврата): staged `.env` коммит остановит, `export API_KEY=…` в staged-скрипте — нет, см. Q25. `allow.rs` — применение `.codepack-allow` в `scan`/`verify`: подавленные находки **считаются и печатаются**, а не исчезают молча, и каждая находка выводится со своим отпечатком, чтобы принять её было копированием, а не ручным выводом хеша. **2026-07-29 (вторая партия)**: `explain <файл>` — почему один файл попал или не попал в экспорт. План уже хранил `PlannedFile::reason`, спросить про конкретный путь было нечем: `preview --list-files` печатает только попавшее, то есть не ту половину вопроса. План строится ровно как в `preview` (ничего не пишется, история не трогается), принимаются абсолютный путь, путь от корня проекта и backslash-написание из самого плана. Четыре исхода, и все четыре — успех (код 0): `included`, `excluded` (с правилом из плана), `not_in_diff` (правила включают, но diff-выборка — нет; найдено ревью) и `not_planned`, где отдельно отвечается «каталог `node_modules` пропущен целиком» — этого плана per-file не содержит, и восстанавливается это из `skipped_dirs`. Путь вне проекта или с `..` — ошибка, а не ответ. `--budget` теперь принимает **имя модели** (`--budget Claude`), а не только число: разрешение идёт через `codepack_tokens::ModelContextLimits`, у которой до сих пор не было ни одного реального потребителя, поэтому модель, добавленная файлом-переопределением, работает без пересборки. Флаг разбирается синтаксически (`BudgetSpec::{Tokens,Model}`) и разрешается позже в `settings.rs`, потому что `value_parser` у clap работает до появления `AppPaths` и не может прочитать файл — а неизвестная модель должна быть ошибкой разрешения (код 1), не ошибкой аргументов (код 2). Сопоставление: точное → регистронезависимое точное → регистронезависимое вхождение **только при единственном совпадении**; `GPT-4` попадает в две записи и это ошибка с перечислением обеих, потому что молчаливый выбор дал бы контекстное окно, которого не просили. 83 юнит- + 47 сквозных тестов, запускающих настоящий бинарь. `--out` по умолчанию — родительский каталог проекта, внутрь проекта писать отказывается (инвариант I2) |
-| `codepack-sanitize` | **добавлен 2026-07-28** («Стерильная копия», новая продуктовая возможность вне порядка этапов — `docs/decisions/open-questions.md`, Q24). Самостоятельное действие, не шаг `codepack-engine`: по исходной папке строится отдельная папка-результат с кодом без комментариев (сняты **tree-sitter**-парсерами, не regex — Batch 1: JS/TS, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Shell, Makefile; **Kotlin присоединился 2026-07-28** после проверки версии/лицензии грамматики (Q24 закрыт по этому языку — `tree-sitter-kotlin-ng`, `tree-sitter-grammars` org, MIT); Batch 2 остальной — Dart/Flutter, Swift, Assembly, Groovy — по-прежнему явно отложен) и, где на `PATH` пользователя нашёлся форматтер, переформатирован им (`rustfmt`, `prettier`, `ruff format`→`black`, `gofmt`, `clang-format`, `shfmt`, `ktlint` для Kotlin; для Java/C#/PHP/Ruby безопасного stdin-режима не нашлось — `StrippedOnlyNoFormatterFound` вместо угадывания). Переиспользует, а не дублирует: выбор файлов и текст/бинарь-классификация — `codepack_scanner::build_export_plan`, отсев чувствительных файлов — `codepack_security::should_skip_file_for_safety`, редактирование секретов — `codepack_security::redact_secrets` (инвариант I3 применяется и здесь). При ERROR-узлах у tree-sitter (синтаксис не разобран полностью) — файл копируется как есть, отмечается `FileOutcome::Error`, комментарии не снимаются (осознанный fail-safe, Q24 остаётся открытым по этому пункту). Новый артефакт `STERILE_COPY_REPORT.md/.json` с `schema_version` с первой версии — не расширение существующих ~30 отчётов, инвариант I5 на него не распространяется. **2026-07-29**: необязательный `.7z` (`SterileCopyOptions::archive_path`; `None` — ровно прежнее поведение). Архив пишется **после** `STERILE_COPY_REPORT`, поэтому содержит его: получателю одного файла достаётся и код, и отчёт о том, что из него вырезали. Список членов строится из исходов самого прогона (`archive_members`), а не обходом папки назначения — папка не обязана быть пустой, и обход затянул бы в «полностью проверенный» архив файлы, не прошедшие ни редакцию, ни фильтр (I3, найдено ревью). Путь архива внутри исходного проекта отвергается так же, как папка назначения (I2). Зависит от `codepack-core`/`-scanner`/`-security`, а с 2026-07-29 ещё и от `codepack-archive` (упаковка живёт там, чтобы не появилось второе место, знающее, как писать архивы; зависимость направлена вниз); `codepack-engine` его не вызывает и им не вызывается. `PATH`/`PATHEXT`-поиск бинарей — свой (без `which`, репозиторий Windows-only). 41 тест |
-| `cargo xtask` (`crates/xtask`) | **готов**: `gate`, `fmt`, `lint`, `test`, `deny`, `sync-agents [--check]`, `install-hooks`, `package`, `doctor`. **2026-07-26**: `fmt` гоняет оба форматтера (rustfmt + Prettier), `install-hooks` включает `core.hooksPath` → отслеживаемый `.githooks/`, `package` собирает NSIS-установщик из `apps/desktop` (модули `frontend.rs`, `hooks.rs`) |
-| `rust-toolchain.toml`, `rustfmt.toml`, workspace lints | **готовы** |
-| Форматирование (`prettier.config.mjs`, `.prettierignore`, `.githooks/`) | **готово (2026-07-26)**: rustfmt владеет `.rs`, Prettier — фронтендом и конфигами (`printWidth: 100` совпадает с `max_width`); `.prettierignore` защищает `tests/golden/`, фикстуры крейтов и генерируемый `AGENTS.md`. `pre-commit` форматирует **только застейдженные** файлы и пере-стейджит их, а частично застейдженный файл пропускает, чтобы не втянуть в коммит незастейдженную половину. Попутно исправлен `.editorconfig`: он не перечислял `.svelte`/`.mjs` в переопределении на 2 пробела, из-за чего Prettier переиндентировал бы все компоненты |
-| `deny.toml` | **активен с S1**: advisories/bans/licenses/sources все `ok`; собственные крейты исключены из license-проверки (`[licenses.private] ignore = true`); с S2 добавлен `[bans] allow-wildcard-paths = true` (внутриворкспейсные path-зависимости без semver-диапазона — не supply-chain риск) |
-| Десктоп-приложение (`apps/desktop`) | **готово (S11, 2026-07-25)**, дополнено S12. `src-tauri` — крейт `codepack-desktop`, бинарь `codepack-desktop`: 19 команд (`dto.rs` — формы ответов, `commands/` — по модулю на область, `tree.rs` — сборка дерева предпросмотра из плоского плана, `state.rs` — реестр прогонов и вотчер), 3 события (`export:progress`, `export:finished`, `watch:changed`), трей, watch (`notify`), масштаб окна. Зовёт `codepack-engine` напрямую, **не** через `codepack-cli` (BLUEPRINT §C.2: рядом, а не цепочкой). Изоляция задана возможностями: `capabilities/default.json` не выдаёт вебвью ни одного разрешения на ФС; выбор папки и открытие результата идут через системные диалог/обработчик. CSP без удалённых источников — инвариант I1 держится на уровне вебвью. Экспорт — фоновый поток с id прогона, отменяемый до первого шага. **S12**: `open_dashboard` обобщена в `open_bundle_report`, три новые тонкие команды (`open_project_overview`, `open_onboarding_guide`, `open_review_checklist`) переиспользуют её, а не копируют логику извлечения бандла; `commands/export.rs` перевалил за 600-строчный потолок и вынесен в директорию-модуль (`export/mod.rs` + `export/tests.rs`), публичная поверхность не изменилась. 68 модульных + 6 сквозных тестов. `ui` — Svelte 5 + Vite + TypeScript: 8 страниц мастера, дерево предпросмотра с ручными переопределениями, i18n RU/EN без перезапуска, темы, типизированный клиент над `invoke()` (`api/types.ts` — источник истины контракта, кода-генерации нет). `ResultPage.svelte` получила три новые кнопки открытия S12-отчётов. **2026-07-26**: приложение single-instance (`tauri-plugin-single-instance`, зарегистрирован первым) — повторный запуск отдаёт активацию уже работающему процессу, который поднимает окно через общий хелпер `raise_existing_window` (его же использует пункт «Show» в трее); без этого каждый экземпляр строил свой значок в трее и открывал второе соединение к той же БД истории. Сборка установщика — `cargo xtask package`, NSIS, `mainBinaryName = codepack-desktop` (бинарь называется не так, как продукт, и бандлер иначе искал бы `codepack.exe`). **2026-07-27**: фронтенд переписан — см. следующую строку; backend-контракт (команды, события, `api/types.ts`) не изменился. **2026-07-28**: добавлены `commands::sanitize` (`start_sanitize`/`cancel_sanitize`, 21 команда всего) и событие `sanitize:finished` — тонкая обёртка над `codepack-sanitize`, тем же фоновым-потоком/реестром-прогонов паттерном, что и экспорт; `sanitize:progress` не существует, потому что крейт сейчас обрабатывает весь набор файлов одним проходом и не отдаёт промежуточный прогресс — событие только одно, по завершении |
-| Фронтенд десктопа (`apps/desktop/ui`) | **переработан 2026-07-27**. Дизайн-система вместо ad-hoc стилей: `src/styles/tokens.css` (цвет, шаг, радиус, тень, типографика, движение — светлая и тёмная), `base.css` (сброс, `:focus-visible`, скроллбары, `prefers-reduced-motion`), `components.css` (кнопки, поля, карточки, бейджи, таблицы, выноски, статы) — глобальные классы, потому что восемь scoped-копий одной кнопки расходятся. Ни одного CSS-фреймворка и ни одной новой зависимости: CSP не допускает удалённых источников, а токен-файл — это ровно та часть фреймворка, которая здесь нужна. Оболочка: боковая навигация (пять пронумерованных шагов мастера + три «итоговые» страницы) вместо ряда из восьми кнопок, шапка с проектом и переключателями темы/языка, статус-строка, в которой обещание приватности видно постоянно. Недоступный шаг остаётся кликабельным и объясняет причину — прежде он был `disabled`, то есть выпадал из порядка обхода и молчал. Общие компоненты: `Icon` (инлайновый набор путей), `Field`, `Switch`, `Segmented`, `Stat`, `Callout`, `EmptyState`, `Toasts`, `StepProgress`, `Sidebar`, `TopBar`, `StatusBar`. Три брейкпоинта (полная панель → рельс 68 px → верхняя полоса), проверено на 1280/880/600 px: горизонтального переполнения нет ни на одной из восьми страниц. Дублировавшая друг друга логика вынесена в `util/format.ts` (`formatBytes` зеркалит `codepack_tokens::format_bytes`), `util/tree.ts` (фильтрация дерева одним проходом), `util/pipeline.ts`, `util/clipboard.ts`, `actions/project.svelte.ts`, `stores/toasts.svelte.ts`, `stores/ui.svelte.ts`. typecheck 133 файла / 0 / 0, lint чист, бандл 175 КБ JS + 40 КБ CSS. **2026-07-28**: девятая страница, `SterileCopyPage.svelte` — не шаг мастера и не «итоговая» страница, а третья группа навигации (`nav.section.tools`) со своим источником (любая папка, не обязательно открытый в мастере проект) и своим результатом (папка очищенного кода, а не архив/отчёты); `stores/wizard.svelte.ts` получил шаг `"sterile"` и `STANDALONE_STEPS` рядом с `WIZARD_STEPS`/`INSIGHT_STEPS` |
-| Проектный конфиг (`.codepack.toml`) | **готов (S10, Q6)**: TOML в корне проекта, все поля опциональны, перекрывает глобальные настройки и перекрывается флагами |
-| CI (`.github/workflows/ci.yml`) | **готов**: матрица — **только `windows-latest`** (2026-07-26; `ubuntu-latest`/`macos-latest` закомментированы с `TODO(cross-platform)`), триггер на всех ветках. Ставит pnpm + Node + `pnpm install --frozen-lockfile`, ставит `cargo-deny`, запускает `cargo xtask gate`, плюс два шага приёмки S10 — headless-экспорт release-сборкой с пофайловой проверкой `--json`-отчёта и проверка контракта кодов возврата. **Шаги pnpm добавлены 2026-07-26 по находке ревью:** без них фронтенд-проверки гейта молча пропускались в CI, то есть существовали и не выполнялись нигде, кроме машины разработчика |
-| Golden-паритет (`tests/golden/`) | **готов (2026-07-25)**: эталоны реального вывода legacy на трёх фикстурах в репозитории, генератор `cargo xtask golden` (нужен Python только разработчику), сверка — `crates/codepack-engine/tests/golden.rs`. CI остаётся чисто Rust |
-| Гейт качества (`cargo xtask gate`) | **зелёный локально и в CI**: fmt, clippy `-D warnings`, тесты, `cargo deny check`, фронтенд `format`/`typecheck`/`lint`, тесты `scripts/` (`scripts.rs`, только в полном гейте, `python -W error -m unittest`), `sync-agents --check`. Шаг `scripts` добавлен 2026-07-26 по находке ревью: тесты защищённых путей `clean-project` — единственное, что стоит между «очистить дерево» и «удалить живые учётные данные», — не запускались ни в гейте, ни в CI, то есть тот же класс дефекта мог дойти до `main` при полностью зелёной проверке. Пропускается с уведомлением без Python, но при выставленной `CI` **падает** — по той же логике, что и фронтенд-шаги. Фронтенд-шаги пропускаются с уведомлением без `node_modules`, но при выставленной переменной `CI` **падают** — иначе удаление шага `pnpm install` из воркфлоу прошло бы незаметно |
-| Оркестратор скриптов (`dev_tools_scripts_runner.py`, `scripts/`) | **готов (2026-07-26)**: кроссплатформенная дверь к рутинным работам — одна и та же для владельца, разработчика и агента. В корне только шим на 16 строк, из которых девять — докстринг; вся логика в `scripts/runner/` (`models` / `exceptions` / `config_loader` / `registry` / `execution` / `rendering` / `interactive` / `main` — печать и чтение ввода никогда в одном модуле), каталог правится руками в `runner/config/*.json` и валидируется до запуска (битый JSON, ссылка на неизвестную категорию, дубль идентификатора, модуль вне `scripts.`). Восемь скриптов, каждый в своей директории со своим `config/*.json`: `quality-gate` (по умолчанию), `format-code`, `dev-run`, `build-installer`, `doctor`, `install-hooks`, `clean-project`, `selftest`. Скрипты **не импортируют друг друга** — общий только `_toolkit/`; запускаются как модули (`python -m scripts.<name>`), поэтому мелкий и полностью декомпозированный скрипт стартуют одинаково. Без терминала и без аргументов запускается скрипт по умолчанию, а не блокируется на `input()` — именно это делает оркестратор пригодным для агента и CI. Скрипты **оборачивают** `cargo xtask`, а не переизобретают его: две двери, один код. `clean-project` — единственный разрушающий, поэтому самый декомпозированный (`core/{discovery,protection,removal,report}.py`), по умолчанию сухой прогон, и он никогда не трогает `.env`, подписной материал, локальные БД и вложенный git-репозиторий. **Каталог оценивается по содержимому, а не по имени** — это исправление трёх путей потери данных, найденных ревью: `git status` сообщает о целиком неотслеживаемом каталоге одной записью и не говорит, что внутри, поэтому защита спрашивалась про `certs/`, а `rmtree` удалял `certs/.env`; план печатал путь как защищённый, и тот же прогон его уничтожал. Проверка вложенного репозитория смотрела `.git` только на верхнем уровне, из-за чего `vendor/` с непушнутым чужим клоном внутри уходил в удаление. Пруннинг пустых каталогов не спрашивал защиту вообще и удалял пути, которых сухой прогон не показывал. Все три закрыты и покрыты тестами (`tests/test_discovery.py`: обнаружение — на настоящих git-репозиториях, пруннинг — на временных каталогах) |
-| Иконка приложения (`apps/desktop/src-tauri/icons/`) | **готова (2026-07-26)**: иконка legacy (`assets/ICO.ico` из `docs/__arch__/codepack-main.zip`, 128×128 в один слой) пересобрана в набор `tauri icon` — шесть кадров 16/24/32/48/64/256 в `icon.ico`, все 32bpp с альфой, плюс PNG-размеры и `icon.png` 512×512 RGBA. Прежние файлы были плейсхолдером на 2.2 КБ и несвязанным `.ico`. Проверено на уровне байт, а не на глаз: все шесть кадров лежат в `codepack-desktop.exe` как ресурсы `RT_ICON` побайтово идентично; `default_window_icon()` (его же берёт трей, `lib.rs:135`) на Windows кодогенерация Tauri собирает из **первого** кадра `icon.ico`, и этот декодированный RGBA-блок 32×32 тоже присутствует в бинаре дословно. `installerIcon`/`uninstallerIcon` заданы явно — без них NSIS ставил на сам `setup.exe` свою дефолтную иконку, то есть файл, который пользователь запускает двойным щелчком, был единственным местом, куда иконка не доходила |
-| Инфраструктура ИИ-агентов (`.ai/`, `.claude/`, `.codex/`) | **готова**; синхронизация `AGENTS.md` — `cargo xtask sync-agents`. Модуль команд разделён на `11-commands.md` (действует в каждой задаче) и `15-command-reference.md` (тир `extended` — справочник, в `AGENTS.md` попадает одной строкой `Essence`), потому что Codex читает не больше 32 КБ проектных инструкций |
-| Спецификация продукта (`BLUEPRINT.md`) | **готова** |
-| План реализации (`ROADMAP.md`) | **готов** |
-| Архив старой реализации | `docs/__arch__/codepack-main.zip` |
+| `codepack-core` | Domain types and `Config` (27 fields plus `schema_version`), normalization, migration from the legacy settings file, the six AI presets, `AppPaths`, `CancellationToken`, progress and log events. Also the single home for things that were once duplicated: text/binary classification (`classify`), the civil-date algorithm (`time`), and the `.codepack-allow` format and fingerprint recipe (`allowlist`). |
+| `codepack-scanner` | Walks the tree, applies ignore rules (base, per-stack, `.exportignore`, user rules), detects the stack, and builds the export plan. Symlinks are never followed (invariant I7). |
+| `codepack-security` | Safe-export modes, secret redaction, and the detector: provider signatures, entropy, a keyword cascade and named risky-code shapes. Carries an accuracy corpus test whose precision/recall thresholds may never be lowered (invariant I9). Emits SARIF 2.1.0. |
+| `codepack-diff` | Differential export and snapshots through `git2`. Never requires a `git` binary. |
+| `codepack-storage` | SQLite: seven tables plus `schema_version`, numbered migrations, run history, snapshots, findings, and per-project retention. Has no runtime dependency on any other `codepack-*` crate. |
+| `codepack-tokens` | Byte formatting (preserved verbatim from the previous version — invariant I4), token estimation, the budget selection, and `ModelContextLimits`, the model→context-window table that `--budget <model>` resolves through. |
+| `codepack-reports` | Around thirty insight reports, `PROJECT_PROFILE.json`, the AI context and prompt folders, the HTML dashboard, and the human-oriented reports (project overview, onboarding guide, review checklist). |
+| `codepack-archive` | Archive building and restore. Two entry points: the export pipeline's planned, splittable, reported output, and `pack_files`, which packs a caller-named list of files into one archive. Both honour `ArchiveFormat` — ZIP by default, 7z on request, RAR reserved and refused. Extraction is path-traversal safe (invariant I7). |
+| `codepack-sanitize` | The "sterile copy": comments stripped with real tree-sitter parsers (never regex) and code reformatted by whichever formatter is found on `PATH`. Reuses the scanner's file selection, the security crate's safety filter and its redaction — never a second, less guarded path out of the project. Optionally packs the result into one archive. |
+| `codepack-engine` | The orchestrator: plan → copy → structure → git → text dump → analytics → manifest → archive. Cancellation is checked inside each step's loops, not only between steps. The only place `codepack_security::scan_project` is called in the pipeline. |
+| `codepack-ai` | The stage S13 integration — the one and only crate permitted to reach the network. |
+| `xtask` | The task runner and quality gate. |
 
-## Что было раньше
+## The two front ends
 
-Предыдущая версия — Project Exporter Desktop 1.0.1: Python 3.11+, PySide6 (Qt),
-около 13 400 строк, 22 тестовых модуля, только Windows, дистрибуция через PyInstaller
-и Inno Setup. Полностью удалена из рабочего дерева; сохранена в архиве и подробно
-описана в `BLUEPRINT.md` части A.
+**`codepack-cli`** — the `codepack` binary. Nine commands: `export`, `preview`, `scan`,
+`history`, `doctor`, `sanitize`, `completions`, `verify`, `explain`. Its published
+contracts live in their own modules with their own tests, because other people's
+pipelines depend on them:
 
-Причины переписывания: кроссплатформенность, производительность без ограничений GIL,
-строгая типизация, замена плоских JSON на SQLite, усиление детектора секретов.
+- **Exit codes** `0` success, `1` error, `2` bad arguments, `3` critical secrets found.
+  Code `2` is emitted deliberately rather than inherited from `clap`'s default, and a
+  real failure always outranks "secrets found" — returning `3` for a run that broke
+  would tell a pipeline the scan result can be trusted when it cannot.
+- **`--json`** carries `schema_version` and a `command` discriminator, with the payload
+  flattened. Machine output is the only thing on stdout; progress, warnings and errors
+  go to stderr, or `codepack export --json | jq` would break on the first log line.
+- **Configuration** resolves in four layers, narrower scope winning: defaults → global
+  settings → `.codepack.toml` → flags. `--preset` sits between the project file and the
+  flags, because a preset is a named bundle of flags and must not override one the user
+  typed.
 
-## Целевая форма системы
+**`apps/desktop`** — the Tauri shell (`codepack-desktop`) and a Svelte 5 + TypeScript
+frontend. The webview holds **no filesystem permission**: every file operation is a
+`#[tauri::command]`, and the frontend's only route to the backend is one typed client
+module. The content security policy admits no remote sources, so invariant I1 is held at
+the webview level rather than by convention. Exports run on a background thread with a
+run id and can be cancelled.
 
-Описана в `BLUEPRINT.md` §C (архитектура Rust + Tauri) и §D (модель данных).
-Порядок появления частей — в `ROADMAP.md` §1.
+## Supporting parts
 
-Кратко: слой крейтов `codepack-*` (ядро, независимое от UI) → `codepack-engine`
-(оркестратор) → две точки входа: `codepack-cli` (headless) и `apps/desktop`
-(Tauri + TypeScript).
+| Part | State |
+|---|---|
+| Project config (`.codepack.toml`) | TOML at the project root, all fields optional, overrides global settings. An unknown key is an error naming the key, not a silent no-op. |
+| Golden parity (`tests/golden/`) | References produced by actually running the archived previous implementation, on three fixtures. Regenerated by `cargo xtask golden`; never edited to make a comparison pass. |
+| Quality gate (`cargo xtask gate`) | Eight sections: format, clippy with warnings denied, tests, `cargo deny`, frontend format/typecheck/lint, the `scripts/` suite, agent-rule sync, and network isolation. |
+| Network isolation | A gate step, not a convention: it reads every crate manifest and fails if an HTTP client appears anywhere but `codepack-ai`. |
+| Dev scripts (`dev_tools_scripts_runner.py`, `scripts/`) | The cross-platform door to routine jobs — quality gate, formatting, dev run, installer, doctor, hooks, clean, selftest. |
+| CI (`.github/workflows/ci.yml`) | `windows-latest` only; the other legs are commented out rather than deleted. |
+| Packaging | `cargo xtask package` produces an NSIS installer. Signing, notarisation, checksums and auto-update are not done. |
 
-## Известный незакрытый долг ядра
+## Known debt
 
-Q7, Q15 и Q16 закрыты 2026-07-25 отдельной задачей после закалки: константы
-классификации текст/бинарь переехали в `codepack-core::classify` (дубля больше нет),
-добавлена контекстная сигнатура `aws-secret-access-key`, и закрыта унаследованная от
-legacy утечка I3, когда секрет содержит `=`. Осталось:
+- Artifact localization is still a pilot on a single report; the rest of the catalogue
+  is English only.
+- Archive splitting uses First-Fit rather than First-Fit Decreasing. This only matters
+  for projects large enough to need splitting at all.
+- The "one finding per line" rule applies only when the keyword cascade fired; on a line
+  without a keyword, a provider signature and the entropy detector can both report.
+- Redaction recognises encoded secrets, but a short word-like password inside a URL,
+  before the first separator, is indistinguishable by shape from a host name.
+- `codepack-reports` checks cancellation between reports, not inside each report's file
+  loop. Accepted deliberately: the pipeline level already bounds the risk.
+- Cancelling while a single very large file is being packed into an archive is not
+  interruptible until that file finishes.
 
-- **Q13** — `codepack-reports` проверяет отмену только между отчётами, не внутри цикла по
-  файлам каждого отчёта. Закрыт как **разрешённое отклонение** (решение владельца
-  2026-07-25): на уровне пайплайна риск снят, переделка ~19 модулей не оправдана.
-- **Q12** — локализация артефактов остаётся пилотом на одном отчёте (до S11).
-- **Q14** — разбиение архива использует First-Fit, а не First-Fit Decreasing.
-- **Q17** — правило «одна находка на строку» применяется только когда сработал
-  keyword-каскад; на строке без keyword провайдер и энтропия могут дать две находки.
-- **Q18** — остаточное ограничение Q16: маскировка опознаёт закодированные секреты, но
-  короткий словоподобный пароль внутри URL перед первым разделителем по форме
-  неотличим от имени хоста.
-- `cargo deny check` не запускался локально с S8: бинарь `cargo-deny` отсутствует в
-  песочнице разработки. В CI он ставится и выполняется.
+## What came before
 
-## Следующий шаг
+The previous version was Project Exporter Desktop 1.0.1: Python 3.11+, PySide6, roughly
+13,400 lines, Windows only, distributed with PyInstaller and Inno Setup. It has been
+removed from the working tree and preserved as an archive, which remains the behavioural
+reference for exact constants and artifact formats.
 
-Этап **S12 — Человеко-ориентированные результаты** (`ROADMAP.md` §4).
-
-Инвариант I8 (ядро не зависит от интерфейса) впервые проверяем на практике и держится:
-зависимости идут только вниз — `codepack-desktop` → домен-крейты → `codepack-core`, ни
-один `codepack-*` не знает о Tauri или о фронтенде.
+It was rewritten for cross-platform reach, for performance without the GIL, for static
+typing, to replace flat JSON storage with SQLite, and to strengthen the secret detector.

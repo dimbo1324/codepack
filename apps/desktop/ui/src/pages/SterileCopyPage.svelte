@@ -2,7 +2,7 @@
   // "Sterile copy": a standalone action, not a step of the export wizard — its own
   // source folder (not necessarily `wizard.project`), its own destination folder, and
   // its own result (cleaned source, not an archive or reports). See `nav.section.tools`
-  // in the sidebar and `docs/decisions/open-questions.md` (2026-07-28) for why this is a
+  // in the sidebar and `docs/__arch__/open-questions.md` (2026-07-28) for why this is a
   // separate page rather than an option inside Export.
   //
   // Unlike the Export page, there is no step-by-step progress: `codepack-sanitize`

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::ignore::RulesReport;
 
 /// One file's disposition in the plan. Field order is a documented contract
-/// (invariant I5, `BLUEPRINT.md` artifact formats): `relative_path`, `size`,
+/// (invariant I5, `docs/__arch__/BLUEPRINT.md` artifact formats): `relative_path`, `size`,
 /// `status`, `reason`, `severity`, `group`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedFile {

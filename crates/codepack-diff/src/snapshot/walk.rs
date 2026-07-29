@@ -9,7 +9,7 @@
 //! The ignored-directory-name set is entirely caller-supplied (lower-cased); this
 //! module has no built-in `IGNORED_DIR_NAMES` of its own (see `lib.rs`'s scope
 //! boundary — this is the deliberate resolution of the Q7-shaped constants-duplication
-//! tension, `docs/decisions/open-questions.md` Q7).
+//! tension, `docs/__arch__/open-questions.md` Q7).
 //!
 //! A file that cannot be `stat`-ed or hashed is silently skipped, matching legacy's
 //! bare `except Exception: continue` inside the per-file loop. A `WalkDir` iteration

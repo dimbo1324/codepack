@@ -28,8 +28,8 @@ Saying so now so the final report is not the first place it appears.
 - [+] B1/B2/B3 finished, reviewed, gate green, committed as `8caf9db`
 - [+] Review findings from that slice addressed before continuing (diff selection in
       `explain`, `skipped_dirs` parsing, case-folded path matching, test honesty)
-- [+] Orientation re-read for the new scope: `ROADMAP.md` §1, `BLUEPRINT.md` on the
-      sterile copy, `docs/decisions/open-questions.md` Q24
+- [+] Orientation re-read for the new scope: `docs/__arch__/ROADMAP.md` §1, `docs/__arch__/BLUEPRINT.md` on the
+      sterile copy, `docs/__arch__/open-questions.md` Q24
 - [+] Decide where 7z lives before writing code (architecture, not after)
 
 ## R1 — a `.7z` archive of the sterile copy
@@ -89,10 +89,10 @@ Saying so now so the final report is not the first place it appears.
 - [+] `README.md` (Russian, owner-facing) rewritten: what the product is, install, the
       commands that exist, the desktop app, where artifacts land, the privacy guarantee.
       It currently says there is no product code, which is false
-- [+] `ROADMAP.md` — `**Status.**` lines for what this branch shipped; §1 status column
+- [+] `docs/__arch__/ROADMAP.md` — `**Status.**` lines for what this branch shipped; §1 status column
 - [+] `docs/architecture/overview.md` — `codepack-archive`, `codepack-sanitize`,
       `codepack-cli`, desktop rows
-- [+] `docs/decisions/open-questions.md` — the 7z decision and anything it surfaces
+- [+] `docs/__arch__/open-questions.md` — the 7z decision and anything it surfaces
 - [-] `.ai/` rule modules only if this task changed how work is done — **not changed**,
       because nothing about how work is done changed. `AGENTS.md` therefore needed no
       regeneration, and `sync-agents --check` in the gate confirms it is still in sync

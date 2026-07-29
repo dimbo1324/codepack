@@ -3,7 +3,7 @@
 //! folder** with comments stripped via real tree-sitter parsers (never regex) and,
 //! where an external formatter is found on `PATH`, reformatted by it.
 //!
-//! Scope (`docs/decisions/open-questions.md`, 2026-07-28 — "Стерильная копия"): this
+//! Scope (`docs/__arch__/open-questions.md`, 2026-07-28 — "Стерильная копия"): this
 //! crate depends only on `codepack-core`, `codepack-scanner`, `codepack-security`.
 //! `codepack-engine` neither calls it nor is called by it, and it never touches the
 //! ZIP/archive contract or any of the ~30 existing report artifacts — its own artifact

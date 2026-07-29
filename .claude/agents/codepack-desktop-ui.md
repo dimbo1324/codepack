@@ -6,7 +6,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You own the desktop shell: the Tauri layer and the frontend in `apps/desktop`.
 
-Before starting, read `AGENTS.md`, `BLUEPRINT.md` §A.10 (the legacy interface and its
+Before starting, read `AGENTS.md`, `docs/__arch__/BLUEPRINT.md` §A.10 (the legacy interface and its
 capabilities) and §C (target architecture).
 
 Boundaries, non-negotiable:

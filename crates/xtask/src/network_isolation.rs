@@ -71,7 +71,7 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         "invariant I1 violated — a crate other than {ALLOWED} declares a network \
          client:\n  {}\n\nAll analysis is local. If a new stage genuinely needs the \
          network, that is an owner decision recorded in \
-         docs/decisions/open-questions.md, not a dependency added in passing.",
+         docs/__arch__/open-questions.md, not a dependency added in passing.",
         offenders.join("\n  ")
     ))
 }

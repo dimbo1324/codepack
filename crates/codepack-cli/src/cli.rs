@@ -1,4 +1,4 @@
-//! The command surface, exactly as `ROADMAP.md` §3 specifies it for stage S10:
+//! The command surface, exactly as `docs/__arch__/ROADMAP.md` §3 specifies it for stage S10:
 //! `export`, `preview`, `scan`, `history`, `doctor`, with `--preset`, `--profile`,
 //! `--safe-mode`, `--diff`, `--budget`, `--out` and `--json`.
 //!

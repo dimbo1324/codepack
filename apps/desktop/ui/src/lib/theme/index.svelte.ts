@@ -1,4 +1,4 @@
-// Light / dark / system theme (`ROADMAP.md` §3), synchronized with `Config.theme`.
+// Light / dark / system theme (`docs/__arch__/ROADMAP.md` §3), synchronized with `Config.theme`.
 // Applied as a `data-theme` attribute on `<html>`; `src/app.css` reacts to it. Kept
 // independent of any CSS framework so it costs nothing beyond a handful of variables.
 export type ThemePreference = "light" | "dark" | "system";

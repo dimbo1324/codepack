@@ -24,7 +24,7 @@ jobs:
       matrix:
         # TODO(cross-platform): restore `ubuntu-latest` and `macos-latest` when the
         # product targets them again. Owner decision 2026-07-26 (see
-        # `docs/decisions/open-questions.md`): the build scope is Windows 10/11 only for
+        # `docs/__arch__/open-questions.md`): the build scope is Windows 10/11 only for
         # now, so the other two legs are commented rather than deleted — BLUEPRINT §B.4
         # still declares cross-platform a product goal, and Q21 records that the Unix
         # `cargo xtask gate` failure was never root-caused before those legs were dropped.

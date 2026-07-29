@@ -191,7 +191,7 @@ pub const TEXT_FILENAMES_WITHOUT_EXTENSION: &[&str] = &[
 /// legacy set above so its provenance and its "133 entries" claim stay literally true.
 /// Both sets are unioned at lookup time.
 ///
-/// Owner decision 2026-07-26 (`docs/decisions/open-questions.md`): support OS and kernel
+/// Owner decision 2026-07-26 (`docs/__arch__/open-questions.md`): support OS and kernel
 /// trees such as `torvalds/linux`, whose languages are C, Assembly, Rust, Shell, Python
 /// and Make.
 ///

@@ -23,10 +23,18 @@ Typical duties:
 - **Assistant mirrors.** `.claude/agents|skills` and `.codex/agents|skills` are
   name-for-name mirrors. Changing one side requires the equivalent change on the other
   **in the same task**.
+- **Internal vs external documents** (owner decision 2026-07-30). Internal —
+  everything in `docs/__arch__/`, Russian, never linked from anything a user reads:
+  `BLUEPRINT.md`, `ROADMAP.md`, `open-questions.md`, the legacy archive. External —
+  English, hung off `README.md` as the hub: `README.md` itself,
+  `docs/architecture/overview.md`, `docs/architecture/invariants.md`. Never move a
+  document across that line, or link an internal one from an external one, without the
+  owner saying so.
 - **State documents.** On stage completion, add the `**Status.**` line under that stage
-  in `ROADMAP.md` (in Russian, matching the file) and update the §1 table. When the
-  system's shape changes, update `docs/architecture/overview.md`. Owner decisions go to
-  `docs/decisions/open-questions.md`. New invariants go to
+  in `docs/__arch__/ROADMAP.md` (in Russian, matching the file) and update the §1 table.
+  When the system's shape changes, update `docs/architecture/overview.md` — and
+  `README.md` too when the change is something a user can see, install or run. Owner
+  decisions go to `docs/__arch__/open-questions.md`. New invariants go to
   `docs/architecture/invariants.md`.
 - **Checklist.** `task-checklist.md` is filled honestly with `+` and `-`; unfinished
   items are never hidden.

@@ -5,7 +5,7 @@ nickname_candidates = ["Insight Weaver", "Report Cartographer", "Context Packer"
 developer_instructions = """
 You implement crates/codepack-reports: analytical reports and context packs.
 
-Read AGENTS.md and BLUEPRINT.md section A.7 — the full report catalog with exact file names and the purpose of each.
+Read AGENTS.md and docs/__arch__/BLUEPRINT.md section A.7 — the full report catalog with exact file names and the purpose of each.
 
 Key requirements:
 - report file names are a contract: 01_summary.txt through 29_export_comparison_report.md, plus PROJECT_PROFILE.json, manifest.json, INDEX.md, REPORT_DASHBOARD.html, 14_dependency_graph.mmd; renaming requires an owner decision;

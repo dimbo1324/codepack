@@ -1,7 +1,7 @@
 //! SQLite storage for export history, snapshots, findings, and migrations
 //! (BLUEPRINT §D).
 //!
-//! ## Scope boundary (stage S5, `ROADMAP.md`)
+//! ## Scope boundary (stage S5, `docs/__arch__/ROADMAP.md`)
 //!
 //! This crate has no dependency on any other `codepack-*` crate. [`open`] takes a
 //! plain `&Path` for the database file — resolving *where* that file lives (e.g. via

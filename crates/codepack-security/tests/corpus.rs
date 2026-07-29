@@ -202,7 +202,7 @@ fn full_mode_strictly_improves_recall_without_regressing_precision() {
     // Metrics are folded into the assertion messages (rather than `println!`, which
     // the workspace lint set forbids) so they surface on any future regression;
     // measured values at the time this baseline was established are recorded in the
-    // stage report / `ROADMAP.md` status line, not just in test output.
+    // stage report / `docs/__arch__/ROADMAP.md` status line, not just in test output.
     assert!(
         full.recall > parity.recall,
         "full mode must strictly improve recall over parity mode on {total_positives} \

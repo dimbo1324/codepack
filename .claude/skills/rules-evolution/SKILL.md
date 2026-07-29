@@ -70,4 +70,4 @@ still references it.
 At the end of every task, fix anything the task proved stale. At the end of every stage,
 re-read the project modules against the code — commands, layout, and gates drift most.
 Rule problems you cannot fix now go into the final report, and, if significant, into
-`docs/decisions/open-questions.md`.
+`docs/__arch__/open-questions.md`.

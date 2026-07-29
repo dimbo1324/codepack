@@ -5,7 +5,7 @@
 //! equivalent set internally for its own walk. This crate needs its *own* copy of that
 //! same set to hand to `codepack_diff::resolve_diff_selection`/`snapshot_project`,
 //! which never compute one themselves by design (see `codepack-diff`'s module doc,
-//! `docs/decisions/open-questions.md` Q7).
+//! `docs/__arch__/open-questions.md` Q7).
 
 use std::collections::HashSet;
 use std::path::Path;

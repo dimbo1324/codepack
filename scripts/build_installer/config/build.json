@@ -2,7 +2,7 @@
   "_comment": "Builds the distributable Windows installer. Every path and command line is data here so a bundler change does not become a Python change.",
 
   "requires_platform": "win32",
-  "platform_refusal": "The installer is an NSIS .exe for Windows 10/11. The product's build scope was narrowed to Windows by owner decision 2026-07-26 (docs/decisions/open-questions.md); macOS/Linux bundling is deferred with cross-platform support.",
+  "platform_refusal": "The installer is an NSIS .exe for Windows 10/11. The product's build scope was narrowed to Windows by owner decision 2026-07-26 (docs/__arch__/open-questions.md); macOS/Linux bundling is deferred with cross-platform support.",
 
   "steps": [
     {

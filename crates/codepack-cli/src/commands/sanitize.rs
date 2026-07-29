@@ -1,7 +1,7 @@
 //! `codepack sanitize` — the "Sterile copy" standalone action.
 //!
 //! Not a flavor of `export`: it writes a plain folder, not a bundle, and never touches
-//! the archive/report artifacts `export` produces (`docs/decisions/open-questions.md`,
+//! the archive/report artifacts `export` produces (`docs/__arch__/open-questions.md`,
 //! 2026-07-28). All of the actual work — file selection, safety filtering, redaction,
 //! tree-sitter comment stripping, `PATH`-formatter reformatting — lives in
 //! `codepack-sanitize`; this module only parses arguments and renders its result.

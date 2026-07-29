@@ -51,7 +51,7 @@ These sharpen the universal rules for this codebase. Stricter wins.
 
 Report file names, JSON manifest structures, and SARIF output are a **contract**.
 Changing one requires bumping `schema_version` and recording the decision in
-`docs/decisions/open-questions.md`.
+`docs/__arch__/open-questions.md`.
 
 ## Assistant workspaces
 

@@ -15,7 +15,7 @@ It is a **behavioral reference, not a code model**.
 
 ## Check BLUEPRINT first
 
-`BLUEPRINT.md` documents the legacy logic in full: the eight-step pipeline, all 25
+`docs/__arch__/BLUEPRINT.md` documents the legacy logic in full: the eight-step pipeline, all 25
 configuration fields, safety modes with their suffix sets, stack detection, the catalog
 of ~30 reports, archiving parameters, and formulas. **In most cases the answer is there.**
 
@@ -33,7 +33,7 @@ an exact artifact layout, the ordering of report sections.
 
 2. Never extract into the working tree and never commit extracted content.
 3. Take facts only: constant values, formats, step ordering.
-4. Do not carry the Python architecture into Rust. Layering is defined by `ROADMAP.md`
+4. Do not carry the Python architecture into Rust. Layering is defined by `docs/__arch__/ROADMAP.md`
    and `.ai/project/12-domain-rules.md`.
 
 ## Where things lived

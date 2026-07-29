@@ -1,6 +1,6 @@
 //! Golden parity against the legacy Python implementation's own *executed* output.
 //!
-//! The S2 and S9 acceptance criteria (`ROADMAP.md`) require the export to match the
+//! The S2 and S9 acceptance criteria (`docs/__arch__/ROADMAP.md`) require the export to match the
 //! legacy version's output on fixtures. Until 2026-07-25 that was verified by reading
 //! the archived Python sources — a check of intent, not of result. This suite closes
 //! that gap: it compares our pipeline's artifacts against reference files produced by

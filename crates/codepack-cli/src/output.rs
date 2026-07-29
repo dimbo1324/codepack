@@ -6,7 +6,7 @@
 //!   to stderr. Otherwise `codepack export … --json | jq` breaks the moment the export
 //!   logs anything, which is always. In human mode stdout carries the report and stderr
 //!   still carries progress, so redirecting either stream stays useful.
-//! * **Machine output is versioned.** `ROADMAP.md` §3 requires `--json` to be "stable
+//! * **Machine output is versioned.** `docs/__arch__/ROADMAP.md` §3 requires `--json` to be "stable
 //!   by schema, versioned"; every payload therefore carries [`JSON_SCHEMA_VERSION`]
 //!   next to a `command` discriminator, so a consumer can tell both *what* it is
 //!   reading and *which* revision of it.

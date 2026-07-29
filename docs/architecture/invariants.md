@@ -1,87 +1,88 @@
-# Инварианты: что нельзя ломать никогда
+# Invariants: what must never break
 
-> Реестр обязателен к соблюдению. Нарушение инварианта — дефект, а не компромисс.
-> Изменить инвариант может только владелец, и такое решение фиксируется в
-> `decisions/open-questions.md` с датой и причиной.
+> This registry is binding. Breaking an invariant is a defect, not a trade-off.
+> Only the owner can change one, and that decision is recorded — with its date and
+> reasoning — in the project's decision log.
 
-## I1. Приватность абсолютна
+## I1. Privacy is absolute
 
-Вся аналитика выполняется локально. Ни один крейт не обращается к сети. Единственное
-исключение — интеграция этапа S13, и только по явному действию пользователя.
-Добавление HTTP-клиента в любой другой крейт — нарушение.
+All analysis runs locally. No crate reaches the network. The single exception is the
+stage S13 integration, and only on an explicit user action. Adding an HTTP client to any
+other crate is a violation.
 
-**Почему.** Продукт обрабатывает чужой исходный код и секреты. Доверие к нему держится
-на том, что данные никуда не уходят.
+**Why.** The product handles other people's source code and secrets. Trusting it rests
+entirely on the data not going anywhere.
 
-**Как проверяется (с 2026-07-27).** Инвариант перестал быть только текстом: шаг
-`network isolation` в `cargo xtask gate` читает манифесты всех крейтов и падает, если
-HTTP-клиент объявлен где-либо, кроме `codepack-ai`. Причина — характер ошибки: крейт,
-получивший HTTP-клиент, ничего не меняет в поведении до того дня, когда сделает запрос,
-поэтому «заметить на ревью» здесь не работает. Тот же приём, что и с изоляцией вебвью:
-не соглашение, а механизм (`crates/xtask/src/network_isolation.rs`).
+**How it is enforced (since 2026-07-27).** This stopped being text and became a
+mechanism: the `network isolation` step of `cargo xtask gate` reads every crate manifest
+and fails if an HTTP client is declared anywhere but `codepack-ai`. The reason is the
+shape of the failure — a crate that gains an HTTP client behaves identically until the
+day it makes a request, so "someone will catch it in review" does not work here. Same
+approach as the webview's isolation: not a convention, a mechanism
+(`crates/xtask/src/network_isolation.rs`).
 
-## I2. Источник неизменен
+## I2. The source is immutable
 
-Экспорт никогда не пишет, не переименовывает и не удаляет что-либо в папке исходного
-проекта. Вся работа идёт на копии в staging-каталоге.
+An export never writes, renames or deletes anything inside the source project folder.
+All work happens on a copy in the staging directory.
 
-**Почему.** Пользователь запускает инструмент на своём рабочем проекте. Порча
-источника недопустима ни при каких обстоятельствах, включая отмену и сбой.
+**Why.** People run this against their working project. Corrupting the source is
+unacceptable under any circumstances, cancellation and failure included.
 
-## I3. Секрет не покидает редактор
+## I3. A secret never leaves the redactor
 
-Значение обнаруженного секрета никогда не попадает в открытом виде в лог, отчёт,
-историю, базу данных, сообщение об ошибке или буфер обмена. Редактирование
-применяется до любой записи.
+The value of a detected secret never reaches a log, a report, the history, the database,
+an error message or the clipboard in the clear. Redaction is applied before anything is
+written.
 
-**Почему.** Инструмент, который логирует найденные секреты, сам становится источником
-утечки.
+**Why.** A tool that logs the secrets it finds becomes a source of leaks itself.
 
-## I4. Байтовые оценки сохраняются
+## I4. Byte figures are preserved
 
-Оценка размера в байтах остаётся везде, где она была в старой версии. Токены —
-дополнительная метрика рядом, а не замена.
+Size in bytes is reported everywhere the previous version reported it. Tokens are an
+additional metric alongside, never a replacement.
 
-**Почему.** Прямое решение владельца (2026-07-22): байты нужны и людям, и для
-понимания реального объёма данных.
+**Why.** A direct owner decision (2026-07-22): bytes are what people read, and what
+tells you the real volume of data.
 
-## I5. Форматы артефактов обратно совместимы
+## I5. Artifact formats stay backward compatible
 
-Имена файлов отчётов, структура `manifest.json`, `PROJECT_PROFILE.json`,
-`06_security_scan.json`, SARIF 2.1.0 и `ARCHIVE_SET_MANIFEST.json` являются контрактом.
-Изменение возможно только с повышением `schema_version` и записью решения.
+Report file names and the structure of `manifest.json`, `PROJECT_PROFILE.json`,
+`06_security_scan.json`, SARIF 2.1.0 and `ARCHIVE_SET_MANIFEST.json` are a contract.
+Changing one requires bumping `schema_version` and recording the decision.
 
-**Почему.** Артефакты потребляются внешними инструментами и людьми; молчаливое
-изменение формата ломает чужие процессы.
+**Why.** These artifacts are consumed by other tools and by people; changing a format
+quietly breaks someone else's process.
 
-## I6. Отмена не портит состояние
+## I6. Cancelling never corrupts state
 
-Любая длительная операция прерывается в любой момент. Отменённый или завершившийся
-ошибкой прогон не перезаписывает базлайн снапшота и не оставляет частичных данных,
-выдаваемых за полные.
+Every long operation can be interrupted at any moment. A cancelled or failed run does
+not overwrite the snapshot baseline and leaves behind no partial data presented as
+complete.
 
-**Почему.** Иначе следующий дифференциальный экспорт даст неверный результат.
+**Why.** Otherwise the next differential export produces a wrong answer.
 
-## I7. Безопасность распаковки и обхода
+## I7. Walking and extraction are safe
 
-При обходе дерева символические ссылки не разыменовываются. При распаковке архива
-путь каждого элемента проверяется до записи (защита от path-traversal).
+Symlinks are never dereferenced while walking a tree. When extracting an archive, each
+member's target path is validated before anything is written (path-traversal safety).
 
-**Почему.** Иначе специально сформированный проект или архив выходит за пределы
-целевого каталога.
+**Why.** Otherwise a specially crafted project or archive escapes the destination
+directory.
 
-## I8. Ядро не зависит от интерфейса
+## I8. The core does not depend on the interface
 
-Крейты `codepack-*` не зависят от Tauri и фронтенда; всё ядро собирается и тестируется
-headless. Направление зависимостей строго вниз, циклы запрещены.
+No `codepack-*` crate depends on Tauri or on the frontend; the whole core builds and
+tests headless. Dependencies point strictly downward, and cycles are forbidden.
 
-**Почему.** На этом стоит CLI, автоматизация и тестируемость; смешение слоёв уже
-однажды сделало старую версию Windows-only.
+**Why.** The CLI, automation and testability all rest on this — and mixing the layers is
+what made the previous version Windows-only.
 
-## I9. Пороги качества детектора не понижаются
+## I9. Detector quality thresholds are never lowered
 
-Пороги precision/recall корпус-теста `codepack-security` не снижаются ради зелёной
-сборки. Падение recall — дефект детектора, а не повод править тест.
+The precision/recall thresholds of `codepack-security`'s corpus test are not lowered to
+make a build green. A drop in recall is a defect in the detector, not a reason to edit
+the test.
 
-**Почему.** Детектор секретов — главная ценность продукта; молчаливая деградация здесь
-опаснее красной сборки.
+**Why.** Secret detection is the product's central value; degrading it quietly is more
+dangerous than a red build.

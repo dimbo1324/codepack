@@ -5,7 +5,7 @@
 //! (invariant I1 — this is exactly why AWS/GitHub/etc. keys are recognised by shape,
 //! never validated against the provider's API).
 //!
-//! Four formats (AWS, Google, Slack, JWT) are given verbatim in `BLUEPRINT.md` §B.1; the
+//! Four formats (AWS, Google, Slack, JWT) are given verbatim in `docs/__arch__/BLUEPRINT.md` §B.1; the
 //! rest are authored from each provider's publicly documented token format, not ported
 //! from legacy or verified against any live account.
 //!

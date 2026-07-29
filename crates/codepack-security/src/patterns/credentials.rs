@@ -7,7 +7,7 @@
 //! the same RFC were not.
 //!
 //! Both matchers work on **structure**, not on entropy or an alphabet-scoring
-//! heuristic. Q18 (`docs/decisions/open-questions.md`) recorded that a short,
+//! heuristic. Q18 (`docs/__arch__/open-questions.md`) recorded that a short,
 //! word-shaped password (`hunter2`) cannot be told apart from a hostname *by its
 //! shape* — but its *position* in the URL identifies it regardless of shape, which is
 //! what [`find_url_credentials`] matches on. A seven-character password is therefore

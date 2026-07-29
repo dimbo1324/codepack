@@ -1,13 +1,13 @@
 //! Differential export selection and project snapshots (BLUEPRINT §A.6).
 //!
-//! ## Scope boundary (stage S4, `ROADMAP.md`)
+//! ## Scope boundary (stage S4, `docs/__arch__/ROADMAP.md`)
 //!
 //! This crate depends only on `codepack-core`. It does not walk with
 //! `codepack-scanner`'s ignore/stack rules and does not consult
 //! `codepack-security`'s safety modes: the ignored-directory-name set and the
 //! "is this a countable text file" predicate `snapshot_project` needs are supplied by
 //! the caller (a future engine stage), never hardcoded here a third time
-//! (`docs/decisions/open-questions.md` Q7).
+//! (`docs/__arch__/open-questions.md` Q7).
 //!
 //! `last_export` mode takes the previous snapshot as a plain function argument
 //! (`Option<&Snapshot>`); this crate never looks one up from disk or a database —

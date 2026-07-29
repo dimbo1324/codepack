@@ -15,7 +15,7 @@
 //! A timezone database would be needed to reproduce legacy's *local* wall clock; these
 //! timestamps are cosmetic (nothing parses `generated_at` back), so every artifact
 //! renders **UTC** instead. That is a deliberate, long-standing deviation from legacy,
-//! recorded in `ROADMAP.md`'s S2 section and reaffirmed here — not a gap.
+//! recorded in `docs/__arch__/ROADMAP.md`'s S2 section and reaffirmed here — not a gap.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

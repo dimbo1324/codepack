@@ -1,5 +1,5 @@
 //! Comment stripping via real tree-sitter parsers — never regex (owner decision,
-//! `docs/decisions/open-questions.md`, 2026-07-28). One generic algorithm plus a
+//! `docs/__arch__/open-questions.md`, 2026-07-28). One generic algorithm plus a
 //! per-language grammar/comment-node-kind table, rather than one hand-written stripper
 //! per language: every Batch 1 grammar exposes comments as one or two named node kinds
 //! (`comment`, or `line_comment`/`block_comment`), and removing named byte ranges is

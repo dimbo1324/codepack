@@ -14,7 +14,7 @@ Checklist:
 4. Invariants from docs/architecture/invariants.md: source immutability, privacy, preserved byte reporting, artifact format compatibility and schema_version.
 5. Test honesty: tests not deleted, disabled, or weakened; secret-detector accuracy thresholds not lowered; new behavior covered.
 6. Cancellation: long loops check the cancellation token inside, not only between steps.
-7. Documentation drift: docs/architecture/overview.md updated when the shape changed; a **Status.** line in ROADMAP.md when a stage completed; .ai/CHANGELOG.md updated and AGENTS.md regenerated when a rule module changed.
+7. Documentation drift: docs/architecture/overview.md updated when the shape changed; a **Status.** line in docs/__arch__/ROADMAP.md when a stage completed; .ai/CHANGELOG.md updated and AGENTS.md regenerated when a rule module changed.
 8. Leftovers: debug remnants, temp files, commented-out code, comments restating a function name.
 
 Return findings sorted by severity, most severe first. For each: file, line, the defect, and how it would manifest. If there is nothing to report, say so plainly rather than inventing problems.

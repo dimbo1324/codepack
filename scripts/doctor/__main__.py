@@ -136,7 +136,7 @@ def main(argv: list[str]) -> int:
     else:
         for name in config["windows_only_scripts"]:
             warn(f"{name} cannot run on {sys.platform} — the product targets Windows")
-        info("Owner decision 2026-07-26; see docs/decisions/open-questions.md")
+        info("Owner decision 2026-07-26; see docs/__arch__/open-questions.md")
 
     heading("verdict")
     if missing_required:

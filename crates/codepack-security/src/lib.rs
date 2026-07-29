@@ -1,6 +1,6 @@
 //! Export safety modes, secret redaction, and the heuristic secret detector.
 //!
-//! Stage S3 scope boundary (binding, see `ROADMAP.md` and
+//! Stage S3 scope boundary (binding, see `docs/__arch__/ROADMAP.md` and
 //! `.ai/project/12-domain-rules.md`): this crate depends only on `codepack-core`. It
 //! takes a caller-supplied file list — it never walks the filesystem in production
 //! code (that is `codepack-scanner`'s job; combining the two crates is S9's). It never

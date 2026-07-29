@@ -7,16 +7,16 @@ tools: Read, Grep, Glob, Bash
 You prepare a stage for implementation. You do **not** write product code.
 
 Read `AGENTS.md` (the compiled ruleset) first, then run the orientation ritual from
-`.ai/project/13-progress-tracking.md`: `git status` and `git log -15`, `ROADMAP.md`
+`.ai/project/13-progress-tracking.md`: `git status` and `git log -15`, `docs/__arch__/ROADMAP.md`
 (the first stage without a `**Status.**` line is next), `docs/architecture/overview.md`,
-`task-checklist.md`, `docs/decisions/open-questions.md`.
+`task-checklist.md`, `docs/__arch__/open-questions.md`.
 
 For the assigned stage, define:
 
 - **Boundaries.** What is in the stage and what is explicitly out. Skipping ahead to a
   later stage is forbidden without an owner decision.
 - **Parity.** Exactly which legacy behavior must be reproduced. Facts come from
-  `BLUEPRINT.md`; when literal precision is needed, from
+  `docs/__arch__/BLUEPRINT.md`; when literal precision is needed, from
   `docs/__arch__/codepack-main.zip` (rules in `.ai/project/14-legacy-reference.md`).
 - **New capability.** Which items marked 🎯 belong to this stage, and why they come only
   after parity is reached.

@@ -360,3 +360,41 @@ fn no_staging_file_survives_a_successful_run() {
         assert_eq!(leftovers, [name], "{format:?}");
     }
 }
+
+#[test]
+fn the_two_containers_hold_the_same_content_from_the_same_input() {
+    // Cross-format equivalence: whichever container a user picks, the archive holds the
+    // same members with the same bytes. Without this, "format is a choice" could quietly
+    // mean "one of them is subtly different".
+    let source = tree();
+    let out = tempfile::tempdir().unwrap();
+
+    let mut per_format = Vec::new();
+    for format in WORKING {
+        let archive = out.path().join(format!("same.{}", format.extension()));
+        pack_files(
+            source.path(),
+            &members(),
+            &archive,
+            format,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        per_format.push(read_back(&archive, format));
+    }
+
+    assert_eq!(
+        per_format[0], per_format[1],
+        "the same input produced different content in the two containers"
+    );
+}
+
+#[test]
+fn a_member_outside_the_root_is_still_named_relative_to_it() {
+    // `member_name` drops anything that is not a normal component, so a caller passing a
+    // leading `./` or an absolute-looking fragment cannot write an entry that escapes
+    // the archive root when extracted.
+    assert_eq!(member_name(Path::new("./a/b.txt")), "a/b.txt");
+    assert_eq!(member_name(Path::new("a/../b.txt")), "a/b.txt");
+    assert!(!member_name(Path::new("/a/b.txt")).starts_with('/'));
+}
