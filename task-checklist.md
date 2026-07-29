@@ -1,83 +1,124 @@
 # Task Checklist
 
-**Task:** Three small/medium follow-ups suggested after the Sterile-copy feature:
-1. `codepack completions <shell>` — shell completion generation via `clap_complete`.
-2. Kotlin support for the Sterile-copy sanitizer (closing one Batch 2 language from Q24).
-3. Drag-and-drop onto the Sterile-copy UI page (the app already supports drag-and-drop
-   globally since the 2026-07-27 decision; the new page never wired it up).
+**Task:** Three security-value features proposed and approved 2026-07-29, all in one
+branch (owner instruction):
 
-**Date:** 2026-07-28
-**Branch:** feat/cli-completions-kotlin-dnd
+- **A1** — `codepack verify <bundle>`: re-scan an already-produced bundle (ZIP, archive
+  set, or extracted folder) and answer "clean / here is what is in it". Turns the
+  product's central promise from "trust the pipeline" into something the **recipient**
+  can check, not only the producer.
+- **A2** — `.codepack-allow`: a project-level list of reviewed findings, so a known
+  false positive stops being re-reported every run. Alert fatigue is how a real finding
+  gets ignored. Fingerprint = (rule, file, hash of the **already-redacted** message) —
+  never the secret itself (invariant I3).
+- **A3** — `codepack scan --staged`: scan only what is staged in git, making the product
+  usable as a real pre-commit guard in someone else's repository — prevention at the
+  source, not only safe handoff.
 
-Owner explicitly approved merging to `main` **and pushing to origin** at the end of this
-task (unlike the previous task, where publish was not requested).
+**Date:** 2026-07-29
+**Branch:** feat/verify-allowlist-staged-scan
 
-## 1 — CLI shell completions
+Owner explicitly approved, at the end of this task and only once everything is green:
+push to `origin`, merge into `main`, delete every branch except `main`.
 
-- [+] Add `clap_complete` dependency to `codepack-cli` (workspace dep, MIT/Apache-2.0
-      like `clap` itself; `cargo deny check` clean)
-- [+] `codepack completions <shell>` subcommand (bash/zsh/fish/powershell/elvish),
-      writes the generated script to stdout; no `--json` form — a completion script
-      is not a report
-- [+] Test: generation succeeds for each supported shell without panicking (unit test
-      in `commands/completions.rs`) plus an end-to-end CLI test running the real
-      binary for all five shells
-- [+] `cargo fmt`/`clippy -D warnings`/`cargo test -p codepack-cli` green for this
-      slice
+## Preparation
 
-## 2 — Kotlin in `codepack-sanitize`
+- [+] Orientation: git status/log, `ROADMAP.md` §1, `docs/architecture/overview.md`,
+      `task-checklist.md` (previous task closed cleanly), `docs/decisions/open-questions.md`
+- [+] Confirmed by reading the code that none of the three already exist: CLI commands
+      are `export`/`preview`/`scan`/`history`/`doctor`/`sanitize`/`completions`;
+      `ScanArgs` carries only the shared `ProjectArgs`; no allowlist/baseline anywhere
+- [+] Reusable pieces confirmed: `codepack_archive::extract_zip_safely`/
+      `restore_archive_set` (S8, path-traversal-safe), `codepack_security::scan_project`
+      (S3), `output::Envelope`/`Format` (S10), `exit::Outcome` contract (0/1/2/3),
+      `ProjectConfig` (`.codepack.toml`) as the precedent for a project-level TOML file
 
-- [+] Verify `tree-sitter-kotlin` crate: current version, license, maintenance —
-      confirm before adding (Q24 flagged Batch 2 crates as needing this check).
-      Found the crate literally named `tree-sitter-kotlin` (fwcd, last published
-      2024-08-03) pins `tree-sitter >= 0.21, < 0.23`, incompatible with this
-      workspace's `tree-sitter` 0.26 — a real type incompatibility, not assumed.
-      Used `tree-sitter-kotlin-ng` instead (`tree-sitter-grammars` org fork,
-      v1.1.0, MIT, published 2025-01-09, depends on the version-independent
-      `tree-sitter-language` crate like every Batch 1 grammar) — builds clean
-- [+] Add Kotlin to `language.rs`'s supported set (`.kt`/`.kts` extensions)
-- [+] Kotlin comment-stripping test (line `//` and block `/* */`, string/literal
-      survival, following the existing Batch 1 test pattern)
-- [+] Formatter table entry: `ktlint` has a real stdin-in/stdout-out mode
-      (`--stdin --format --stdin-path=<name>`, verified against
-      `KtlintCommandLine.kt` source) — added with a real-binary-guarded test
-      following the gofmt/ruff pattern
-- [+] Update `docs/decisions/open-questions.md` Q24 — Kotlin moves from "deferred"
-      to "closed", the rest of Batch 2 (Dart/Swift/Assembly/Groovy) stays open
-- [+] `cargo fmt -p codepack-sanitize`/`clippy -D warnings`/`cargo test
-      -p codepack-sanitize`/`cargo deny check` all green for this slice (did not
-      run the full `cargo xtask gate`, since sections 1 and 3 of this checklist
-      were out of scope for this task and are mid-flight on this branch)
+## A1 — `codepack verify <bundle>`
 
-## 3 — Drag-and-drop on the Sterile-copy page
+- [ ] `cli.rs`: `Verify(VerifyArgs)` with a positional bundle path; accepts a `.zip`, an
+      archive-set directory (`ARCHIVE_SET_MANIFEST.json` present), or an
+      already-extracted bundle folder — decided by inspection, not by a flag
+- [ ] `commands/verify.rs`: extract (ZIP/set → temp dir via `extract_zip_safely`, which
+      already refuses traversal entries) or use the folder as-is, then `scan_project`
+      over the extracted contents; temp dir removed on every exit path
+- [ ] Decide and record: whether findings inside the bundle's own `reports/` tree
+      (`06_security_scan.json` etc. contain already-redacted finding text, which the
+      keyword cascade can legitimately re-trigger on) are reported, suppressed, or
+      reported-but-labelled. **Resolve by writing the test first and looking at what
+      the real scanner actually does** — not by guessing
+- [ ] Exit codes reuse the existing contract: 0 clean, 3 critical findings present,
+      1 real failure (unreadable/corrupt archive) — a real failure outranks 3
+- [ ] `--json` via the existing envelope (`command: "verify"`)
+- [ ] Tests: clean bundle → 0; bundle with a planted secret → 3 and the finding is
+      reported; corrupt/missing archive → 1 with a readable error; a traversal-hostile
+      ZIP is refused (reuses S8's guarantee, asserted here at the command level)
 
-- [+] Wire the existing app-level drag-and-drop handler
-      (`client.ts::onWindowDragDrop`) into `SterileCopyPage.svelte` for the source
-      folder field (destination folder stays picker-only — dropping a folder to
-      *write into* is a different, riskier action than dropping one to *read from*)
-- [+] Only take effect when the Sterile-copy page is the active view, matching the
-      existing single-path-if-multiple-dropped rule from the 2026-07-27 decision.
-      `App.svelte` mounts `SterileCopyPage` only while `wizard.step === "sterile"`,
-      so the page's own `onMount`/cleanup already scopes the listener; `App.svelte`'s
-      own drag-drop handler was additionally given a one-line guard (`if (wizard.step
-      === "sterile") return;`) so a single drop is never acted on by both handlers at
-      once (this scoping did not pre-exist as assumed in the plan — the global
-      handler previously fired unconditionally on every page)
-- [+] `pnpm --filter @codepack/ui typecheck`/`lint` clean
+## A2 — `.codepack-allow`
 
-## Verification
+- [ ] `codepack-core`: new `allowlist` module next to `config::project` (same TOML +
+      `deny_unknown_fields` + "unknown key is an error" precedent as `.codepack.toml`,
+      Q6). Fingerprint helper takes (rule, file, redacted message) as plain strings, so
+      `codepack-core` needs no dependency on `codepack-security`
+- [ ] Fingerprint is stable and documented: never contains the secret, and is derived
+      only from values that are already safe to write down (I3)
+- [ ] Applied in `scan` and `verify` only — **not** inside `codepack-security`, not in
+      the engine pipeline, not in the ~30 reports. Rationale to record: changing the
+      domain crate's output would move golden parity and touch I5's artifact contracts
+      for a convenience feature. Boundary stated in the module doc, not left implicit
+- [ ] Suppressed findings are **counted and reported as suppressed**, never silently
+      dropped — a scanner that quietly hides findings is worse than one that is noisy
+- [ ] `scan --json` gains a `fingerprint` per finding so a user can copy it into the
+      file without hand-deriving it (additive field, no schema bump per `output.rs`)
+- [ ] Tests: fingerprint stability; a matching entry suppresses and is counted; a
+      non-matching entry does not; unknown key in the file is an error naming the key;
+      missing file is simply "no allowlist"; a suppressed `critical` finding does not
+      by itself flip the exit code back to 0 unless everything critical was suppressed
+      (decide the rule explicitly and test it)
 
-- [+] Full `cargo xtask gate` green after all three slices landed together: fmt,
-      clippy `-D warnings`, 56 test binaries (`cargo test --workspace`, none
-      failed), `cargo deny check` (advisories/bans/licenses/sources all ok),
-      frontend format/typecheck (136 files, 0 errors)/lint, the `scripts/` test
-      suite, `sync-agents --check` (29.0 KiB, in sync), network isolation
-- [+] `cargo test --workspace` green (covered by the full gate run above)
+## A3 — `codepack scan --staged`
+
+- [ ] `ScanArgs` gains `--staged`
+- [ ] Lists staged entries via `git2` (index vs `HEAD`), added/modified only, never
+      deleted paths
+- [ ] **Scans the staged blob content, not the working-tree file.** A pre-commit hook
+      must answer "what is about to be committed"; if a file is staged and then edited,
+      those differ. Blobs are materialised into a temp dir and scanned there; temp dir
+      cleaned up on every exit path. Recorded as a deliberate correctness choice
+- [ ] Not a git repository → clear error (exit 1), not a silent empty result
+- [ ] No staged files → exit 0 with an explicit "nothing staged" message, not a
+      confusing empty report
+- [ ] `--staged` composes with `--json` and with the A2 allowlist
+- [ ] Tests: repository built programmatically with `git2` (no `git` binary, per the
+      domain rule); staged clean file → 0; staged file with a secret → 3; secret in the
+      working tree but **not** staged → 0 (proves it reads the index, the whole point);
+      staged-then-edited file → the *staged* content is what gets scanned; not-a-repo
+      and nothing-staged paths
+
+## Verification (run at the very end, all three together)
+
+- [ ] `cargo fmt --all --check`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
+- [ ] `cargo test --workspace`
+- [ ] `cargo xtask gate` (full: fmt, clippy, tests, `cargo deny check`, frontend
+      format/typecheck/lint, `scripts/` suite, `sync-agents --check`, network isolation)
+- [ ] No `unsafe`; no bare `unwrap()`/`expect()` outside tests without a
+      proven-invariant comment
+- [ ] Independent review pass (`codepack-quality-reviewer`) before merge
 
 ## Completion
 
-- [+] `docs/architecture/overview.md` updated (`codepack-cli` row for
-      `completions`, `codepack-sanitize` row for Kotlin/`ktlint`)
-- [+] Checklist filled `+`/`-`, final report in Russian
-- [+] Merge to `main` (fast-forward), push to `origin/main`, delete this branch
-      locally (never pushed as its own remote branch, so nothing to delete there)
+- [ ] `docs/architecture/overview.md` — `codepack-cli` row updated (`verify`,
+      `scan --staged`), `codepack-core` row updated (`allowlist`)
+- [ ] `docs/decisions/open-questions.md` — record any new open question this surfaces
+      (candidate: whether the allowlist should eventually apply to the engine pipeline
+      and the ~30 reports, not only `scan`/`verify`)
+- [ ] Checklist filled `+`/`-` honestly, final report in Russian
+- [ ] Push to `origin`, fast-forward merge into `main`, delete every branch but `main`
+      (local and remote) — only after the full gate is green
+
+---
+
+## Next task
+
+Not yet chosen. Start with the orientation ritual from
+`.ai/project/13-progress-tracking.md`.
