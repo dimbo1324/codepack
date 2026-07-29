@@ -80,6 +80,12 @@ fn to_artifact(relative_path: &Path, outcome: &FileOutcome) -> FileArtifact {
     }
 }
 
+/// The two artifact file names, named once so callers that need to refer to them —
+/// the archiver, which must list every file this crate wrote — cannot drift from what
+/// [`write_report`] actually creates.
+pub(crate) const REPORT_JSON_NAME: &str = "STERILE_COPY_REPORT.json";
+pub(crate) const REPORT_MARKDOWN_NAME: &str = "STERILE_COPY_REPORT.md";
+
 /// Writes both `STERILE_COPY_REPORT.json` and `.md` into `destination_root`.
 pub(crate) fn write_report(
     destination_root: &Path,
@@ -101,7 +107,7 @@ pub(crate) fn write_report(
             .collect(),
     };
 
-    let json_path = destination_root.join("STERILE_COPY_REPORT.json");
+    let json_path = destination_root.join(REPORT_JSON_NAME);
     let json = serde_json::to_string_pretty(&artifact).map_err(SanitizeError::Serialize)?;
     std::fs::write(&json_path, json).map_err(|source| SanitizeError::Write {
         path: json_path.clone(),
@@ -109,7 +115,7 @@ pub(crate) fn write_report(
     })?;
 
     let markdown = render_markdown(&artifact);
-    let markdown_path = destination_root.join("STERILE_COPY_REPORT.md");
+    let markdown_path = destination_root.join(REPORT_MARKDOWN_NAME);
     std::fs::write(&markdown_path, markdown).map_err(|source| SanitizeError::Write {
         path: markdown_path.clone(),
         source,

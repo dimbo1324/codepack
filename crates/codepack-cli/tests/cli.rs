@@ -872,6 +872,32 @@ fn sanitize_with_only_an_archive_leaves_no_folder_to_clean_up() {
 }
 
 #[test]
+fn sanitize_reports_no_destination_when_the_folder_was_only_scratch() {
+    // Naming a path that has already been deleted is worse than saying nothing — and
+    // that path was also being written into STERILE_COPY_REPORT.json *inside* the
+    // archive, where a recipient could make nothing of it. Found by review 2026-07-29.
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("only.7z");
+
+    let output = sandbox.run(&[
+        "--json",
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    let payload = json(&output);
+    assert!(
+        payload.get("destination").is_none(),
+        "a scratch folder that no longer exists was reported as the destination: {payload}"
+    );
+    assert_eq!(payload["archive"]["path"], archive.display().to_string());
+}
+
+#[test]
 fn sanitize_without_out_or_archive_is_a_usage_error() {
     let sandbox = Sandbox::new();
     let output = sandbox.run(&[
