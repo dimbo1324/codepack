@@ -117,10 +117,12 @@ pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyRepor
     // whole promise is that everything inside was screened (invariant I3).
     if let Some(archive_path) = &options.archive_path {
         let members = archive_members(&report);
+        let format = resolve_archive_format(options, archive_path);
         let packed = codepack_archive::pack_files(
             &canonical_destination,
             &members,
             archive_path,
+            format,
             &options.cancellation,
         )
         .map_err(|source| match source {
@@ -132,12 +134,28 @@ pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyRepor
         })?;
         report.archive = Some(SterileCopyArchive {
             path: packed.archive_path,
+            format: packed.format,
             file_count: packed.file_count,
             bytes: packed.archive_bytes,
         });
     }
 
     Ok(report)
+}
+
+/// An explicit choice wins; otherwise the file name decides; otherwise ZIP.
+///
+/// Naming a file `out.7z` and getting a ZIP would be a small lie the user only
+/// discovers on opening it, so the extension is honoured — but it is a *guess*, and an
+/// explicit `archive_format` overrides it rather than the other way round.
+fn resolve_archive_format(
+    options: &SterileCopyOptions,
+    archive_path: &Path,
+) -> codepack_archive::ArchiveFormat {
+    options
+        .archive_format
+        .or_else(|| codepack_archive::ArchiveFormat::from_path(archive_path))
+        .unwrap_or_default()
 }
 
 /// Exactly the files this run wrote into the destination: every file that produced

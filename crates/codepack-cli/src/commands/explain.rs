@@ -185,19 +185,19 @@ fn relative_to_project(root: &Path, requested: &Path) -> Result<PathBuf> {
     let normalized = PathBuf::from(text.trim_start_matches("./"));
 
     let relative = if normalized.is_absolute() {
-        // Canonicalized only when it exists: explaining why a *missing* path is missing
-        // is one of the three answers, so a non-existent absolute path must still be
-        // usable.
-        let candidate = if normalized.exists() {
-            commands::canonicalize_existing(&normalized)?
-        } else {
-            normalized.clone()
-        };
-        strip_project_prefix(root, &candidate).ok_or_else(|| {
+        // Both sides are put through the same resolution before being compared. Anything
+        // less fails on Windows in ways that are easy to miss: CI caught
+        // `C:\Users\runneradmin\…` (the file, canonicalized) not matching
+        // `C:\Users\RUNNER~1\…` (the root, as given) — an 8.3 short name, which no
+        // amount of case-folding reconciles. The same applies to a junction or a mapped
+        // drive on one side only.
+        let candidate = resolve_through_existing_ancestor(&normalized)?;
+        let base = resolve_through_existing_ancestor(root)?;
+        strip_project_prefix(&base, &candidate).ok_or_else(|| {
             CliError::message(format!(
                 "{} is not inside {}",
                 candidate.display(),
-                root.display()
+                base.display()
             ))
         })?
     } else {
@@ -226,11 +226,42 @@ fn relative_to_project(root: &Path, requested: &Path) -> Result<PathBuf> {
     Ok(relative)
 }
 
-/// `Path::strip_prefix` compares components byte-wise apart from the drive letter, but
-/// the root is always canonical here while the user's spelling need not be — and a
-/// non-existent path cannot be canonicalized to match. `C:\PROJ\src\nope.rs` inside
-/// `C:\Proj` must still get the "no such file" answer rather than a hard error, so the
-/// comparison falls back to a case-folded one.
+/// Canonicalizes as much of `path` as exists, then re-appends the rest verbatim.
+///
+/// A path that does not exist cannot be canonicalized, and "this file is not in the
+/// project" is one of the answers `explain` must be able to give — so refusing to
+/// resolve a missing path would turn a legitimate question into an error. Resolving the
+/// longest existing ancestor gets the real spelling of every component that is actually
+/// on disk (short names expanded, symlinks followed, case as the filesystem stores it)
+/// and leaves only the genuinely-absent tail as typed.
+fn resolve_through_existing_ancestor(path: &Path) -> Result<PathBuf> {
+    let mut existing = path;
+    let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
+    loop {
+        if existing.exists() {
+            let mut resolved = commands::canonicalize_existing(existing)?;
+            for part in tail.iter().rev() {
+                resolved.push(part);
+            }
+            return Ok(resolved);
+        }
+        match (existing.parent(), existing.file_name()) {
+            (Some(parent), Some(name)) => {
+                tail.push(name);
+                existing = parent;
+            }
+            // Nothing on this path exists, not even its root — nothing to resolve
+            // against, so the caller's spelling is the best available answer.
+            _ => return Ok(path.to_path_buf()),
+        }
+    }
+}
+
+/// `Path::strip_prefix` compares components byte-wise apart from the drive letter. Both
+/// sides reach here already resolved, so this is normally an exact match; the
+/// case-folded fallback covers the tail components that did not exist on disk and could
+/// therefore not be resolved — `C:\Proj\SRC\nope.rs` must still get the "no such file"
+/// answer rather than a hard error.
 fn strip_project_prefix(root: &Path, candidate: &Path) -> Option<PathBuf> {
     if let Ok(relative) = candidate.strip_prefix(root) {
         return Some(relative.to_path_buf());
@@ -547,6 +578,38 @@ mod tests {
             assert_eq!(other.file, relative.file);
             assert_eq!(other.verdict, relative.verdict);
         }
+    }
+
+    /// Regression for the CI failure of 2026-07-29: on the GitHub Windows runner the
+    /// project root arrived as `C:\Users\RUNNER~1\…` (an 8.3 short name) while the
+    /// canonicalized file was `C:\Users\runneradmin\…`, and the two did not match. The
+    /// fix resolves both sides the same way, so this asserts on the helper rather than
+    /// on a machine that happens to have short names enabled.
+    #[test]
+    fn both_sides_of_the_comparison_are_resolved_the_same_way() {
+        let dir = project();
+        let raw = dir.path();
+        let canonical = crate::commands::canonicalize_existing(raw).unwrap();
+
+        // Whichever spelling the caller has, the answer is the same file.
+        let from_raw = relative_to_project(raw, &canonical.join("src/main.rs")).unwrap();
+        let from_canonical = relative_to_project(&canonical, &raw.join("src/main.rs")).unwrap();
+
+        assert_eq!(plan_spelling(&from_raw), "src\\main.rs");
+        assert_eq!(plan_spelling(&from_canonical), "src\\main.rs");
+    }
+
+    #[test]
+    fn a_missing_tail_is_kept_verbatim_while_its_existing_ancestor_is_resolved() {
+        let dir = project();
+        let resolved = resolve_through_existing_ancestor(&dir.path().join("src/deep/nope.rs"));
+
+        let resolved = resolved.unwrap();
+        assert!(resolved.ends_with("src/deep/nope.rs"), "{resolved:?}");
+        assert!(
+            resolved.starts_with(crate::commands::canonicalize_existing(dir.path()).unwrap()),
+            "the existing ancestor should have been canonicalized: {resolved:?}"
+        );
     }
 
     #[test]

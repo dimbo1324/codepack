@@ -113,6 +113,15 @@ pub(crate) struct ProjectArgs {
     /// are available, so there is nothing to look up first.
     #[arg(long, value_parser = crate::settings::parse_budget)]
     pub budget: Option<crate::settings::BudgetSpec>,
+
+    /// Container the bundle is written as. `zip` is the default and what every earlier
+    /// release produced; `rar` is reserved and not implemented yet.
+    ///
+    /// Shared with the other project commands rather than being `export`-only so
+    /// `preview` can report which container an export would produce — the same
+    /// reasoning that puts `--budget` here.
+    #[arg(long, value_enum)]
+    pub archive_format: Option<ArchiveFormat>,
 }
 
 #[derive(Debug, Args)]
@@ -164,13 +173,19 @@ pub(crate) struct SanitizeArgs {
     #[arg(long, required_unless_present = "archive")]
     pub out: Option<PathBuf>,
 
-    /// Also pack the finished sterile copy into a single `.7z` at this path.
+    /// Also pack the finished sterile copy into a single archive at this path.
     ///
     /// The archive contains the copied files and `STERILE_COPY_REPORT.*`, so a
     /// recipient holding only the archive still has the account of what was stripped,
-    /// skipped and redacted.
+    /// skipped and redacted. The container follows the file extension unless
+    /// `--archive-format` says otherwise.
     #[arg(long, value_name = "FILE")]
     pub archive: Option<PathBuf>,
+
+    /// Container for `--archive`. Defaults to whatever the file extension says, and to
+    /// `zip` when it says nothing.
+    #[arg(long, value_enum)]
+    pub archive_format: Option<ArchiveFormat>,
 
     /// How aggressively to exclude sensitive files. Defaults to `safe`, matching every
     /// other command that reads a project.
@@ -213,6 +228,30 @@ impl SafeMode {
     }
 }
 
+/// Mirrors `codepack_core::config::valid_sets::ARCHIVE_FORMATS`. `Rar` is offered
+/// deliberately: the choice exists, it is reserved, and asking for it gets a message
+/// saying so rather than "unexpected value", which would read like a typo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ArchiveFormat {
+    /// The default. What every earlier release produced.
+    Zip,
+    /// Smaller archives, at some cost in time.
+    #[value(name = "7z")]
+    SevenZip,
+    /// Reserved — not implemented yet.
+    Rar,
+}
+
+impl ArchiveFormat {
+    pub(crate) fn as_config_value(self) -> &'static str {
+        match self {
+            Self::Zip => "zip",
+            Self::SevenZip => "7z",
+            Self::Rar => "rar",
+        }
+    }
+}
+
 /// Mirrors `codepack_core::config::valid_sets::DIFF_EXPORT_MODES`, for the same reason
 /// as [`SafeMode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -249,6 +288,9 @@ impl ProjectArgs {
                 .map(|mode| mode.as_config_value().to_string()),
             diff: self.diff.map(|mode| mode.as_config_value().to_string()),
             budget: self.budget.clone(),
+            archive_format: self
+                .archive_format
+                .map(|format| format.as_config_value().to_string()),
         }
     }
 }

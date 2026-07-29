@@ -48,6 +48,7 @@ pub(crate) struct Overrides {
     pub safe_mode: Option<String>,
     pub diff: Option<String>,
     pub budget: Option<BudgetSpec>,
+    pub archive_format: Option<String>,
 }
 
 /// Resolves the four layers into one [`Config`], reporting what contributed.
@@ -97,6 +98,9 @@ pub(crate) fn resolve(
     }
     if let Some(diff) = &overrides.diff {
         config.diff_export_mode = diff.clone();
+    }
+    if let Some(archive_format) = &overrides.archive_format {
+        config.archive_format = archive_format.clone();
     }
     if let Some(spec) = &overrides.budget {
         config.token_budget = resolve_budget(spec, model_limits)?;

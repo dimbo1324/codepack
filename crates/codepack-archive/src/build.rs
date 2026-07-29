@@ -14,6 +14,7 @@ use serde::Serialize;
 
 use crate::entry::{ArchiveEntry, collect_entries};
 use crate::error::{ArchiveError, Result};
+use crate::format::ArchiveFormat;
 use crate::options::ArchiveOptions;
 use crate::plan::{
     ArchivePlan, plan_archive, plan_logical_parts, predicted_result_for_plan, sort_entries,
@@ -25,17 +26,79 @@ fn file_size_or_zero(path: &Path) -> u64 {
     std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
 }
 
-fn write_zip(
+/// Writes one archive (the whole bundle, or one part of a split set) in the requested
+/// container.
+///
+/// Split into a dispatcher plus a per-format writer rather than one function with a
+/// `match` inside its loop: the two containers have genuinely different writer APIs, and
+/// interleaving them would make the ZIP path — the default, and the one under the
+/// frozen split-set contract — harder to read than it was before formats existed.
+fn write_archive(
     archive_path: &Path,
     entries: &[ArchiveEntry],
+    format: ArchiveFormat,
     cancel: &CancellationToken,
 ) -> Result<u32> {
+    format.ensure_implemented()?;
     if let Some(parent) = archive_path.parent() {
         std::fs::create_dir_all(parent).map_err(|source| ArchiveError::Write {
             path: parent.to_path_buf(),
             source,
         })?;
     }
+    match format {
+        ArchiveFormat::SevenZip => write_seven_zip(archive_path, entries, cancel),
+        // `Rar` is rejected by `ensure_implemented` above; ZIP is both the default and
+        // the fallback so a future variant cannot silently produce nothing.
+        _ => write_zip(archive_path, entries, cancel),
+    }
+}
+
+fn write_seven_zip(
+    archive_path: &Path,
+    entries: &[ArchiveEntry],
+    cancel: &CancellationToken,
+) -> Result<u32> {
+    let mut writer = sevenz_rust2::ArchiveWriter::create(archive_path).map_err(|source| {
+        ArchiveError::SevenZip {
+            path: archive_path.to_path_buf(),
+            source,
+        }
+    })?;
+
+    let mut count = 0u32;
+    for entry in entries {
+        if cancel.is_cancelled() {
+            break;
+        }
+        let arcname = entry.arcname.to_string_lossy().replace('\\', "/");
+        let file = std::fs::File::open(&entry.path).map_err(|source| ArchiveError::Read {
+            path: entry.path.clone(),
+            source,
+        })?;
+        writer
+            .push_archive_entry(
+                sevenz_rust2::ArchiveEntry::from_path(&entry.path, arcname),
+                Some(std::io::BufReader::new(file)),
+            )
+            .map_err(|source| ArchiveError::SevenZip {
+                path: entry.path.clone(),
+                source,
+            })?;
+        count += 1;
+    }
+    writer.finish().map_err(|source| ArchiveError::Write {
+        path: archive_path.to_path_buf(),
+        source,
+    })?;
+    Ok(count)
+}
+
+fn write_zip(
+    archive_path: &Path,
+    entries: &[ArchiveEntry],
+    cancel: &CancellationToken,
+) -> Result<u32> {
     let file = std::fs::File::create(archive_path).map_err(|source| ArchiveError::Write {
         path: archive_path.to_path_buf(),
         source,
@@ -77,8 +140,19 @@ fn write_zip(
     Ok(count)
 }
 
-fn part_archive_name(paths: &ExportPaths, index: u32, group_hint: &str) -> String {
-    format!("{}_part_{:03}_{}.zip", paths.bundle_name, index, group_hint)
+fn part_archive_name(
+    paths: &ExportPaths,
+    index: u32,
+    group_hint: &str,
+    format: ArchiveFormat,
+) -> String {
+    format!(
+        "{}_part_{:03}_{}.{}",
+        paths.bundle_name,
+        index,
+        group_hint,
+        format.extension()
+    )
 }
 
 #[derive(Serialize, Clone)]
@@ -110,6 +184,7 @@ fn write_restore_files(
     result: &ArchiveBuildResult,
     parts: &[PartManifestEntry],
     limit_bytes: u64,
+    format: ArchiveFormat,
 ) -> Result<()> {
     let Some(output_dir) = &result.output_dir else {
         return Ok(());
@@ -128,11 +203,17 @@ fn write_restore_files(
         archives: result
             .archives
             .iter()
-            .filter_map(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+            .filter_map(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
             .collect(),
         parts: parts.to_vec(),
         oversized_files: result.oversized_files.clone(),
-        restore_note: "Extract all ZIP files into the same destination folder. Every archive preserves original paths.".to_string(),
+        restore_note: format!(
+            "Extract all {} files into the same destination folder. Every archive preserves original paths.",
+            format.extension().to_uppercase()
+        ),
     };
 
     let manifest_path = output_dir.join("ARCHIVE_SET_MANIFEST.json");
@@ -210,7 +291,12 @@ pub fn build_final_archives(
     }
 
     if !plan.split {
-        let count = write_zip(&paths.final_zip, &plan.parts[0].entries, cancel)?;
+        let count = write_archive(
+            &paths.final_zip,
+            &plan.parts[0].entries,
+            options.format,
+            cancel,
+        )?;
         if cancel.is_cancelled() {
             let archives = if paths.final_zip.exists() {
                 vec![paths.final_zip.clone()]
@@ -291,9 +377,9 @@ pub fn build_final_archives(
         if cancel.is_cancelled() {
             break;
         }
-        let archive_name = part_archive_name(paths, part.index, &part.group_hint);
+        let archive_name = part_archive_name(paths, part.index, &part.group_hint, options.format);
         let archive_path = paths.archive_set_dir.join(&archive_name);
-        let count = write_zip(&archive_path, &part.entries, cancel)?;
+        let count = write_archive(&archive_path, &part.entries, options.format, cancel)?;
         result.archives.push(archive_path.clone());
         result.file_count += count;
 
@@ -322,6 +408,12 @@ pub fn build_final_archives(
         });
     }
 
-    write_restore_files(paths, &result, &part_manifest, plan.limit_bytes)?;
+    write_restore_files(
+        paths,
+        &result,
+        &part_manifest,
+        plan.limit_bytes,
+        options.format,
+    )?;
     Ok(result)
 }

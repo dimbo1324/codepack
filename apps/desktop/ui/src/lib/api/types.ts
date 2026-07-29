@@ -20,6 +20,8 @@ export interface Config {
   safe_export_mode: string;
   zip_part_limit_mb: number;
   diff_export_mode: string;
+  /** `zip` (default), `7z`, or `rar` (reserved, not implemented). */
+  archive_format: string;
   diff_base_ref: string;
   diff_target_ref: string;
   include_git_patch: boolean;
@@ -225,14 +227,22 @@ export interface SanitizeSummary {
 export interface SanitizeFileOutcome {
   path: string;
   outcome: SanitizeOutcome;
+  /** Stable token for the reason, translated by the UI. `detail` keeps the backend's
+   * own English wording for anything that wants the raw text. */
+  detail_kind: SanitizeDetailKind;
   detail: string | null;
 }
+
+export type SanitizeDetailKind =
+  "formatted_by" | "no_formatter" | "unsupported_language" | "sensitive" | "error";
 
 /** The `.7z` a run produced, when one was asked for. `bytes` is a number, not a
  * formatted string: byte-based reporting is preserved everywhere (invariant I4) and the
  * formatting is this layer's job. */
 export interface SanitizeArchive {
   path: string;
+  /** The container actually written — the file name may have chosen it. */
+  format: string;
   file_count: number;
   bytes: number;
 }

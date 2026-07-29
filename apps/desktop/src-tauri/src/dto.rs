@@ -237,6 +237,9 @@ pub struct SanitizeSummary {
 pub struct SanitizeFileOutcome {
     pub path: String,
     pub outcome: &'static str,
+    /// A stable token the frontend translates. `detail` keeps the English prose for
+    /// anything that wants the raw wording (a log, a copied line).
+    pub detail_kind: &'static str,
     pub detail: Option<String>,
 }
 
@@ -258,6 +261,8 @@ pub struct SanitizeReport {
 #[derive(Debug, Clone, Serialize)]
 pub struct SanitizeArchive {
     pub path: String,
+    /// The container actually written — the file name may have chosen it.
+    pub format: String,
     pub file_count: usize,
     pub bytes: u64,
 }

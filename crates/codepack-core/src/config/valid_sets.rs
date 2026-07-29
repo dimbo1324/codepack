@@ -11,6 +11,19 @@ pub const DEFAULT_SAFE_EXPORT_MODE: &str = "safe";
 pub const DIFF_EXPORT_MODES: &[&str] = &["all", "last_export", "git_ref", "uncommitted"];
 pub const DEFAULT_DIFF_EXPORT_MODE: &str = "all";
 
+/// Container formats the product can produce. Added 2026-07-30 (owner decision): ZIP
+/// stays the default everywhere, so an existing config keeps producing exactly what it
+/// produced before. `7z` is fully implemented; `rar` is **declared but not implemented**
+/// — RAR compression is patent-encumbered and has no permissively-licensed encoder, so
+/// it is listed here so the choice is visible and reserved, and rejected with a clear
+/// message wherever it is actually used. See `docs/__arch__/open-questions.md`.
+pub const ARCHIVE_FORMATS: &[&str] = &["zip", "7z", "rar"];
+pub const DEFAULT_ARCHIVE_FORMAT: &str = "zip";
+
+/// The subset of [`ARCHIVE_FORMATS`] that actually works today. Kept separate rather
+/// than filtered at each call site so "listed" and "usable" can never drift apart.
+pub const IMPLEMENTED_ARCHIVE_FORMATS: &[&str] = &["zip", "7z"];
+
 pub const THEMES: &[&str] = &["system", "light", "dark"];
 pub const DEFAULT_THEME: &str = "system";
 

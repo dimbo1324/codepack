@@ -16,6 +16,7 @@
   import Field from "$lib/components/Field.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import Segmented, { type SegmentOption } from "$lib/components/Segmented.svelte";
+  import { archiveFormatOptions } from "$lib/util/archiveFormats";
   import Switch from "$lib/components/Switch.svelte";
   import { setLanguage, t } from "$lib/i18n/index.svelte";
   import { pushToast, reportError } from "$lib/stores/toasts.svelte";
@@ -48,6 +49,8 @@
       hint: t("settings.diffMode.hint.uncommitted"),
     },
   ]);
+
+  const archiveFormats = $derived(archiveFormatOptions());
 
   const themeModes: SegmentOption<ThemePreference>[] = $derived([
     { value: "light", label: t("settings.theme.light") },
@@ -186,6 +189,13 @@
           options={diffModes}
           value={config.diff_export_mode}
           onselect={(value) => (config.diff_export_mode = value)}
+        />
+
+        <Segmented
+          label={t("archive.format")}
+          options={archiveFormats}
+          value={config.archive_format}
+          onselect={(value) => (config.archive_format = value)}
         />
 
         {#if config.diff_export_mode === "git_ref"}

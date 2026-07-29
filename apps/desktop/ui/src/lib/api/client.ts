@@ -30,13 +30,16 @@ export async function pickProjectDirectory(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
-/** Opens the native "save as" dialog for the sterile copy's `.7z`. `null` means the
+/** Opens the native "save as" dialog for the sterile copy's archive. `null` means the
  * user cancelled — not an error. The extension is appended by the dialog when the user
  * types a bare name, so the backend never has to guess at one. */
-export async function pickArchiveDestination(defaultName: string): Promise<string | null> {
+export async function pickArchiveDestination(
+  defaultName: string,
+  extension: string,
+): Promise<string | null> {
   const selected = await saveDialog({
     defaultPath: defaultName,
-    filters: [{ name: "7z archive", extensions: ["7z"] }],
+    filters: [{ name: `${extension.toUpperCase()} archive`, extensions: [extension] }],
   });
   return typeof selected === "string" ? selected : null;
 }
@@ -205,12 +208,14 @@ export function startSanitize(
   destinationRoot: string,
   safetyMode: string,
   archivePath: string | null,
+  archiveFormat: string | null,
 ): Promise<string> {
   return invoke("start_sanitize", {
     sourceRoot,
     destinationRoot,
     safetyMode,
     archivePath,
+    archiveFormat,
   });
 }
 

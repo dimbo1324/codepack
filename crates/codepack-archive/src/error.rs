@@ -42,6 +42,14 @@ pub enum ArchiveError {
         source: sevenz_rust2::Error,
     },
 
+    /// A format that is listed as a choice but has no implementation — today only
+    /// `rar`. Refused before anything is written, and the message names what the user
+    /// *can* pick, because "unsupported" without an alternative is a dead end.
+    #[error(
+        "the {format} format is not implemented yet — it is reserved for a future          release. Choose zip (the default) or 7z."
+    )]
+    FormatNotImplemented { format: &'static str },
+
     #[error("unsafe archive member path: {member}")]
     UnsafeMemberPath { member: String },
 

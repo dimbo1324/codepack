@@ -1,3 +1,5 @@
+import { DEFAULT_ARCHIVE_FORMAT, type ArchiveFormat } from "$lib/util/archiveFormats";
+
 // The wizard's shared state: which step is active, the project and its session
 // configuration, and the last result of each step's own action. One store rather
 // than per-page component state, because later steps (Preview, Export, Result) all
@@ -96,8 +98,10 @@ class WizardState {
    * `wizard.project`, and it produces no archive/report artifacts of its own. */
   sterileSource = $state<string | null>(null);
   sterileDestination = $state<string | null>(null);
-  /** Where to also write a `.7z` of the sterile copy. `null` means folder only. */
+  /** Where to also write an archive of the sterile copy. `null` means folder only. */
   sterileArchive = $state<string | null>(null);
+  /** Container for that archive. ZIP by default, like everywhere else. */
+  sterileArchiveFormat = $state<ArchiveFormat>(DEFAULT_ARCHIVE_FORMAT);
   sterileSafetyMode = $state("safe");
   sterileRunId = $state<string | null>(null);
   sterileRunning = $state(false);

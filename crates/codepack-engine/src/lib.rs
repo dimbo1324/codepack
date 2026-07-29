@@ -47,7 +47,7 @@ pub use error::{EngineError, Result};
 pub use git_report::write_git_report;
 pub use manifest::write_manifest_and_index;
 pub use orchestrator::{ExportOutcome, run_export};
-pub use paths::{build_export_paths, sanitize_name};
+pub use paths::{build_export_paths, build_export_paths_for_format, sanitize_name};
 pub use plan::{PlanOutcome, plan_export, run_export_plan};
 pub use structure::write_structure_report;
 pub use text_dump::write_text_dump;

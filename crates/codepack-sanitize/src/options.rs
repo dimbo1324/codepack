@@ -13,10 +13,14 @@ pub struct SterileCopyOptions {
     /// `codepack_security::should_skip_file_for_safety` already accepts; an invalid
     /// value falls back to `"safe"`, exactly like the rest of the product.
     pub safety_mode: String,
-    /// When set, the finished sterile copy is additionally packed into one `.7z` at
+    /// When set, the finished sterile copy is additionally packed into one archive at
     /// this path. `None` keeps the folder-only behaviour this crate shipped with, so
     /// no existing caller changes meaning.
     pub archive_path: Option<PathBuf>,
+    /// Container for that archive. `None` means "decide from the file name", falling
+    /// back to ZIP when the name says nothing — so `out.7z` does the obvious thing and
+    /// `out.bundle` does the safe thing.
+    pub archive_format: Option<codepack_archive::ArchiveFormat>,
     pub cancellation: CancellationToken,
 }
 
@@ -46,6 +50,23 @@ pub enum FileOutcome {
 }
 
 impl FileOutcome {
+    /// A stable token for the *detail*, so a user interface can say why in its own
+    /// language instead of showing this crate's English prose.
+    ///
+    /// [`Self::label`] already names the outcome; this names the reason behind it.
+    /// Proper nouns (a language, a formatter) stay out of the token deliberately —
+    /// "Rust" and "rustfmt" are names, not words to translate, and the caller pairs
+    /// them with the translated token itself.
+    pub fn detail_kind(&self) -> &'static str {
+        match self {
+            Self::StrippedAndFormatted { .. } => "formatted_by",
+            Self::StrippedOnlyNoFormatterFound { .. } => "no_formatter",
+            Self::SkippedUnsupportedLanguage { .. } => "unsupported_language",
+            Self::SkippedSensitiveOrRedacted => "sensitive",
+            Self::Error { .. } => "error",
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             Self::StrippedAndFormatted { .. } => "stripped_and_formatted",
@@ -107,6 +128,9 @@ pub struct SterileCopyReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SterileCopyArchive {
     pub path: PathBuf,
+    /// Which container was actually written — not what was asked for, so a caller that
+    /// let the file name decide can report the real answer.
+    pub format: codepack_archive::ArchiveFormat,
     pub file_count: usize,
     pub bytes: u64,
 }

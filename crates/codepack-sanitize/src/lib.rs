@@ -26,6 +26,7 @@ mod report;
 mod run;
 mod strip;
 
+pub use codepack_archive::ArchiveFormat;
 pub use error::{Result, SanitizeError};
 pub use language::{Language, detect_language};
 pub use options::{

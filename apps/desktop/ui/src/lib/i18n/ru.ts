@@ -319,6 +319,19 @@ export const ru: Record<TranslationKey, string> = {
   "sterile.destination.choose": "Выбрать папку…",
   "sterile.destination.change": "Изменить…",
   "sterile.destination.missing": "Выберите, куда записать стерильную копию.",
+  "archive.format": "Формат архива",
+  "archive.format.zip": "ZIP",
+  "archive.format.sevenZip": "7-Zip",
+  "archive.format.rar": "RAR",
+  "archive.format.hint.zip": "По умолчанию. Открывается везде, без дополнительных программ.",
+  "archive.format.hint.sevenZip":
+    "Архив меньше, собирается чуть дольше. Для открытия нужен 7-Zip или похожая программа.",
+  "archive.format.rar.unavailable":
+    "RAR пока недоступен — он в планах на будущие версии. Выберите ZIP или 7-Zip.",
+  "sterile.detail.formattedBy": "{detail}",
+  "sterile.detail.noFormatter":
+    "{language} — форматировщик не найден в PATH (переменная с путями к программам)",
+  "sterile.detail.unsupportedLanguage": "Язык не поддерживается, файл скопирован без изменений",
   "sterile.archive": "Также сохранить архив .7z",
   "sterile.archive.missing":
     "Необязательно. Без выбранного файла результатом остаётся только папка.",

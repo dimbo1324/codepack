@@ -898,6 +898,133 @@ fn sanitize_reports_no_destination_when_the_folder_was_only_scratch() {
 }
 
 #[test]
+fn sanitize_writes_a_zip_by_default_and_says_so() {
+    // ZIP is the default everywhere (owner decision 2026-07-30); the extension picks
+    // the container when the user names the file.
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("sterile.zip");
+
+    let output = sandbox.run(&[
+        "--json",
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert_eq!(json(&output)["archive"]["format"], "zip");
+
+    // Really a ZIP, not merely a file with that name.
+    let file = std::fs::File::open(&archive).unwrap();
+    assert!(!zip::ZipArchive::new(file).unwrap().is_empty());
+}
+
+#[test]
+fn sanitize_writes_a_7z_when_the_file_name_asks_for_one() {
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("sterile.7z");
+
+    let output = sandbox.run(&[
+        "--json",
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert_eq!(json(&output)["archive"]["format"], "7z");
+    assert_eq!(
+        &std::fs::read(&archive).unwrap()[..6],
+        b"7z\xbc\xaf\x27\x1c"
+    );
+}
+
+#[test]
+fn an_explicit_archive_format_beats_the_file_extension() {
+    // The extension is a guess; `--archive-format` is a statement.
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("named-wrong.7z");
+
+    let output = sandbox.run(&[
+        "--json",
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+        "--archive-format",
+        "zip",
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert_eq!(json(&output)["archive"]["format"], "zip");
+    let file = std::fs::File::open(&archive).unwrap();
+    assert!(zip::ZipArchive::new(file).is_ok(), "should be a real ZIP");
+}
+
+#[test]
+fn rar_is_offered_but_refused_with_a_message_that_names_the_alternatives() {
+    // Offered on purpose: `--archive-format rar` must not read like a typo. It is a
+    // real choice that is not implemented yet, and the message has to say so.
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("sterile.rar");
+
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+        "--archive-format",
+        "rar",
+    ]);
+
+    assert_eq!(
+        code(&output),
+        1,
+        "a reserved format is a failure, not a usage error"
+    );
+    let message = stderr(&output);
+    assert!(message.contains("not implemented"), "{message}");
+    assert!(
+        message.contains("zip") && message.contains("7z"),
+        "{message}"
+    );
+    assert!(
+        !archive.exists(),
+        "nothing may be written for a refused format"
+    );
+}
+
+#[test]
+fn export_writes_a_zip_by_default_and_a_7z_on_request() {
+    for (format, expected_extension) in [("zip", "zip"), ("7z", "7z")] {
+        let sandbox = Sandbox::new();
+        let output = sandbox.run(&[
+            "--json",
+            "export",
+            &sandbox.project().display().to_string(),
+            "--out",
+            &sandbox.out().display().to_string(),
+            "--archive-format",
+            format,
+        ]);
+
+        assert_eq!(code(&output), 0, "{format}: {}", stderr(&output));
+        let produced = json(&output)["result_path"].as_str().unwrap().to_string();
+        assert!(
+            produced.ends_with(expected_extension),
+            "{format}: bundle landed at {produced}"
+        );
+        assert!(std::path::Path::new(&produced).is_file(), "{produced}");
+    }
+}
+
+#[test]
 fn sanitize_without_out_or_archive_is_a_usage_error() {
     let sandbox = Sandbox::new();
     let output = sandbox.run(&[

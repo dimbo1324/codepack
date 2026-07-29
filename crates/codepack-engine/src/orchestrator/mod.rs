@@ -59,7 +59,7 @@ use crate::error::Result;
 use crate::git_report::write_git_report;
 use crate::ignored_dirs::extra_ignored_display;
 use crate::manifest::write_manifest_and_index;
-use crate::paths::build_export_paths;
+use crate::paths::build_export_paths_for_format;
 use crate::plan::run_export_plan;
 use crate::storage::{diff_snapshot_to_new_snapshot, stored_snapshot_to_diff_snapshot};
 use crate::structure::write_structure_report;
@@ -130,7 +130,11 @@ pub fn run_export(
         }));
     };
 
-    let paths = build_export_paths(source_root, output_root);
+    // The bundle's file name carries the container's extension, so a 7z export does not
+    // arrive called `.zip`. Every other path (staging, split-set directory) is unchanged.
+    let archive_format =
+        codepack_archive::ArchiveFormat::from_config_value(config.normalized_archive_format());
+    let paths = build_export_paths_for_format(source_root, output_root, archive_format.extension());
 
     let _staging_cleanup = StagingCleanupGuard {
         staging_dir: paths.staging_dir.clone(),

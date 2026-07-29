@@ -8,9 +8,9 @@
 
 use super::Config;
 use super::valid_sets::{
-    DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE, DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE,
-    DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES, SAFE_EXPORT_MODES, THEMES,
-    resolve_diff_export_mode_alias,
+    ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
+    DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES,
+    LANGUAGES, SAFE_EXPORT_MODES, THEMES, resolve_diff_export_mode_alias,
 };
 
 pub const UI_ZOOM_MIN: f64 = 0.7;
@@ -47,6 +47,18 @@ impl Config {
             "last_export"
         } else {
             DEFAULT_DIFF_EXPORT_MODE
+        }
+    }
+
+    /// Falls back to `zip` for anything unrecognised, like every other string field.
+    /// `rar` normalizes to itself — it is a valid *choice*, and refusing it is the
+    /// archiver's job, with a message that says why; silently turning it into a ZIP
+    /// would hand the user a different container than the one they asked for.
+    pub fn normalized_archive_format(&self) -> &str {
+        if ARCHIVE_FORMATS.contains(&self.archive_format.as_str()) {
+            &self.archive_format
+        } else {
+            DEFAULT_ARCHIVE_FORMAT
         }
     }
 

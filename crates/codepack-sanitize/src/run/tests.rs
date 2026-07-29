@@ -11,6 +11,7 @@ fn options(source: &Path, destination: &Path) -> SterileCopyOptions {
         destination_root: destination.to_path_buf(),
         safety_mode: "safe".to_string(),
         archive_path: None,
+        archive_format: None,
         cancellation: CancellationToken::new(),
     }
 }

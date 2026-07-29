@@ -1,4 +1,9 @@
-//! ZIP building, logical splitting, and restore helpers (BLUEPRINT §A.8).
+//! Archive building, logical splitting, and restore helpers (BLUEPRINT §A.8).
+//!
+//! Two entry points, deliberately separate: [`build_final_archives`] is the export
+//! pipeline's own multi-part, planned, reported output (a frozen contract, invariant
+//! I5), and [`pack_files`] is the small one — a caller-named list of files into one
+//! archive. Both honour [`ArchiveFormat`], and both default to ZIP.
 //!
 //! ## Scope boundary (stage S8, `ROADMAP.md`)
 //!
@@ -17,17 +22,19 @@
 mod build;
 mod entry;
 mod error;
+mod format;
 mod options;
+mod pack;
 mod plan;
 mod report;
 mod restore;
-mod sevenz;
 
 pub use build::build_final_archives;
 pub use entry::{ArchiveEntry, classify_archive_group, collect_entries};
 pub use error::{ArchiveError, Result};
+pub use format::ArchiveFormat;
 pub use options::ArchiveOptions;
+pub use pack::{PackResult, pack_files};
 pub use plan::{ArchivePartPlan, ArchivePlan, plan_archive, predicted_result_for_plan};
 pub use report::write_archive_plan_report;
 pub use restore::{extract_zip_safely, restore_archive_set, safe_member_target};
-pub use sevenz::{SevenZipResult, pack_files};

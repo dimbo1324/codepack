@@ -36,6 +36,8 @@ pub(crate) struct SanitizeReport {
 #[derive(Debug, Serialize)]
 pub(crate) struct ArchiveInfo {
     pub path: String,
+    /// The container actually written — the file name may have chosen it.
+    pub format: &'static str,
     pub file_count: usize,
     pub bytes: u64,
     pub bytes_human: String,
@@ -87,6 +89,9 @@ pub(crate) fn run(args: &SanitizeArgs, format: Format) -> Result<Outcome> {
         destination_root: destination.clone(),
         safety_mode: safety_mode.clone(),
         archive_path: args.archive.clone(),
+        archive_format: args.archive_format.map(|format| {
+            codepack_sanitize::ArchiveFormat::from_config_value(format.as_config_value())
+        }),
         cancellation: CancellationToken::new(),
     };
     let result = run_sterile_copy(&options)?;
@@ -145,6 +150,7 @@ fn assemble(
         safety_mode: safety_mode.to_string(),
         archive: result.archive.as_ref().map(|archive| ArchiveInfo {
             path: archive.path.display().to_string(),
+            format: archive.format.as_str(),
             file_count: archive.file_count,
             bytes: archive.bytes,
             bytes_human: codepack_tokens::format_bytes(archive.bytes),
@@ -189,8 +195,8 @@ fn print_human(report: &SanitizeReport) {
     }
     if let Some(archive) = &report.archive {
         output::line(format!(
-            "Archive:     {} ({} file(s), {})",
-            archive.path, archive.file_count, archive.bytes_human
+            "Archive:     {} [{}] ({} file(s), {})",
+            archive.path, archive.format, archive.file_count, archive.bytes_human
         ));
     }
     output::line(format!("Safety mode: {}", report.safety_mode));

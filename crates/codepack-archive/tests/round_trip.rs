@@ -3,7 +3,7 @@ mod support;
 use std::fs;
 
 use codepack_archive::{
-    ArchiveOptions, build_final_archives, extract_zip_safely, restore_archive_set,
+    ArchiveFormat, ArchiveOptions, build_final_archives, extract_zip_safely, restore_archive_set,
 };
 use codepack_core::CancellationToken;
 
@@ -23,6 +23,7 @@ fn single_zip_round_trip_reproduces_bytes_paths_and_deflate_compression() {
     let options = ArchiveOptions {
         include_project: true,
         part_limit_bytes: 512 * 1024 * 1024,
+        format: ArchiveFormat::Zip,
     };
     let cancel = CancellationToken::new();
     let mut hook_calls = 0u32;
@@ -90,6 +91,7 @@ fn build_split_fixture() -> (
     let options = ArchiveOptions {
         include_project: true,
         part_limit_bytes: 8 * 1024 * 1024 + 50 * 1024,
+        format: ArchiveFormat::Zip,
     };
     let cancel = CancellationToken::new();
     let result = build_final_archives(&paths, &options, &cancel, &mut |_plan, _predicted| {})
@@ -170,6 +172,7 @@ fn single_zip_exceeding_hard_limit_after_write_falls_back_to_split() {
     let options = ArchiveOptions {
         include_project: true,
         part_limit_bytes: 100,
+        format: ArchiveFormat::Zip,
     };
     let cancel = CancellationToken::new();
     let mut hook_calls = 0u32;
@@ -207,6 +210,7 @@ fn precancelled_token_yields_a_partial_not_a_complete_result() {
     let options = ArchiveOptions {
         include_project: true,
         part_limit_bytes: 512 * 1024 * 1024,
+        format: ArchiveFormat::Zip,
     };
     let cancel = CancellationToken::new();
     cancel.cancel();

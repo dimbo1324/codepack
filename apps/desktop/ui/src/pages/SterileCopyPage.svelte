@@ -26,6 +26,7 @@
   import { reportError } from "$lib/stores/toasts.svelte";
   import { wizard } from "$lib/stores/wizard.svelte";
   import { formatBytes } from "$lib/util/format";
+  import { archiveFormatOptions } from "$lib/util/archiveFormats";
 
   import { onMount } from "svelte";
 
@@ -46,6 +47,8 @@
       hint: t("security.safeMode.hint.full"),
     },
   ]);
+
+  const archiveFormats = $derived(archiveFormatOptions());
 
   const outcomeLabels: Record<SanitizeOutcome, TranslationKey> = {
     stripped_and_formatted: "sterile.outcome.stripped_and_formatted",
@@ -112,17 +115,30 @@
     if (chosen) wizard.sterileDestination = chosen;
   }
 
-  /** Suggests `<source folder name>-sterile.7z`, so the saved file says which project
-   * it came from without the user having to type it. */
+  /** Suggests `<source folder name>-sterile.<ext>`, so the saved file says which
+   * project it came from without the user having to type it. */
   function suggestedArchiveName(): string {
     const source = wizard.sterileSource ?? "";
     const leaf = source.split(/[\\/]/).filter(Boolean).pop() ?? "sterile-copy";
-    return `${leaf}-sterile.7z`;
+    return `${leaf}-sterile.${wizard.sterileArchiveFormat}`;
   }
 
   async function chooseArchive(): Promise<void> {
-    const chosen = await pickArchiveDestination(suggestedArchiveName());
+    const chosen = await pickArchiveDestination(
+      suggestedArchiveName(),
+      wizard.sterileArchiveFormat,
+    );
     if (chosen) wizard.sterileArchive = chosen;
+  }
+
+  /** Retargets an already-chosen file when the format changes, so the extension never
+   * contradicts the container. Silently writing `x.zip` as a 7z is the kind of small
+   * lie a user only finds out about when something refuses to open it. */
+  function onFormatChange(format: string): void {
+    wizard.sterileArchiveFormat = format as typeof wizard.sterileArchiveFormat;
+    if (wizard.sterileArchive) {
+      wizard.sterileArchive = wizard.sterileArchive.replace(/\.[^.\\/]+$/, `.${format}`);
+    }
   }
 
   function clearArchive(): void {
@@ -148,6 +164,7 @@
         wizard.sterileDestination,
         wizard.sterileSafetyMode,
         wizard.sterileArchive,
+        wizard.sterileArchiveFormat,
       );
     } catch (error) {
       wizard.sterileRunning = false;
@@ -164,8 +181,22 @@
     }
   }
 
+  /** The reason in the user's own language. Proper nouns — a language, a formatter —
+   * come from the backend and stay as they are, because "Rust" and "rustfmt" are names,
+   * not words to translate. */
   function detailOf(file: SanitizeFileOutcome): string | null {
-    return file.detail;
+    switch (file.detail_kind) {
+      case "formatted_by":
+        return file.detail ? t("sterile.detail.formattedBy", { detail: file.detail }) : null;
+      case "no_formatter":
+        return file.detail ? t("sterile.detail.noFormatter", { language: file.detail }) : null;
+      case "unsupported_language":
+        return t("sterile.detail.unsupportedLanguage");
+      case "error":
+        return file.detail;
+      default:
+        return null;
+    }
   }
 </script>
 
@@ -230,6 +261,16 @@
           {wizard.sterileArchive ? t("sterile.archive.change") : t("sterile.archive.choose")}
         </button>
       </div>
+
+      {#if wizard.sterileArchive}
+        <Segmented
+          label={t("archive.format")}
+          options={archiveFormats}
+          value={wizard.sterileArchiveFormat}
+          disabled={wizard.sterileRunning}
+          onselect={onFormatChange}
+        />
+      {/if}
 
       <Segmented
         label={t("sterile.safetyMode")}

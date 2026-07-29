@@ -5,6 +5,11 @@
     /** Shown under the option list once that option is selected. A mode whose
      * consequences are invisible until export is a mode chosen blind. */
     hint?: string;
+    /** When set, the option is offered but cannot be chosen, and this text explains
+     * why. Used for a choice that genuinely exists and is not built yet: hiding it
+     * would leave the user wondering whether it is coming, and letting them pick it
+     * would fail later, further from the decision. Clicking shows the reason. */
+    unavailable?: string;
   }
 </script>
 
@@ -25,6 +30,18 @@
   const active = $derived(options.find((option) => option.value === value));
 
   let track = $state<HTMLDivElement | null>(null);
+  /** The explanation for the last unavailable option the user tried to pick. Cleared as
+   * soon as they choose something real, so it never lingers as stale advice. */
+  let blocked = $state<string | null>(null);
+
+  function choose(option: SegmentOption<T>): void {
+    if (option.unavailable) {
+      blocked = option.unavailable;
+      return;
+    }
+    blocked = null;
+    onselect(option.value);
+  }
 
   /** The radiogroup keyboard contract, which the ARIA role promises and a bare row of
    * buttons does not deliver: exactly one option is tabbable, and the arrow keys move
@@ -39,8 +56,10 @@
           : 0;
     if (step === 0 || disabled) return;
     event.preventDefault();
+    // Arrow keys land on an unavailable option like any other — it is focusable and
+    // announced — but choosing it shows the reason instead of changing the value.
     const next = (index + step + options.length) % options.length;
-    onselect(options[next].value);
+    choose(options[next]);
     track?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
   }
 </script>
@@ -56,15 +75,20 @@
         tabindex={option.value === value ? 0 : -1}
         class="segmented__option"
         class:is-active={option.value === value}
+        class:is-unavailable={!!option.unavailable}
+        aria-disabled={!!option.unavailable}
+        title={option.unavailable}
         {disabled}
-        onclick={() => onselect(option.value)}
+        onclick={() => choose(option)}
         onkeydown={(event) => onKeyDown(event, index)}
       >
         {option.label}
       </button>
     {/each}
   </div>
-  {#if active?.hint}
+  {#if blocked}
+    <p class="segmented__blocked" role="status">{blocked}</p>
+  {:else if active?.hint}
     <p class="segmented__hint">{active.hint}</p>
   {/if}
 </div>
@@ -118,6 +142,25 @@
 
   .segmented__option:disabled {
     opacity: 0.5;
+  }
+
+  /* Dimmed, but still readable and still focusable: the point is that the user can see
+     the choice exists. */
+  .segmented__option.is-unavailable {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .segmented__option.is-unavailable:hover:not(:disabled) {
+    background: transparent;
+    color: var(--fg-secondary);
+  }
+
+  .segmented__blocked {
+    max-width: 62ch;
+    color: var(--fg-muted);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
   }
 
   .segmented__hint {

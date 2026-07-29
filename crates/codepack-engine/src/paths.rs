@@ -34,7 +34,21 @@ pub fn sanitize_name(name: &str) -> String {
 /// until none of `staging`/`final_zip`/`archive_set_dir` already exist) is preserved
 /// verbatim.
 pub fn build_export_paths(source_root: &Path, output_root: &Path) -> ExportPaths {
-    build_export_paths_with_stamp(source_root, output_root, &compact_utc_stamp())
+    build_export_paths_for_format(source_root, output_root, "zip")
+}
+
+/// As [`build_export_paths`], but with the container's file extension.
+///
+/// Only the single-archive path carries an extension; the staging folder and the
+/// split-set directory do not. Kept as a separate entry point so every existing caller
+/// keeps producing `.zip` without being touched — the default is not a parameter
+/// anybody has to remember to pass.
+pub fn build_export_paths_for_format(
+    source_root: &Path,
+    output_root: &Path,
+    extension: &str,
+) -> ExportPaths {
+    build_export_paths_with_stamp(source_root, output_root, &compact_utc_stamp(), extension)
 }
 
 /// Test seam for [`build_export_paths`]: takes the bundle-name timestamp as a
@@ -44,6 +58,7 @@ fn build_export_paths_with_stamp(
     source_root: &Path,
     output_root: &Path,
     stamp: &str,
+    extension: &str,
 ) -> ExportPaths {
     let raw_name = source_root
         .file_name()
@@ -56,7 +71,7 @@ fn build_export_paths_with_stamp(
     let candidate_paths = |name: &str| -> (PathBuf, PathBuf, PathBuf) {
         (
             output_root.join(name),
-            output_root.join(format!("{name}.zip")),
+            output_root.join(format!("{name}.{extension}")),
             output_root.join(format!("{name}_archives")),
         )
     };
@@ -119,8 +134,12 @@ mod tests {
         let output_root = tempfile::tempdir().unwrap();
         let source_root = Path::new("/some/where/my_project");
 
-        let paths =
-            build_export_paths_with_stamp(source_root, output_root.path(), "20240101_120000");
+        let paths = build_export_paths_with_stamp(
+            source_root,
+            output_root.path(),
+            "20240101_120000",
+            "zip",
+        );
 
         assert_eq!(paths.project_name, "my_project");
         assert_eq!(paths.bundle_name, "my_project_export_20240101_120000");
@@ -164,8 +183,12 @@ mod tests {
         let output_root = tempfile::tempdir().unwrap();
         let source_root = Path::new("???");
 
-        let paths =
-            build_export_paths_with_stamp(source_root, output_root.path(), "20240101_120000");
+        let paths = build_export_paths_with_stamp(
+            source_root,
+            output_root.path(),
+            "20240101_120000",
+            "zip",
+        );
 
         assert_eq!(paths.project_name, "project");
     }
@@ -179,7 +202,7 @@ mod tests {
         let base_bundle = format!("my_project_export_{stamp}");
         std::fs::create_dir_all(output_root.path().join(&base_bundle)).unwrap();
 
-        let paths = build_export_paths_with_stamp(source_root, output_root.path(), stamp);
+        let paths = build_export_paths_with_stamp(source_root, output_root.path(), stamp, "zip");
 
         assert_eq!(paths.bundle_name, format!("{base_bundle}_1"));
     }
@@ -200,7 +223,7 @@ mod tests {
         )
         .unwrap();
 
-        let paths = build_export_paths_with_stamp(source_root, output_root.path(), stamp);
+        let paths = build_export_paths_with_stamp(source_root, output_root.path(), stamp, "zip");
 
         assert_eq!(paths.bundle_name, format!("{base_bundle}_3"));
     }

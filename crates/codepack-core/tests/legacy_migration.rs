@@ -115,6 +115,10 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         "last_root",
         "export_profile",
         "safe_export_mode",
+        // Added 2026-07-30 (owner decision). An added optional field with a default
+        // does not bump `CONFIG_SCHEMA_VERSION` — that governance is in `config/mod.rs`
+        // — but it must be listed here, or this guard stops guarding.
+        "archive_format",
         "diff_export_mode",
         "diff_base_ref",
         "diff_target_ref",

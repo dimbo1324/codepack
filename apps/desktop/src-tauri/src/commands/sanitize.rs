@@ -46,6 +46,7 @@ pub fn start_sanitize(
     destination_root: String,
     safety_mode: String,
     archive_path: Option<String>,
+    archive_format: Option<String>,
 ) -> CommandResult<String> {
     let source = resolve_project_root(&source_root)?;
 
@@ -71,6 +72,8 @@ pub fn start_sanitize(
             destination_root: destination,
             safety_mode,
             archive_path: archive,
+            archive_format: archive_format
+                .map(|value| codepack_sanitize::ArchiveFormat::from_config_value(&value)),
             cancellation: cancel,
         };
 
@@ -112,6 +115,7 @@ fn assemble(options: &SterileCopyOptions, result: &SterileCopyReport) -> Sanitiz
         safety_mode: options.safety_mode.clone(),
         archive: result.archive.as_ref().map(|archive| SanitizeArchive {
             path: archive.path.display().to_string(),
+            format: archive.format.as_str().to_string(),
             file_count: archive.file_count,
             bytes: archive.bytes,
         }),
@@ -129,6 +133,7 @@ fn assemble(options: &SterileCopyOptions, result: &SterileCopyReport) -> Sanitiz
             .map(|(path, outcome)| SanitizeFileOutcome {
                 path: path.to_string_lossy().replace('\\', "/"),
                 outcome: outcome.label(),
+                detail_kind: outcome.detail_kind(),
                 detail: detail_of(outcome),
             })
             .collect(),
@@ -161,6 +166,7 @@ mod tests {
             destination_root: destination,
             safety_mode: "safe".to_string(),
             archive_path: None,
+            archive_format: None,
             cancellation: codepack_core::CancellationToken::new(),
         }
     }
@@ -182,6 +188,7 @@ mod tests {
             summary: codepack_sanitize::SterileCopySummary::default(),
             archive: Some(codepack_sanitize::SterileCopyArchive {
                 path: std::path::PathBuf::from("C:\\out\\sterile.7z"),
+                format: codepack_sanitize::ArchiveFormat::SevenZip,
                 file_count: 12,
                 bytes: 4096,
             }),

@@ -23,8 +23,9 @@ pub use normalize::{DEFAULT_UI_ZOOM, UI_ZOOM_MAX, UI_ZOOM_MIN};
 pub use presets::{AiPreset, ai_presets};
 pub use project::{PROJECT_CONFIG_FILE_NAME, ProjectConfig, ProjectConfigError};
 pub use valid_sets::{
-    DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE, DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE,
-    DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES, SAFE_EXPORT_MODES, THEMES,
+    ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
+    DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES,
+    IMPLEMENTED_ARCHIVE_FORMATS, LANGUAGES, SAFE_EXPORT_MODES, THEMES,
 };
 
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,9 @@ pub struct Config {
     pub export_profile: String,
     pub safe_export_mode: String,
     pub zip_part_limit_mb: u32,
+    /// Container the final bundle is written as: `zip` (default, and what every
+    /// earlier version produced), `7z`, or `rar` (declared, not implemented).
+    pub archive_format: String,
     pub diff_export_mode: String,
     pub diff_base_ref: String,
     pub diff_target_ref: String,
@@ -88,6 +92,7 @@ impl Default for Config {
             export_profile: DEFAULT_EXPORT_PROFILE.to_string(),
             safe_export_mode: DEFAULT_SAFE_EXPORT_MODE.to_string(),
             zip_part_limit_mb: 512,
+            archive_format: DEFAULT_ARCHIVE_FORMAT.to_string(),
             diff_export_mode: DEFAULT_DIFF_EXPORT_MODE.to_string(),
             diff_base_ref: "HEAD".to_string(),
             diff_target_ref: String::new(),

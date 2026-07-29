@@ -318,6 +318,18 @@ export const en = {
   "sterile.destination.choose": "Choose a folder…",
   "sterile.destination.change": "Change…",
   "sterile.destination.missing": "Choose where the sterile copy should be written.",
+  "archive.format": "Archive format",
+  "archive.format.zip": "ZIP",
+  "archive.format.sevenZip": "7-Zip",
+  "archive.format.rar": "RAR",
+  "archive.format.hint.zip": "The default. Opens anywhere without extra software.",
+  "archive.format.hint.sevenZip":
+    "Smaller archives, a little slower to build. Needs 7-Zip or a similar tool to open.",
+  "archive.format.rar.unavailable":
+    "RAR is not available yet — it is planned for a future release. Choose ZIP or 7-Zip.",
+  "sterile.detail.formattedBy": "{detail}",
+  "sterile.detail.noFormatter": "{language} — no formatter found on your PATH",
+  "sterile.detail.unsupportedLanguage": "Not a supported language, copied unchanged",
   "sterile.archive": "Also save a .7z archive",
   "sterile.archive.missing":
     "Optional. The folder alone is the result unless you choose a file here.",
