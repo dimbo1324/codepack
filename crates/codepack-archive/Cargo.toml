@@ -18,6 +18,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 walkdir.workspace = true
 zip.workspace = true
+# The sterile copy's `.7z` output; see the workspace manifest for why 7z needs its own
+# writer rather than reusing `zip`.
+sevenz-rust2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

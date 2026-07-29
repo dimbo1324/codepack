@@ -11,7 +11,7 @@ use codepack_sanitize::{FileOutcome, SterileCopyOptions, SterileCopyReport, run_
 use serde::Serialize;
 
 use crate::cli::SanitizeArgs;
-use crate::error::Result;
+use crate::error::{CliError, Result};
 use crate::exit::Outcome;
 use crate::output::{self, Format};
 
@@ -20,8 +20,21 @@ pub(crate) struct SanitizeReport {
     pub source: String,
     pub destination: String,
     pub safety_mode: String,
+    /// Present only when `--archive` asked for one. Reported next to the destination
+    /// because when `--out` was omitted the destination was a temporary folder that no
+    /// longer exists, and the archive is the only result the user can open.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive: Option<ArchiveInfo>,
     pub summary: Summary,
     pub files: Vec<ReportedFile>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ArchiveInfo {
+    pub path: String,
+    pub file_count: usize,
+    pub bytes: u64,
+    pub bytes_human: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -48,14 +61,33 @@ pub(crate) fn run(args: &SanitizeArgs, format: Format) -> Result<Outcome> {
         .map(|mode| mode.as_config_value().to_string())
         .unwrap_or_else(|| "safe".to_string());
 
+    // Held for the whole call, not just this block: dropping a `TempDir` deletes it, so
+    // binding it here is what keeps the scratch folder alive until the archive has been
+    // written from it.
+    let scratch = match args.out {
+        Some(_) => None,
+        None => Some(tempfile::tempdir().map_err(|source| CliError::Read {
+            path: std::env::temp_dir(),
+            source,
+        })?),
+    };
+    let destination = match (&args.out, &scratch) {
+        (Some(out), _) => out.clone(),
+        // `--out` is `required_unless_present = "archive"`, so exactly one of the two
+        // arms is reachable; clap rejects the third case before this runs.
+        (None, Some(dir)) => dir.path().to_path_buf(),
+        (None, None) => unreachable!("clap requires --out unless --archive is given"),
+    };
+
     let options = SterileCopyOptions {
         source_root: args.source.clone(),
-        destination_root: args.out.clone(),
+        destination_root: destination.clone(),
         safety_mode: safety_mode.clone(),
+        archive_path: args.archive.clone(),
         cancellation: CancellationToken::new(),
     };
     let result = run_sterile_copy(&options)?;
-    let report = assemble(args, &safety_mode, &result);
+    let report = assemble(&destination, args, &safety_mode, &result);
 
     if format.is_json() {
         output::emit_json("sanitize", &report)?;
@@ -70,11 +102,22 @@ pub(crate) fn run(args: &SanitizeArgs, format: Format) -> Result<Outcome> {
     })
 }
 
-fn assemble(args: &SanitizeArgs, safety_mode: &str, result: &SterileCopyReport) -> SanitizeReport {
+fn assemble(
+    destination: &std::path::Path,
+    args: &SanitizeArgs,
+    safety_mode: &str,
+    result: &SterileCopyReport,
+) -> SanitizeReport {
     SanitizeReport {
         source: args.source.display().to_string(),
-        destination: args.out.display().to_string(),
+        destination: destination.display().to_string(),
         safety_mode: safety_mode.to_string(),
+        archive: result.archive.as_ref().map(|archive| ArchiveInfo {
+            path: archive.path.display().to_string(),
+            file_count: archive.file_count,
+            bytes: archive.bytes,
+            bytes_human: codepack_tokens::format_bytes(archive.bytes),
+        }),
         summary: Summary {
             total_files: result.summary.total_files,
             stripped_and_formatted: result.summary.stripped_and_formatted,
@@ -111,6 +154,12 @@ fn detail_of(outcome: &FileOutcome) -> Option<String> {
 fn print_human(report: &SanitizeReport) {
     output::line(format!("Source:      {}", report.source));
     output::line(format!("Destination: {}", report.destination));
+    if let Some(archive) = &report.archive {
+        output::line(format!(
+            "Archive:     {} ({} file(s), {})",
+            archive.path, archive.file_count, archive.bytes_human
+        ));
+    }
     output::line(format!("Safety mode: {}", report.safety_mode));
     output::line("");
     output::line(format!(

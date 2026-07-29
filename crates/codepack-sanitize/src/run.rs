@@ -22,7 +22,9 @@ use codepack_security::{redact_secrets, should_skip_file_for_safety};
 use crate::error::{Result, SanitizeError};
 use crate::format::format_source;
 use crate::language::detect_language;
-use crate::options::{FileOutcome, SterileCopyOptions, SterileCopyReport, SterileCopySummary};
+use crate::options::{
+    FileOutcome, SterileCopyArchive, SterileCopyOptions, SterileCopyReport, SterileCopySummary,
+};
 use crate::report::write_report;
 use crate::strip::strip_comments;
 
@@ -31,6 +33,9 @@ use crate::strip::strip_comments;
 pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyReport> {
     let (canonical_source, canonical_destination) =
         validate_destination(&options.source_root, &options.destination_root)?;
+    if let Some(archive_path) = &options.archive_path {
+        validate_archive_path(&canonical_source, archive_path)?;
+    }
 
     let scan_options = ScanOptions {
         safe_export_mode: options.safety_mode.clone(),
@@ -88,7 +93,11 @@ pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyRepor
     per_file.extend(processed);
 
     let summary = SterileCopySummary::from_outcomes(per_file.iter().map(|(_, outcome)| outcome));
-    let report = SterileCopyReport { per_file, summary };
+    let mut report = SterileCopyReport {
+        per_file,
+        summary,
+        archive: None,
+    };
 
     write_report(
         &canonical_destination,
@@ -97,7 +106,45 @@ pub fn run_sterile_copy(options: &SterileCopyOptions) -> Result<SterileCopyRepor
         &report,
     )?;
 
+    // Packed last, after the report exists, so the archive contains it: the recipient
+    // of a `.7z` gets the account of what was stripped, skipped and redacted in the
+    // same file as the code it describes.
+    if let Some(archive_path) = &options.archive_path {
+        let packed = codepack_archive::pack_directory(
+            &canonical_destination,
+            archive_path,
+            &options.cancellation,
+        )
+        .map_err(|source| match source {
+            codepack_archive::ArchiveError::Cancelled => SanitizeError::Cancelled,
+            source => SanitizeError::Archive {
+                path: archive_path.clone(),
+                source: Box::new(source),
+            },
+        })?;
+        report.archive = Some(SterileCopyArchive {
+            path: packed.archive_path,
+            file_count: packed.file_count,
+            bytes: packed.archive_bytes,
+        });
+    }
+
     Ok(report)
+}
+
+/// The archive is a second thing written outside the source project, and it needs the
+/// same guard the destination folder gets: writing it inside the project being read
+/// from would modify that project (invariant I2), and a second run would then try to
+/// pack the previous archive into the new one.
+fn validate_archive_path(canonical_source: &Path, archive_path: &Path) -> Result<()> {
+    let prospective = resolve_prospective_path(archive_path)?;
+    if prospective.starts_with(canonical_source) {
+        return Err(SanitizeError::ArchiveInsideSource {
+            source_root: canonical_source.to_path_buf(),
+            archive: prospective,
+        });
+    }
+    Ok(())
 }
 
 /// Invariant analogous to I2: a sterile copy must never be written into, or as an
@@ -315,8 +362,102 @@ mod tests {
             source_root: source.to_path_buf(),
             destination_root: destination.to_path_buf(),
             safety_mode: "safe".to_string(),
+            archive_path: None,
             cancellation: CancellationToken::new(),
         }
+    }
+
+    fn source_with_code() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("main.rs"),
+            "// a comment\nfn main() { println!(\"hi\"); }\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn no_archive_path_leaves_todays_behaviour_untouched() {
+        let source = source_with_code();
+        let destination = tempfile::tempdir().unwrap();
+
+        let report = run_sterile_copy(&options(source.path(), destination.path())).unwrap();
+
+        assert!(report.archive.is_none());
+        assert!(destination.path().join("main.rs").is_file());
+        assert!(
+            !destination.path().join("main.rs.7z").exists(),
+            "nothing may be packed unless an archive was asked for"
+        );
+    }
+
+    #[test]
+    fn an_archive_path_packs_the_finished_copy_including_its_report() {
+        let source = source_with_code();
+        let destination = tempfile::tempdir().unwrap();
+        let archive_dir = tempfile::tempdir().unwrap();
+        let archive_path = archive_dir.path().join("sterile.7z");
+
+        let mut options = options(source.path(), destination.path());
+        options.archive_path = Some(archive_path.clone());
+        let report = run_sterile_copy(&options).unwrap();
+
+        let archive = report.archive.expect("an archive was asked for");
+        assert_eq!(archive.path, archive_path);
+        assert!(archive.bytes > 0);
+        assert!(archive_path.is_file());
+
+        // The report must be *inside* the archive: a recipient holding only the `.7z`
+        // otherwise has the code with no account of what was stripped or redacted.
+        let mut names = Vec::new();
+        let mut reader =
+            sevenz_rust2::ArchiveReader::open(&archive_path, Default::default()).unwrap();
+        reader
+            .for_each_entries(|entry, _| {
+                names.push(entry.name.clone());
+                Ok(true)
+            })
+            .unwrap();
+        assert!(names.iter().any(|name| name == "main.rs"), "{names:?}");
+        assert!(
+            names
+                .iter()
+                .any(|name| name.contains("STERILE_COPY_REPORT")),
+            "{names:?}"
+        );
+    }
+
+    #[test]
+    fn an_archive_path_inside_the_source_is_rejected_before_anything_is_written() {
+        let source = source_with_code();
+        let destination = tempfile::tempdir().unwrap();
+        let archive_path = source.path().join("sterile.7z");
+
+        let mut options = options(source.path(), destination.path());
+        options.archive_path = Some(archive_path.clone());
+        let error = run_sterile_copy(&options).unwrap_err();
+
+        assert!(matches!(error, SanitizeError::ArchiveInsideSource { .. }));
+        assert!(
+            !archive_path.exists(),
+            "the source project must be left exactly as it was found (invariant I2)"
+        );
+    }
+
+    #[test]
+    fn a_cancelled_run_produces_no_archive() {
+        let source = source_with_code();
+        let destination = tempfile::tempdir().unwrap();
+        let archive_dir = tempfile::tempdir().unwrap();
+        let archive_path = archive_dir.path().join("sterile.7z");
+
+        let mut options = options(source.path(), destination.path());
+        options.archive_path = Some(archive_path.clone());
+        options.cancellation.cancel();
+
+        assert!(run_sterile_copy(&options).is_err());
+        assert!(!archive_path.exists());
     }
 
     #[test]

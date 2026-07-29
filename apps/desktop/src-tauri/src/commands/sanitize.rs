@@ -19,7 +19,9 @@
 use codepack_sanitize::{FileOutcome, SterileCopyOptions, SterileCopyReport, run_sterile_copy};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::dto::{SanitizeFileOutcome, SanitizeFinishedEvent, SanitizeReport, SanitizeSummary};
+use crate::dto::{
+    SanitizeArchive, SanitizeFileOutcome, SanitizeFinishedEvent, SanitizeReport, SanitizeSummary,
+};
 use crate::error::{CommandError, CommandResult};
 use crate::state::AppState;
 
@@ -43,6 +45,7 @@ pub fn start_sanitize(
     source_root: String,
     destination_root: String,
     safety_mode: String,
+    archive_path: Option<String>,
 ) -> CommandResult<String> {
     let source = resolve_project_root(&source_root)?;
 
@@ -50,6 +53,13 @@ pub fn start_sanitize(
     if destination.as_os_str().is_empty() {
         return Err(CommandError::new("no destination folder was given"));
     }
+
+    // An empty string is what an untouched text field sends; treating it as "no
+    // archive" rather than as a path avoids a run failing on a path of `""`.
+    let archive = archive_path
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from);
 
     let (run_id, cancel) = state.runs.start();
     let thread_run_id = run_id.clone();
@@ -60,6 +70,7 @@ pub fn start_sanitize(
             source_root: source,
             destination_root: destination,
             safety_mode,
+            archive_path: archive,
             cancellation: cancel,
         };
 
@@ -99,6 +110,11 @@ fn assemble(options: &SterileCopyOptions, result: &SterileCopyReport) -> Sanitiz
         source: options.source_root.display().to_string(),
         destination: options.destination_root.display().to_string(),
         safety_mode: options.safety_mode.clone(),
+        archive: result.archive.as_ref().map(|archive| SanitizeArchive {
+            path: archive.path.display().to_string(),
+            file_count: archive.file_count,
+            bytes: archive.bytes,
+        }),
         summary: SanitizeSummary {
             total_files: result.summary.total_files,
             stripped_and_formatted: result.summary.stripped_and_formatted,
@@ -144,8 +160,39 @@ mod tests {
             source_root: source,
             destination_root: destination,
             safety_mode: "safe".to_string(),
+            archive_path: None,
             cancellation: codepack_core::CancellationToken::new(),
         }
+    }
+
+    #[test]
+    fn an_archive_reaches_the_frontend_with_its_byte_size_unformatted() {
+        // The frontend formats bytes itself (`util/format.ts` mirrors
+        // `codepack_tokens::format_bytes`), so this layer must hand over the number —
+        // invariant I4: byte-based reporting is preserved, never replaced.
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        let opts = options(
+            source.path().to_path_buf(),
+            destination.path().to_path_buf(),
+        );
+
+        let result = SterileCopyReport {
+            per_file: Vec::new(),
+            summary: codepack_sanitize::SterileCopySummary::default(),
+            archive: Some(codepack_sanitize::SterileCopyArchive {
+                path: std::path::PathBuf::from("C:\\out\\sterile.7z"),
+                file_count: 12,
+                bytes: 4096,
+            }),
+        };
+
+        let archive = assemble(&opts, &result)
+            .archive
+            .expect("the archive must survive the DTO conversion");
+        assert_eq!(archive.file_count, 12);
+        assert_eq!(archive.bytes, 4096);
+        assert!(archive.path.ends_with("sterile.7z"));
     }
 
     #[test]
@@ -173,7 +220,11 @@ mod tests {
         let summary = codepack_sanitize::SterileCopySummary::from_outcomes(
             per_file.iter().map(|(_, outcome)| outcome),
         );
-        let result = SterileCopyReport { per_file, summary };
+        let result = SterileCopyReport {
+            per_file,
+            summary,
+            archive: None,
+        };
 
         let report = assemble(&opts, &result);
         assert_eq!(report.summary.total_files, 2);

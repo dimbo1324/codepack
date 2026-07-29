@@ -35,8 +35,21 @@ pub enum ArchiveError {
     #[error("cannot serialize archive report: {0}")]
     Serialize(#[from] serde_json::Error),
 
+    #[error("7z error for {path}: {source}")]
+    SevenZip {
+        path: PathBuf,
+        #[source]
+        source: sevenz_rust2::Error,
+    },
+
     #[error("unsafe archive member path: {member}")]
     UnsafeMemberPath { member: String },
+
+    /// The caller cancelled mid-archive. A distinct variant rather than a generic
+    /// failure because the caller must be able to tell "you stopped this" from
+    /// "something broke", and report it as neither an error nor a success.
+    #[error("archiving was cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, ArchiveError>;

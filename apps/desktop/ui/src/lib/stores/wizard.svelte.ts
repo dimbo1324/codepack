@@ -96,6 +96,8 @@ class WizardState {
    * `wizard.project`, and it produces no archive/report artifacts of its own. */
   sterileSource = $state<string | null>(null);
   sterileDestination = $state<string | null>(null);
+  /** Where to also write a `.7z` of the sterile copy. `null` means folder only. */
+  sterileArchive = $state<string | null>(null);
   sterileSafetyMode = $state("safe");
   sterileRunId = $state<string | null>(null);
   sterileRunning = $state(false);

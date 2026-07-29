@@ -185,6 +185,7 @@ mod tests {
                     formatter: "rustfmt".to_string(),
                 },
             )],
+            archive: None,
             summary: SterileCopySummary::from_outcomes(&[FileOutcome::StrippedAndFormatted {
                 language: "Rust".to_string(),
                 formatter: "rustfmt".to_string(),

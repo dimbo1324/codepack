@@ -69,6 +69,14 @@ codepack-tokens = { path = "crates/codepack-tokens" }
 # broader `deflate` feature bucket also enables — this crate always writes at a fixed
 # level 6 via flate2/zlib-rs, never zopfli's own (different) compression path.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# The sterile copy's `.7z` output (owner request 2026-07-29). 7z is a different
+# container from ZIP and `zip` cannot write it, so this is a genuinely new capability
+# rather than a duplicate of an existing dependency. Pure Rust — no 7-Zip binary on
+# `PATH`, no C toolchain — which matters because the product must run on a machine that
+# has nothing installed but the app itself. `default-features = false` plus `compress`
+# keeps the LZMA2 encoder while leaving out AES encryption, bzip2, PPMd and the `util`
+# convenience layer: this crate writes one archive, at one setting, with no password.
+sevenz-rust2 = { version = "0.21", default-features = false, features = ["compress"] }
 # S9 (codepack-engine): the orchestrator's analytics step (6) assembles and runs the
 # full report catalog and writes PROJECT_PROFILE.json/REPORT_PLUGINS.json over the
 # already-shipped, reviewed codepack-reports crate, rather than re-deriving any of it.

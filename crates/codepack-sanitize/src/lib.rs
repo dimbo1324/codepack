@@ -28,6 +28,8 @@ mod strip;
 
 pub use error::{Result, SanitizeError};
 pub use language::{Language, detect_language};
-pub use options::{FileOutcome, SterileCopyOptions, SterileCopyReport, SterileCopySummary};
+pub use options::{
+    FileOutcome, SterileCopyArchive, SterileCopyOptions, SterileCopyReport, SterileCopySummary,
+};
 pub use report::SCHEMA_VERSION;
 pub use run::run_sterile_copy;

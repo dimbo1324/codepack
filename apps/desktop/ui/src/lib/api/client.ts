@@ -8,7 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import type {
@@ -27,6 +27,17 @@ import type {
 /** Opens the native folder picker. `null` means the user cancelled — not an error. */
 export async function pickProjectDirectory(): Promise<string | null> {
   const selected = await openDialog({ directory: true, multiple: false });
+  return typeof selected === "string" ? selected : null;
+}
+
+/** Opens the native "save as" dialog for the sterile copy's `.7z`. `null` means the
+ * user cancelled — not an error. The extension is appended by the dialog when the user
+ * types a bare name, so the backend never has to guess at one. */
+export async function pickArchiveDestination(defaultName: string): Promise<string | null> {
+  const selected = await saveDialog({
+    defaultPath: defaultName,
+    filters: [{ name: "7z archive", extensions: ["7z"] }],
+  });
   return typeof selected === "string" ? selected : null;
 }
 
@@ -193,8 +204,14 @@ export function startSanitize(
   sourceRoot: string,
   destinationRoot: string,
   safetyMode: string,
+  archivePath: string | null,
 ): Promise<string> {
-  return invoke("start_sanitize", { sourceRoot, destinationRoot, safetyMode });
+  return invoke("start_sanitize", {
+    sourceRoot,
+    destinationRoot,
+    safetyMode,
+    archivePath,
+  });
 }
 
 export function cancelSanitize(runId: string): Promise<void> {

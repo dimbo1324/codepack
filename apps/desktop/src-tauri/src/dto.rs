@@ -245,8 +245,21 @@ pub struct SanitizeReport {
     pub source: String,
     pub destination: String,
     pub safety_mode: String,
+    /// Present only when the run was asked for a `.7z`. Reported separately from
+    /// `destination` because when the user asked for an archive only, the destination
+    /// was a scratch folder that no longer exists.
+    pub archive: Option<SanitizeArchive>,
     pub summary: SanitizeSummary,
     pub files: Vec<SanitizeFileOutcome>,
+}
+
+/// The `.7z` a sterile copy produced. `bytes` stays a number — formatting is the
+/// frontend's job, and byte-based reporting is preserved everywhere (invariant I4).
+#[derive(Debug, Clone, Serialize)]
+pub struct SanitizeArchive {
+    pub path: String,
+    pub file_count: usize,
+    pub bytes: u64,
 }
 
 /// A `sanitize:finished` event. Exactly one of `report`/`error` is set.

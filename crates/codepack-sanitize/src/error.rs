@@ -38,6 +38,28 @@ pub enum SanitizeError {
     #[error("failed to serialize the sterile copy report: {0}")]
     Serialize(#[from] serde_json::Error),
 
+    /// Boxed: `ArchiveError` carries several `PathBuf`s and an `io::Error`, and
+    /// inlining it here would make every `Result` in this crate pay for the size of the
+    /// rarest failure.
+    #[error("failed to pack the sterile copy into {path}: {source}")]
+    Archive {
+        path: PathBuf,
+        #[source]
+        source: Box<codepack_archive::ArchiveError>,
+    },
+
+    /// The archive path is inside the source project. Same reasoning as
+    /// [`Self::DestinationInsideSource`]: an archive written into the project being
+    /// read from would modify it (invariant I2), and on a second run would try to pack
+    /// itself.
+    #[error(
+        "refusing to write the archive to {archive}: it is inside the source project          {source_root}. Choose a path outside it."
+    )]
+    ArchiveInsideSource {
+        source_root: PathBuf,
+        archive: PathBuf,
+    },
+
     #[error("sterile copy cancelled")]
     Cancelled,
 }

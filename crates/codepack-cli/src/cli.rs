@@ -157,8 +157,20 @@ pub(crate) struct SanitizeArgs {
 
     /// Destination directory the sterile copy is written into. Must not be the same as,
     /// or nested inside, `--source`.
-    #[arg(long)]
-    pub out: PathBuf,
+    ///
+    /// Optional only when `--archive` is given: then the copy goes to a temporary
+    /// folder that is removed afterwards, and the `.7z` is the whole result. Wanting
+    /// only an archive should not require inventing a folder to throw away.
+    #[arg(long, required_unless_present = "archive")]
+    pub out: Option<PathBuf>,
+
+    /// Also pack the finished sterile copy into a single `.7z` at this path.
+    ///
+    /// The archive contains the copied files and `STERILE_COPY_REPORT.*`, so a
+    /// recipient holding only the archive still has the account of what was stripped,
+    /// skipped and redacted.
+    #[arg(long, value_name = "FILE")]
+    pub archive: Option<PathBuf>,
 
     /// How aggressively to exclude sensitive files. Defaults to `safe`, matching every
     /// other command that reads a project.

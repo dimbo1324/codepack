@@ -11,7 +11,9 @@
     cancelSanitize,
     onSanitizeFinished,
     onWindowDragDrop,
+    pickArchiveDestination,
     pickProjectDirectory,
+    openResultLocation,
     startSanitize,
   } from "$lib/api/client";
   import type { SanitizeFileOutcome, SanitizeOutcome } from "$lib/api/types";
@@ -23,6 +25,7 @@
   import { t } from "$lib/i18n/index.svelte";
   import { reportError } from "$lib/stores/toasts.svelte";
   import { wizard } from "$lib/stores/wizard.svelte";
+  import { formatBytes } from "$lib/util/format";
 
   import { onMount } from "svelte";
 
@@ -109,6 +112,31 @@
     if (chosen) wizard.sterileDestination = chosen;
   }
 
+  /** Suggests `<source folder name>-sterile.7z`, so the saved file says which project
+   * it came from without the user having to type it. */
+  function suggestedArchiveName(): string {
+    const source = wizard.sterileSource ?? "";
+    const leaf = source.split(/[\\/]/).filter(Boolean).pop() ?? "sterile-copy";
+    return `${leaf}-sterile.7z`;
+  }
+
+  async function chooseArchive(): Promise<void> {
+    const chosen = await pickArchiveDestination(suggestedArchiveName());
+    if (chosen) wizard.sterileArchive = chosen;
+  }
+
+  function clearArchive(): void {
+    wizard.sterileArchive = null;
+  }
+
+  async function revealArchive(path: string): Promise<void> {
+    try {
+      await openResultLocation(path);
+    } catch (error) {
+      reportError("sterile.revealFailed", error);
+    }
+  }
+
   async function begin(): Promise<void> {
     if (!wizard.sterileSource || !wizard.sterileDestination) return;
     wizard.sterileResult = null;
@@ -119,6 +147,7 @@
         wizard.sterileSource,
         wizard.sterileDestination,
         wizard.sterileSafetyMode,
+        wizard.sterileArchive,
       );
     } catch (error) {
       wizard.sterileRunning = false;
@@ -182,6 +211,26 @@
         </button>
       </div>
 
+      <div class="picker-row">
+        <span class="picker-row__icon"><Icon name="package" size={16} /></span>
+        <div class="picker-row__text">
+          <p class="picker-row__label">{t("sterile.archive")}</p>
+          {#if wizard.sterileArchive}
+            <p class="path selectable">{wizard.sterileArchive}</p>
+          {:else}
+            <p class="text-muted text-sm">{t("sterile.archive.missing")}</p>
+          {/if}
+        </div>
+        {#if wizard.sterileArchive}
+          <button class="btn" onclick={clearArchive} disabled={wizard.sterileRunning}>
+            {t("sterile.archive.clear")}
+          </button>
+        {/if}
+        <button class="btn" onclick={chooseArchive} disabled={wizard.sterileRunning}>
+          {wizard.sterileArchive ? t("sterile.archive.change") : t("sterile.archive.choose")}
+        </button>
+      </div>
+
       <Segmented
         label={t("sterile.safetyMode")}
         options={safeModes}
@@ -217,6 +266,26 @@
 
   {#if wizard.sterileError}
     <Callout tone="danger" title={t("sterile.failed")}>{wizard.sterileError}</Callout>
+  {/if}
+
+  {#if wizard.sterileResult?.archive}
+    {@const archive = wizard.sterileResult.archive}
+    <section class="card">
+      <div class="card__body archive-result">
+        <span class="picker-row__icon"><Icon name="package" size={16} /></span>
+        <div class="picker-row__text">
+          <p class="picker-row__label">{t("sterile.archive.ready")}</p>
+          <p class="path selectable">{archive.path}</p>
+          <p class="text-muted text-sm">
+            {archive.file_count}
+            {t("sterile.archive.files")} · {formatBytes(archive.bytes)}
+          </p>
+        </div>
+        <button class="btn" onclick={() => revealArchive(archive.path)}>
+          {t("sterile.archive.reveal")}
+        </button>
+      </div>
+    </section>
   {/if}
 
   {#if wizard.sterileResult}
@@ -281,7 +350,8 @@
     height: 100%;
   }
 
-  .picker-row {
+  .picker-row,
+  .archive-result {
     display: flex;
     align-items: center;
     gap: var(--space-5);

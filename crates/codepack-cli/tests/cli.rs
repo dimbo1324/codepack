@@ -819,6 +819,91 @@ fn sanitize_json_output_is_a_versioned_envelope() {
     assert!(payload["summary"]["total_files"].as_u64().unwrap() > 0);
 }
 
+#[test]
+fn sanitize_can_produce_a_7z_archive_next_to_the_folder() {
+    let sandbox = Sandbox::new().with_secret();
+    let archive = sandbox.out().join("sterile.7z");
+    let folder = sandbox.out().join("folder");
+
+    let output = sandbox.run(&[
+        "--json",
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &folder.display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert!(archive.is_file(), "no archive at {}", archive.display());
+
+    let payload = json(&output);
+    assert_eq!(payload["archive"]["path"], archive.display().to_string());
+    assert!(payload["archive"]["bytes"].as_u64().unwrap() > 0);
+
+    // Both results exist: the archive is an addition, not a replacement.
+    assert!(folder.join("STERILE_COPY_REPORT.json").is_file());
+}
+
+#[test]
+fn sanitize_with_only_an_archive_leaves_no_folder_to_clean_up() {
+    // The actual complaint this feature answers: wanting a shareable archive should not
+    // require inventing a destination folder and deleting it afterwards.
+    let sandbox = Sandbox::new();
+    let archive = sandbox.out().join("only.7z");
+    let before = listing(sandbox.out());
+
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--archive",
+        &archive.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert!(archive.is_file());
+
+    let mut after = listing(sandbox.out());
+    after.retain(|name| name != "only.7z");
+    assert_eq!(before, after, "a scratch folder was left behind");
+}
+
+#[test]
+fn sanitize_without_out_or_archive_is_a_usage_error() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+    ]);
+    assert_eq!(code(&output), 2);
+}
+
+#[test]
+fn sanitize_refuses_an_archive_path_inside_the_source() {
+    let sandbox = Sandbox::new();
+    let inside = sandbox.project().join("sterile.7z");
+    let output = sandbox.run(&[
+        "sanitize",
+        "--source",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+        "--archive",
+        &inside.display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 1);
+    assert!(stderr(&output).contains("refusing"), "{}", stderr(&output));
+    assert!(
+        !inside.exists(),
+        "the source project must be left as it was found (invariant I2)"
+    );
+}
+
 // --- verify: checking a bundle that already exists ---------------------------------
 
 #[test]

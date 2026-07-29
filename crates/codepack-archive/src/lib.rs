@@ -21,6 +21,7 @@ mod options;
 mod plan;
 mod report;
 mod restore;
+mod sevenz;
 
 pub use build::build_final_archives;
 pub use entry::{ArchiveEntry, classify_archive_group, collect_entries};
@@ -29,3 +30,4 @@ pub use options::ArchiveOptions;
 pub use plan::{ArchivePartPlan, ArchivePlan, plan_archive, predicted_result_for_plan};
 pub use report::write_archive_plan_report;
 pub use restore::{extract_zip_safely, restore_archive_set, safe_member_target};
+pub use sevenz::{SevenZipResult, pack_directory};

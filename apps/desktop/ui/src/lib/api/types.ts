@@ -228,10 +228,20 @@ export interface SanitizeFileOutcome {
   detail: string | null;
 }
 
+/** The `.7z` a run produced, when one was asked for. `bytes` is a number, not a
+ * formatted string: byte-based reporting is preserved everywhere (invariant I4) and the
+ * formatting is this layer's job. */
+export interface SanitizeArchive {
+  path: string;
+  file_count: number;
+  bytes: number;
+}
+
 export interface SanitizeReport {
   source: string;
   destination: string;
   safety_mode: string;
+  archive: SanitizeArchive | null;
   summary: SanitizeSummary;
   files: SanitizeFileOutcome[];
 }

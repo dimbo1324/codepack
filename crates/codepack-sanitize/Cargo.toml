@@ -11,6 +11,10 @@ publish.workspace = true
 codepack-core.workspace = true
 codepack-scanner.workspace = true
 codepack-security.workspace = true
+# The optional `.7z` output (owner request 2026-07-29). Archiving lives in
+# codepack-archive so the sterile copy does not become a second place that knows how to
+# write archives; the dependency points downward, as the domain rules require.
+codepack-archive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -33,6 +37,10 @@ tree-sitter-kotlin-ng.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Reading a produced `.7z` back to prove the sterile copy and its report are really in
+# it. Test-only: the crate itself never opens an archive, it only asks
+# codepack-archive to write one.
+sevenz-rust2.workspace = true
 
 [lints]
 workspace = true

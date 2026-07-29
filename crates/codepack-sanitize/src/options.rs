@@ -13,6 +13,10 @@ pub struct SterileCopyOptions {
     /// `codepack_security::should_skip_file_for_safety` already accepts; an invalid
     /// value falls back to `"safe"`, exactly like the rest of the product.
     pub safety_mode: String,
+    /// When set, the finished sterile copy is additionally packed into one `.7z` at
+    /// this path. `None` keeps the folder-only behaviour this crate shipped with, so
+    /// no existing caller changes meaning.
+    pub archive_path: Option<PathBuf>,
     pub cancellation: CancellationToken,
 }
 
@@ -93,6 +97,18 @@ impl SterileCopySummary {
 pub struct SterileCopyReport {
     pub per_file: Vec<(PathBuf, FileOutcome)>,
     pub summary: SterileCopySummary,
+    /// Present only when [`SterileCopyOptions::archive_path`] asked for one. Carries
+    /// the byte size rather than a formatted string — the caller decides how to show
+    /// it (invariant I4).
+    pub archive: Option<SterileCopyArchive>,
+}
+
+/// The `.7z` a run produced, when one was asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SterileCopyArchive {
+    pub path: PathBuf,
+    pub file_count: usize,
+    pub bytes: u64,
 }
 
 #[cfg(test)]
