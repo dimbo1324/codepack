@@ -155,6 +155,10 @@ fn every_command_emits_a_versioned_envelope() {
         (vec!["--json", "scan", project.as_str()], "scan"),
         (vec!["--json", "history"], "history"),
         (vec!["--json", "doctor"], "doctor"),
+        (
+            vec!["--json", "explain", "src/main.py", project.as_str()],
+            "explain",
+        ),
     ] {
         let output = sandbox.run(&args);
         let parsed = json(&output);
@@ -423,8 +427,133 @@ fn doctor_states_the_privacy_guarantee_and_lists_the_presets() {
     let report = json(&sandbox.run(&["--json", "doctor"]));
 
     assert!(report["network_access"].as_str().unwrap().contains("local"));
-    assert_eq!(report["presets"].as_array().unwrap().len(), 5);
+    // Every preset the binary knows, not a fixed five: `ai_presets()` pins the legacy
+    // five and its own additions, and duplicating that count here would only mean two
+    // places to update.
+    let listed = report["presets"].as_array().unwrap();
+    assert!(!listed.is_empty(), "doctor listed no presets at all");
+    assert_eq!(listed.len(), codepack_core::config::ai_presets().len());
     assert_eq!(report["project_config_file"], ".codepack.toml");
+}
+
+// --- explain, --budget by model, and the PR Review preset ---------------------------
+
+#[test]
+fn explain_answers_for_an_included_file_and_exits_zero() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "--json",
+        "explain",
+        "src/main.py",
+        &sandbox.project().display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0);
+    let report = json(&output);
+    assert_eq!(report["verdict"], "included");
+    assert_eq!(report["file"], "src\\main.py");
+    assert_eq!(report["exists_on_disk"], true);
+}
+
+#[test]
+fn explain_is_a_successful_answer_even_when_the_file_was_excluded() {
+    // The whole reason `explain` exists: "it was excluded, here is the rule" is the
+    // answer working, not a failure, so a script asking about a file must not have to
+    // treat a non-zero exit as a normal case.
+    let sandbox = Sandbox::new().with_secret();
+    let output = sandbox.run(&[
+        "--json",
+        "explain",
+        ".env",
+        &sandbox.project().display().to_string(),
+    ]);
+
+    assert_eq!(code(&output), 0);
+    let report = json(&output);
+    assert_eq!(report["verdict"], "excluded");
+    assert!(!report["reason"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn explain_writes_nothing_into_the_source_project() {
+    let sandbox = Sandbox::new();
+    let before = listing(sandbox.project());
+    let output = sandbox.run(&[
+        "--json",
+        "explain",
+        "src/main.py",
+        &sandbox.project().display().to_string(),
+    ]);
+    // Asserted before the tree comparison: a build where `explain` failed outright
+    // would leave the tree untouched too, and pass an I2 test it never exercised.
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(json(&output)["verdict"], "included");
+    assert_eq!(before, listing(sandbox.project()));
+}
+
+#[test]
+fn a_mistyped_budget_that_looks_like_a_model_fails_at_resolution_not_at_parsing() {
+    // Behaviour change worth pinning: `--budget lots` used to be a clap usage error
+    // (exit 2). Now anything not digit- or sign-leading is a model name, so it is a
+    // resolution failure (exit 1). Only values claiming to be numbers stay exit 2.
+    let sandbox = Sandbox::new();
+    let project = sandbox.project().display().to_string();
+
+    assert_eq!(
+        code(&sandbox.run(&["preview", &project, "--budget", "lots"])),
+        1
+    );
+    assert_eq!(
+        code(&sandbox.run(&["preview", &project, "--budget", "12kb"])),
+        2
+    );
+}
+
+#[test]
+fn a_budget_named_by_model_resolves_through_the_table() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "--json",
+        "preview",
+        &sandbox.project().display().to_string(),
+        "--budget",
+        "Claude",
+    ]);
+
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    assert_eq!(json(&output)["resolution"]["budget_model"], "Claude");
+}
+
+#[test]
+fn an_unknown_model_fails_by_name_rather_than_silently_running_unbudgeted() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "preview",
+        &sandbox.project().display().to_string(),
+        "--budget",
+        "no-such-model-9f3b",
+    ]);
+
+    assert_eq!(code(&output), 1);
+    let message = stderr(&output);
+    assert!(message.contains("no-such-model-9f3b"), "{message}");
+}
+
+#[test]
+fn the_pr_review_preset_is_selectable_from_the_command_line() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "--json",
+        "preview",
+        &sandbox.project().display().to_string(),
+        "--preset",
+        "PR Review",
+    ]);
+
+    assert_eq!(code(&output), 0, "{}", stderr(&output));
+    let report = json(&output);
+    assert_eq!(report["resolution"]["preset"], "PR Review");
+    assert_eq!(report["profile"], "ai_review");
 }
 
 #[test]

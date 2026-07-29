@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn a_size_limit_in_the_users_config_does_not_blind_the_scan() {
-        // Two of the five presets enable this limit; honouring it here would let a
+        // Two presets enable this limit; honouring it here would let a
         // credential in a large file pass as "no findings".
         let dir = fixture();
         let padding = "x".repeat(3 * 1024 * 1024);

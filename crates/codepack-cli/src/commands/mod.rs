@@ -2,6 +2,7 @@
 
 pub(crate) mod completions;
 pub(crate) mod doctor;
+pub(crate) mod explain;
 pub(crate) mod export;
 pub(crate) mod history;
 pub(crate) mod preview;
@@ -43,7 +44,24 @@ pub(crate) fn prepare(args: &ProjectArgs) -> Result<ProjectContext> {
         codepack_core::profiles::UserProfilesFile::default()
     };
 
-    let (config, trace) = settings::resolve(global, &root, &args.overrides(), &user_profiles)?;
+    // Loaded only when `--budget` actually named a model. Reading the override file
+    // otherwise would turn a malformed one into an error for every command, including
+    // the ones that never consult a context window.
+    let model_limits = match args.budget {
+        Some(settings::BudgetSpec::Model(_)) => {
+            codepack_tokens::ModelContextLimits::load_or_default(&app_paths.model_limits_file())
+                .map_err(|error| CliError::message(error.to_string()))?
+        }
+        _ => codepack_tokens::ModelContextLimits::default(),
+    };
+
+    let (config, trace) = settings::resolve(
+        global,
+        &root,
+        &args.overrides(),
+        &user_profiles,
+        &model_limits,
+    )?;
     Ok(ProjectContext {
         root,
         config,

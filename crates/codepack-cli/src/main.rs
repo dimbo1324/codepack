@@ -53,6 +53,7 @@ fn main() -> std::process::ExitCode {
         Command::Sanitize(args) => commands::sanitize::run(&args, format),
         Command::Completions(args) => Ok(commands::completions::run(&args)),
         Command::Verify(args) => commands::verify::run(&args, format),
+        Command::Explain(args) => commands::explain::run(&args, format),
     };
 
     if let Err(error) = &result {

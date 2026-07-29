@@ -48,6 +48,18 @@ pub(crate) enum Command {
     Completions(CompletionsArgs),
     /// Re-scan an already-produced bundle and report what is actually inside it.
     Verify(VerifyArgs),
+    /// Explain why one file would, or would not, end up in the export.
+    Explain(ExplainArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ExplainArgs {
+    /// The file to explain. Absolute, relative to the project, or spelled the way the
+    /// export plan stores it — all three name the same file.
+    pub file: PathBuf,
+
+    #[command(flatten)]
+    pub project: ProjectArgs,
 }
 
 #[derive(Debug, Args)]
@@ -97,9 +109,10 @@ pub(crate) struct ProjectArgs {
     pub diff: Option<DiffMode>,
 
     /// Token budget; drops the least valuable files to fit. Accepts `200000`, `200k`,
-    /// `1M`.
+    /// `1M`, or a model name such as `Claude`. An unknown name lists the models that
+    /// are available, so there is nothing to look up first.
     #[arg(long, value_parser = crate::settings::parse_budget)]
-    pub budget: Option<u64>,
+    pub budget: Option<crate::settings::BudgetSpec>,
 }
 
 #[derive(Debug, Args)]
@@ -223,7 +236,7 @@ impl ProjectArgs {
                 .safe_mode
                 .map(|mode| mode.as_config_value().to_string()),
             diff: self.diff.map(|mode| mode.as_config_value().to_string()),
-            budget: self.budget,
+            budget: self.budget.clone(),
         }
     }
 }
@@ -288,7 +301,10 @@ mod tests {
     fn budget_units_are_parsed_by_the_argument_parser_itself() {
         let cli = Cli::try_parse_from(["codepack", "export", ".", "--budget", "200k"]).unwrap();
         match cli.command {
-            Command::Export(args) => assert_eq!(args.project.budget, Some(200_000)),
+            Command::Export(args) => assert_eq!(
+                args.project.budget,
+                Some(crate::settings::BudgetSpec::Tokens(200_000))
+            ),
             other => panic!("expected export, got {other:?}"),
         }
     }
@@ -300,11 +316,27 @@ mod tests {
         assert_eq!(error.exit_code(), crate::exit::BAD_ARGUMENTS);
     }
 
+    /// A value that *looks* like a number but is not one stays a usage error. A value
+    /// that looks like nothing in particular is a model name now, so it is no longer
+    /// decidable at parse time — an unknown model is a resolution failure (exit 1),
+    /// reported by `settings`, not a usage error.
     #[test]
-    fn an_invalid_budget_is_a_usage_error_too() {
+    fn a_malformed_numeric_budget_is_a_usage_error_too() {
         let error =
-            Cli::try_parse_from(["codepack", "export", ".", "--budget", "lots"]).unwrap_err();
+            Cli::try_parse_from(["codepack", "export", ".", "--budget", "12kb"]).unwrap_err();
         assert_eq!(error.exit_code(), crate::exit::BAD_ARGUMENTS);
+    }
+
+    #[test]
+    fn a_model_name_budget_parses_and_is_resolved_later() {
+        let cli = Cli::try_parse_from(["codepack", "export", ".", "--budget", "Claude"]).unwrap();
+        match cli.command {
+            Command::Export(args) => assert_eq!(
+                args.project.budget,
+                Some(crate::settings::BudgetSpec::Model("Claude".to_string()))
+            ),
+            other => panic!("expected export, got {other:?}"),
+        }
     }
 
     #[test]

@@ -18,6 +18,7 @@
 use std::path::Path;
 
 use codepack_core::config::{AiPreset, Config, ai_presets};
+use codepack_tokens::ModelContextLimits;
 
 use crate::error::{CliError, Result};
 use codepack_core::config::{ProjectConfig, ProjectConfigError};
@@ -32,6 +33,11 @@ pub(crate) struct ResolutionTrace {
     pub preset: Option<String>,
     /// Name of the user-defined export profile applied, if any.
     pub profile: Option<String>,
+    /// The model `--budget` was resolved through, when it named one rather than a
+    /// number. Reported because "budget: 200000" alone does not tell a reader that the
+    /// figure came from a table entry that an override file could have changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_model: Option<String>,
 }
 
 /// The flag values that can override configuration, already parsed.
@@ -41,7 +47,7 @@ pub(crate) struct Overrides {
     pub profile: Option<String>,
     pub safe_mode: Option<String>,
     pub diff: Option<String>,
-    pub budget: Option<u64>,
+    pub budget: Option<BudgetSpec>,
 }
 
 /// Resolves the four layers into one [`Config`], reporting what contributed.
@@ -50,6 +56,7 @@ pub(crate) fn resolve(
     project_root: &Path,
     overrides: &Overrides,
     user_profiles: &codepack_core::profiles::UserProfilesFile,
+    model_limits: &ModelContextLimits,
 ) -> Result<(Config, ResolutionTrace)> {
     let mut config = base;
     let mut trace = ResolutionTrace::default();
@@ -91,8 +98,11 @@ pub(crate) fn resolve(
     if let Some(diff) = &overrides.diff {
         config.diff_export_mode = diff.clone();
     }
-    if let Some(budget) = overrides.budget {
-        config.token_budget = budget;
+    if let Some(spec) = &overrides.budget {
+        config.token_budget = resolve_budget(spec, model_limits)?;
+        if let BudgetSpec::Model(name) = spec {
+            trace.budget_model = Some(name.clone());
+        }
     }
 
     Ok((config, trace))
@@ -166,12 +176,27 @@ fn apply_preset(config: &mut Config, preset: &AiPreset) {
     }
 }
 
-/// Parses `--budget`, accepting `200000`, `200k` and `1M`.
+/// What `--budget` was given: a number of tokens, or the name of a model to look the
+/// number up from.
+///
+/// Kept unresolved until [`resolve`] because the model table can be overridden by a
+/// file whose location comes from `AppPaths`, and clap's `value_parser` runs before any
+/// of that exists. Resolving there would also misreport an unknown model as exit 2
+/// ("the arguments could not be understood") when the arguments were understood
+/// perfectly and the model simply is not in the table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BudgetSpec {
+    Tokens(u64),
+    Model(String),
+}
+
+/// Parses `--budget`, accepting `200000`, `200k`, `1M`, or a model name.
 ///
 /// BLUEPRINT §B.5's own example is `--budget 200k`, and context windows are quoted in
 /// those units everywhere, so requiring a bare integer would make the documented
-/// invocation fail.
-pub(crate) fn parse_budget(raw: &str) -> std::result::Result<u64, String> {
+/// invocation fail. Anything that is not a number is taken as a model name and checked
+/// later — this stage only decides *which kind* of value it is.
+pub(crate) fn parse_budget(raw: &str) -> std::result::Result<BudgetSpec, String> {
     let text = raw.trim();
     if text.is_empty() {
         return Err("budget must not be empty".to_string());
@@ -183,12 +208,84 @@ pub(crate) fn parse_budget(raw: &str) -> std::result::Result<u64, String> {
         _ => (text, 1),
     };
 
+    // A leading digit or sign is what distinguishes "a number, possibly with a unit"
+    // from "a model name" — and `Gemini 1.5 Pro (1M)` ends in `M`, so the suffix alone
+    // cannot decide it. A sign counts as numeric intent so that `-5` stays a usage
+    // error instead of becoming a model nobody will ever have.
+    if !digits
+        .trim()
+        .starts_with(|character: char| character.is_ascii_digit() || matches!(character, '+' | '-'))
+    {
+        return Ok(BudgetSpec::Model(text.to_string()));
+    }
+
     let value: u64 = digits.trim().parse().map_err(|_| {
-        format!("`{raw}` is not a token budget; use a number, or a number with k/M")
+        format!("`{raw}` is not a token budget; use a number, a number with k/M, or a model name")
     })?;
     value
         .checked_mul(multiplier)
+        .map(BudgetSpec::Tokens)
         .ok_or_else(|| format!("`{raw}` is too large to be a token budget"))
+}
+
+/// Turns a [`BudgetSpec`] into a token count, consulting the model table when needed.
+///
+/// Matching is deliberately forgiving, because the table holds legacy *display* names —
+/// `Claude (200K)`, `GPT-4o (128K)` — and demanding one of those verbatim, with its
+/// capitals and parentheses, through a shell that treats them specially would make the
+/// feature technically present and practically unusable.
+///
+/// Forgiving matching needs a stated rule for collisions, so: exact, then
+/// case-insensitive exact, then case-insensitive substring **only when exactly one
+/// model matches**. `GPT-4` matches two entries and is an error naming both — guessing
+/// there would silently pick a context window the user did not ask for, and a budget
+/// that is wrong in the generous direction quietly ships more than intended.
+pub(crate) fn resolve_budget(spec: &BudgetSpec, limits: &ModelContextLimits) -> Result<u64> {
+    let name = match spec {
+        BudgetSpec::Tokens(value) => return Ok(*value),
+        BudgetSpec::Model(name) => name,
+    };
+
+    if let Some(limit) = limits.get(name) {
+        return Ok(limit);
+    }
+
+    let wanted = name.to_lowercase();
+    if let Some((_, limit)) = limits
+        .iter()
+        .find(|(candidate, _)| candidate.to_lowercase() == wanted)
+    {
+        return Ok(limit);
+    }
+
+    let matches: Vec<(&str, u64)> = limits
+        .iter()
+        .filter(|(candidate, _)| candidate.to_lowercase().contains(&wanted))
+        .collect();
+
+    match matches.as_slice() {
+        [(_, limit)] => Ok(*limit),
+        [] => Err(CliError::message(format!(
+            "unknown model `{name}`; available models: {}",
+            model_names(limits)
+        ))),
+        several => Err(CliError::message(format!(
+            "`{name}` matches more than one model: {}. Name one of them exactly.",
+            several
+                .iter()
+                .map(|(candidate, _)| *candidate)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
+fn model_names(limits: &ModelContextLimits) -> String {
+    limits
+        .iter()
+        .map(|(name, _)| name)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
@@ -200,19 +297,186 @@ mod tests {
         tempfile::tempdir().unwrap()
     }
 
-    #[test]
-    fn budget_accepts_the_units_blueprint_uses() {
-        assert_eq!(parse_budget("200000").unwrap(), 200_000);
-        assert_eq!(parse_budget("200k").unwrap(), 200_000);
-        assert_eq!(parse_budget("200K").unwrap(), 200_000);
-        assert_eq!(parse_budget("1M").unwrap(), 1_000_000);
-        assert_eq!(parse_budget(" 8k ").unwrap(), 8_000);
+    fn tokens(raw: &str) -> u64 {
+        match parse_budget(raw).unwrap() {
+            BudgetSpec::Tokens(value) => value,
+            BudgetSpec::Model(name) => panic!("`{raw}` should be a number, parsed as model {name}"),
+        }
     }
 
     #[test]
+    fn budget_accepts_the_units_blueprint_uses() {
+        assert_eq!(tokens("200000"), 200_000);
+        assert_eq!(tokens("200k"), 200_000);
+        assert_eq!(tokens("200K"), 200_000);
+        assert_eq!(tokens("1M"), 1_000_000);
+        assert_eq!(tokens(" 8k "), 8_000);
+    }
+
+    #[test]
+    fn a_non_numeric_budget_is_taken_as_a_model_name() {
+        assert_eq!(
+            parse_budget("Claude").unwrap(),
+            BudgetSpec::Model("Claude".to_string())
+        );
+        // Ends in `M`, but does not start with a digit — the suffix alone cannot decide.
+        assert_eq!(
+            parse_budget("Gemini 1.5 Pro (1M)").unwrap(),
+            BudgetSpec::Model("Gemini 1.5 Pro (1M)".to_string())
+        );
+    }
+
+    #[test]
+    fn a_model_name_resolves_through_the_table() {
+        let limits = ModelContextLimits::default();
+
+        // Exact.
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Model("Claude (200K)".into()), &limits).unwrap(),
+            200_000
+        );
+        // Case-insensitive exact.
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Model("claude (200k)".into()), &limits).unwrap(),
+            200_000
+        );
+        // Unambiguous substring — the spelling a person actually types.
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Model("claude".into()), &limits).unwrap(),
+            200_000
+        );
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Model("gemini".into()), &limits).unwrap(),
+            1_000_000
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_model_names_the_candidates_instead_of_guessing() {
+        // Two entries contain `gpt-4`; picking one would silently hand back a context
+        // window the user did not ask for.
+        let error = resolve_budget(
+            &BudgetSpec::Model("gpt-4".into()),
+            &ModelContextLimits::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("more than one"), "{error}");
+        assert!(error.contains("GPT-4o (128K)"), "{error}");
+        assert!(error.contains("GPT-4 Turbo (128K)"), "{error}");
+    }
+
+    #[test]
+    fn an_unknown_model_lists_what_is_available() {
+        let error = resolve_budget(
+            &BudgetSpec::Model("llama".into()),
+            &ModelContextLimits::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("unknown model"), "{error}");
+        assert!(error.contains("Claude (200K)"), "{error}");
+    }
+
+    #[test]
+    fn a_numeric_budget_never_consults_the_table() {
+        // Including zero, which means "no budget" and must keep meaning that.
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Tokens(0), &ModelContextLimits::default()).unwrap(),
+            0
+        );
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Tokens(1234), &ModelContextLimits::default()).unwrap(),
+            1234
+        );
+    }
+
+    #[test]
+    fn resolving_by_model_is_recorded_in_the_trace() {
+        let dir = empty_project();
+        let overrides = Overrides {
+            budget: Some(BudgetSpec::Model("claude".into())),
+            ..Overrides::default()
+        };
+        let (config, trace) = resolve(
+            Config::default(),
+            dir.path(),
+            &overrides,
+            &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(config.token_budget, 200_000);
+        assert_eq!(trace.budget_model.as_deref(), Some("claude"));
+    }
+
+    /// The point of routing through `ModelContextLimits` rather than a hard-coded
+    /// match: a model the binary has never heard of works without a rebuild.
+    #[test]
+    fn a_model_added_by_the_override_file_resolves() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("model_limits.json");
+        std::fs::write(&file, r#"{"Brand New 5 (2M)": 2000000}"#).unwrap();
+        let limits = ModelContextLimits::load_or_default(&file).unwrap();
+
+        assert_eq!(
+            resolve_budget(&BudgetSpec::Model("brand new 5".into()), &limits).unwrap(),
+            2_000_000
+        );
+    }
+
+    #[test]
+    fn a_numeric_budget_leaves_the_model_field_empty() {
+        let dir = empty_project();
+        let overrides = Overrides {
+            budget: Some(BudgetSpec::Tokens(50_000)),
+            ..Overrides::default()
+        };
+        let (config, trace) = resolve(
+            Config::default(),
+            dir.path(),
+            &overrides,
+            &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(config.token_budget, 50_000);
+        assert_eq!(trace.budget_model, None);
+    }
+
+    #[test]
+    fn the_pr_review_preset_is_reachable_from_the_flag() {
+        let dir = empty_project();
+        let overrides = Overrides {
+            preset: Some("pr review".to_string()),
+            ..Overrides::default()
+        };
+        let (config, trace) = resolve(
+            Config::default(),
+            dir.path(),
+            &overrides,
+            &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(trace.preset.as_deref(), Some("PR Review"));
+        assert_eq!(config.diff_export_mode, "uncommitted");
+        assert_eq!(config.export_profile, "ai_review");
+        assert!(config.include_git_patch);
+        assert!(config.redact_secrets);
+    }
+
+    /// Only values that *claim* to be numbers are rejected here. A word like `lots` is
+    /// now a model name, and is rejected later — by name, with the table listed — which
+    /// is a better message than a parser could give.
+    #[test]
     fn budget_rejects_nonsense_instead_of_guessing() {
         assert!(parse_budget("").is_err());
-        assert!(parse_budget("lots").is_err());
         assert!(parse_budget("12kb").is_err());
         assert!(parse_budget("-5").is_err());
         assert!(parse_budget("99999999999999999999M").is_err());
@@ -237,6 +501,7 @@ mod tests {
             dir.path(),
             &overrides,
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap();
 
@@ -263,6 +528,7 @@ mod tests {
             dir.path(),
             &Overrides::default(),
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap();
 
@@ -284,6 +550,7 @@ mod tests {
             dir.path(),
             &overrides,
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap();
 
@@ -305,6 +572,7 @@ mod tests {
             dir.path(),
             &overrides,
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap();
         assert_eq!(config.safe_export_mode, "full");
@@ -325,6 +593,7 @@ mod tests {
             dir.path(),
             &overrides,
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap_err()
         .to_string();
@@ -349,8 +618,14 @@ mod tests {
             profile: Some("team".to_string()),
             ..Overrides::default()
         };
-        let (config, trace) =
-            resolve(Config::default(), dir.path(), &overrides, &profiles).unwrap();
+        let (config, trace) = resolve(
+            Config::default(),
+            dir.path(),
+            &overrides,
+            &profiles,
+            &ModelContextLimits::default(),
+        )
+        .unwrap();
         assert_eq!(config.safe_export_mode, "safe");
         assert_eq!(trace.profile.as_deref(), Some("team"));
     }
@@ -382,6 +657,7 @@ mod tests {
             dir.path(),
             &Overrides::default(),
             &UserProfilesFile::default(),
+            &ModelContextLimits::default(),
         )
         .unwrap();
         assert_eq!(config, Config::default());
