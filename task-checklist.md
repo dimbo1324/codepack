@@ -116,8 +116,9 @@ Saying so now so the final report is not the first place it appears.
 ## Completion
 
 - [+] Checklist filled `+`/`-` honestly, final report in Russian
-- [ ] Push to `origin`, fast-forward merge into `main`, delete every branch but `main`
-      — the last step, after this checklist is committed
+- [+] Push to `origin`, fast-forward merge into `main`, delete every branch but `main`
+      — done: `main` is at `24af901`, and `git ls-remote --heads origin` shows `main`
+      alone
 
 ---
 
