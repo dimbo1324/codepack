@@ -69,8 +69,9 @@ fn signature_display(signature: &Signature<'_>) -> String {
     format!("{name} <{email}>")
 }
 
-/// A commit's author date, rendered in UTC. Git stores the timestamp as signed epoch
-/// seconds plus a separate timezone offset; the offset is deliberately dropped here for
+/// A commit's timestamp (`git2::Commit::time`, the committer moment), rendered in UTC
+/// down to the second. Git stores it as signed epoch seconds plus a separate timezone
+/// offset; the offset is deliberately dropped here for
 /// the same reason every other timestamp in this crate renders UTC (see
 /// [`codepack_core::time`]) — a stable, unambiguous rendering beats reproducing each
 /// committer's local zone.
@@ -124,6 +125,13 @@ fn status_short(repo: &Repository) -> Vec<String> {
     lines
 }
 
+/// Legacy's `git log --oneline -5`, plus each commit's committer moment — the
+/// `--date=iso-strict --pretty=%h %cd %s` shape rather than the bare `--oneline` one.
+///
+/// Owner decision 2026-08-05: a log a reader cannot place in time is half a log, and
+/// this project routinely produces several commits in one day. The committer date is
+/// the one shown, not the author date, because it is what orders the history as it
+/// actually landed — a rebased or cherry-picked commit keeps its original author date.
 fn recent_log(repo: &Repository, limit: usize) -> Vec<String> {
     let Ok(mut revwalk) = repo.revwalk() else {
         return Vec::new();
@@ -139,8 +147,9 @@ fn recent_log(repo: &Repository, limit: usize) -> Vec<String> {
             continue;
         };
         lines.push(format!(
-            "{} {}",
+            "{} {} {}",
             short_oid(oid),
+            format_commit_datetime(commit.time().seconds()),
             commit.summary().ok().flatten().unwrap_or("")
         ));
     }
@@ -396,7 +405,7 @@ pub fn write_git_report(
     bail_if_cancelled!();
     write_section(
         &mut out,
-        "git log --oneline -5",
+        "git log -5 --date=iso-strict --pretty=%h %cd %s",
         &recent_log(&repo, 5),
         redact,
     );
@@ -553,9 +562,22 @@ mod tests {
         assert!(content.contains("$ git status --short --branch"));
         assert!(content.contains("untracked.txt"));
         assert!(content.contains("$ git branch --show-current"));
-        assert!(content.contains("$ git log --oneline -5"));
+        assert!(content.contains("$ git log -5 --date=iso-strict --pretty=%h %cd %s"));
         assert!(content.contains("first"));
         assert!(content.contains("second"));
+        // Every logged commit is placed in time to the second. The indented copy of
+        // the message inside the `git show` section ends with the same words, so log
+        // lines are told apart by not being indented.
+        let logged: Vec<&str> = content
+            .lines()
+            .filter(|line| {
+                !line.starts_with(' ') && (line.ends_with("first") || line.ends_with("second"))
+            })
+            .collect();
+        assert_eq!(logged.len(), 2, "both commits appear in the log section");
+        for line in logged {
+            assert!(line.contains(" UTC "), "{line} carries no moment");
+        }
         assert!(content.contains("$ git show --stat --name-status HEAD"));
         assert!(content.contains("b.py"));
         assert!(content.contains("Secret redaction is disabled."));

@@ -39,6 +39,7 @@ for when and how to change them, and `.ai/CHANGELOG.md` for what changed so far.
 - @.ai/universal/06-quality-and-testing.md
 - @.ai/universal/07-multi-assistant.md
 - @.ai/universal/08-rules-evolution.md
+- @.ai/universal/09-time-and-timestamps.md
 
 ## Project rules (codepack)
 

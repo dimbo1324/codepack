@@ -124,8 +124,8 @@
                     {t(`history.status.${status.key}`)}
                   </span>
                 </td>
-                <td class="when" title={entry.started_at_utc}>
-                  {formatRelativeTime(entry.started_at, language.current)}
+                <td class="when" title={formatRelativeTime(entry.started_at, language.current)}>
+                  {entry.started_at_utc}
                 </td>
                 <td>
                   <span class="project" title={entry.project_root}>{entry.project_name}</span>

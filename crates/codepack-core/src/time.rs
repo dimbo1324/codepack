@@ -16,6 +16,15 @@
 //! timestamps are cosmetic (nothing parses `generated_at` back), so every artifact
 //! renders **UTC** instead. That is a deliberate, long-standing deviation from legacy,
 //! recorded in `docs/__arch__/ROADMAP.md`'s S2 section and reaffirmed here — not a gap.
+//!
+//! ## Why there is no date-only formatter
+//!
+//! There used to be a `format_date` returning `YYYY-MM-DD`, used for commit listings
+//! "where the time adds noise". Owner decision 2026-08-05 reversed that judgement: a
+//! date without a time cannot order two commits made on the same day, which is exactly
+//! when ordering is being asked for. Every formatter here therefore carries hours,
+//! minutes and seconds, and truncating one is a decision to take deliberately at the
+//! call site rather than a helper this module offers.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -101,12 +110,6 @@ impl UtcDateTime {
     pub fn format_compact(&self) -> String {
         let (y, mo, d, h, mi, s) = self.parts();
         format!("{y:04}{mo:02}{d:02}_{h:02}{mi:02}{s:02}")
-    }
-
-    /// `YYYY-MM-DD` — date alone, for per-commit listings where the time adds noise.
-    pub fn format_date(&self) -> String {
-        let (y, mo, d, ..) = self.parts();
-        format!("{y:04}-{mo:02}-{d:02}")
     }
 
     fn parts(&self) -> (i64, u32, u32, u32, u32, u32) {
@@ -213,12 +216,29 @@ mod tests {
     }
 
     #[test]
-    fn all_four_formats_render_the_same_instant_consistently() {
+    fn every_format_renders_the_same_instant_consistently() {
         let dt = UtcDateTime::from_unix_seconds(1_704_112_496);
         assert_eq!(dt.format_human(), "2024-01-01 12:34:56");
         assert_eq!(dt.format_human_utc(), "2024-01-01 12:34:56 UTC");
         assert_eq!(dt.format_compact(), "20240101_123456");
-        assert_eq!(dt.format_date(), "2024-01-01");
+    }
+
+    #[test]
+    fn no_formatter_truncates_the_time_of_day() {
+        // Owner decision 2026-08-05: a date-only rendering cannot order two commits
+        // made on the same day. Every formatter must therefore carry hh:mm:ss, and
+        // this test is what stops a convenience date-only helper coming back.
+        let dt = UtcDateTime::from_unix_seconds(1_704_112_496);
+        for rendered in [
+            dt.format_human(),
+            dt.format_human_utc(),
+            dt.format_compact(),
+        ] {
+            assert!(
+                rendered.contains("12:34:56") || rendered.contains("123456"),
+                "{rendered} drops the time of day"
+            );
+        }
     }
 
     #[test]

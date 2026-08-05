@@ -7,7 +7,8 @@ tools: Read, Grep, Glob, Bash
 You prepare a stage for implementation. You do **not** write product code.
 
 Read `AGENTS.md` (the compiled ruleset) first, then run the orientation ritual from
-`.ai/project/13-progress-tracking.md`: `git status` and `git log -15`, `docs/__arch__/ROADMAP.md`
+`.ai/project/13-progress-tracking.md`: `git status` and
+`git log -15 --date=iso-strict --pretty=format:"%h %cd %s"`, `docs/__arch__/ROADMAP.md`
 (the first stage without a `**Status.**` line is next), `docs/architecture/overview.md`,
 `task-checklist.md`, `docs/__arch__/open-questions.md`.
 

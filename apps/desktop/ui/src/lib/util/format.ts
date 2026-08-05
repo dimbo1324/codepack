@@ -56,9 +56,10 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", Number.POSITIVE_INFINITY],
 ];
 
-/** "3 minutes ago" from a unix-seconds timestamp. The absolute UTC string stays
- * available as the row's tooltip: relative time is what a user scans, absolute time is
- * what they need when they are actually comparing two runs. */
+/** "3 minutes ago" from a unix-seconds timestamp. This is now the *secondary* rendering
+ * — the history table shows the exact `YYYY-MM-DD HH:MM:SS UTC` moment and keeps this
+ * as the tooltip. Owner decision 2026-08-05: "an hour ago" cannot be compared against
+ * another run, and two runs minutes apart read as the same relative time. */
 export function formatRelativeTime(unixSeconds: number, language: Language): string {
   const formatter = new Intl.RelativeTimeFormat(language === "ru" ? "ru-RU" : "en-US", {
     numeric: "auto",

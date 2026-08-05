@@ -3,7 +3,9 @@
 //! separate `git` subprocess commands (`status --short --branch`, `branch
 //! --show-current`, `branch -a`, `remote -v`, `diff --stat`, `diff --name-only`,
 //! `ls-files`, `ls-files --others --exclude-standard`,
-//! `log --oneline --decorate --graph -20`, `rev-parse --show-toplevel`) and redacts
+//! `log --decorate --graph -20` (legacy's own call was `--oneline`; owner decision
+//! 2026-08-05 adds `--date=iso-strict` so each commit carries its moment),
+//! `rev-parse --show-toplevel`) and redacts
 //! each command's raw stdout/stderr before writing it. Domain rules forbid shelling
 //! out to `git` from this crate (`unsafe`/subprocess bans aside, `codepack-reports`
 //! must never invoke an external `git` binary) — every section here is the
@@ -215,6 +217,9 @@ fn ls_files_untracked(repo: &Repository) -> Vec<String> {
     lines
 }
 
+/// The graph-marker log line, `* <short oid> <moment> <subject>`. The moment is the
+/// committer date, which is what orders the history as it landed; see
+/// [`crate::git_support::format_commit_datetime`] for why it is rendered in full.
 fn recent_log(repo: &Repository, limit: usize) -> Vec<String> {
     let Ok(mut revwalk) = repo.revwalk() else {
         return Vec::new();
@@ -230,8 +235,9 @@ fn recent_log(repo: &Repository, limit: usize) -> Vec<String> {
             continue;
         };
         lines.push(format!(
-            "* {} {}",
+            "* {} {} {}",
             short_oid(oid),
+            crate::git_support::format_commit_datetime(commit.time().seconds()),
             commit.summary().ok().flatten().unwrap_or("")
         ));
     }
@@ -279,7 +285,7 @@ fn write_git_deep_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<
     );
     write_section(
         &mut out,
-        "git log --oneline --decorate --graph -20",
+        "git log --decorate --graph -20 --date=iso-strict --pretty=%h %cd %s",
         &recent_log(&repo, 20),
     );
     write_section(

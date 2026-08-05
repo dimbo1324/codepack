@@ -12,7 +12,7 @@ skip the S0→S14 order without an owner decision.
 
 ```powershell
 git status --short --branch
-git log --oneline -15
+git log -15 --date=iso-strict --pretty=format:"%h %cd %s"
 ```
 
 Then read, in order: `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines (the first stage

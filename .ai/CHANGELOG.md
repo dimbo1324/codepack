@@ -8,6 +8,27 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+### 2026-08-05 — a date is never taken without its moment
+
+**What changed.** New universal module `09-time-and-timestamps.md`: any fact carrying a
+date is read and reported at full precision — hours, minutes, seconds, and the zone —
+and the git commands the rules prescribe now say so. The orientation ritual in
+`13-progress-tracking.md` and the coordination check in `07-multi-assistant.md` both
+moved from `git log --oneline` to
+`git log --date=iso-strict --pretty=format:"%h %cd %s"`; the `stage-episode` skill and
+the stage-planner agent were updated on both the `.claude/` and `.codex/` sides. The
+module is marked `tier: extended`, so `AGENTS.md` carries its essence line rather than
+its full text — the compiled file was 30127 of its 30720-byte budget before this change,
+and the essence line states the rule completely.
+
+**Why.** Owner instruction: a date with no time cannot order two things that happened on
+the same day, and several commits a day is this project's normal rhythm. The same
+instruction reached the product — `codepack-core::time` no longer offers a date-only
+formatter, and the Git sections of `04_git_report.txt`, `05_git_deep.txt` and
+`21_git_timeline_report.md` stamp every commit to the second.
+
+**Who decided.** Owner, 2026-08-05.
+
 ### 2026-07-30 — internal vs external documents
 
 **What changed.** `BLUEPRINT.md`, `ROADMAP.md` and `docs/decisions/open-questions.md`

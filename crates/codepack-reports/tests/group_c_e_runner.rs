@@ -112,12 +112,18 @@ fn group_c_and_group_e_jobs_run_end_to_end_for_a_multi_stack_git_fixture() {
 
     // Group C: real Git history was found and read.
     let git_deep = std::fs::read_to_string(out_dir.path().join("05_git_deep.txt")).unwrap();
-    assert!(git_deep.contains("$ git log --oneline --decorate --graph -20"));
+    assert!(
+        git_deep.contains("$ git log --decorate --graph -20 --date=iso-strict --pretty=%h %cd %s")
+    );
     assert!(!git_deep.contains("No .git directory was found"));
 
     let git_timeline =
         std::fs::read_to_string(out_dir.path().join("21_git_timeline_report.md")).unwrap();
     assert!(git_timeline.contains("init: import demo project"));
+    // Both Group C reports place every commit in time to the second (owner decision
+    // 2026-08-05), not on a day that several commits share.
+    assert!(git_deep.contains(" UTC init: import demo project"));
+    assert!(git_timeline.contains(" UTC — "));
 
     // Group E: the dependency graph's Mermaid sibling exists and resolved the Python edge.
     assert!(out_dir.path().join("14_dependency_graph.mmd").exists());

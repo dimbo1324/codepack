@@ -1,7 +1,9 @@
 //! `21_git_timeline_report.md`, ported from legacy
 //! `reports/insights/git_timeline.py::write_git_timeline_report`. Legacy shells out to
 //! `git branch --show-current`, `git rev-parse --short HEAD`, `git shortlog -sne HEAD`,
-//! `git log --date=short --pretty=... -30`, and `git log --numstat --pretty=format: -200`;
+//! `git log --date=iso-strict --pretty=... -30` (legacy's own call used `--date=short`;
+//! owner decision 2026-08-05 requires the full moment), and
+//! `git log --numstat --pretty=format: -200`;
 //! every one of those is reproduced here as a read-only `git2` query
 //! ([`crate::git_support`]) rather than a subprocess call (domain rules forbid shelling
 //! out to `git` from this crate).
@@ -17,7 +19,7 @@ use git2::{Patch, Repository, Sort};
 use crate::context::{ReportContext, redact_line};
 use crate::error::ReportError;
 use crate::git_support::{
-    current_branch_name, format_commit_date, open_repository, short_oid, signature_display,
+    current_branch_name, format_commit_datetime, open_repository, short_oid, signature_display,
 };
 use crate::plugin::ReportJob;
 use crate::profile;
@@ -71,9 +73,9 @@ fn recent_commits(repo: &Repository, limit: usize) -> Vec<String> {
             continue;
         };
         let author = commit.author();
-        let date = format_commit_date(author.when().seconds());
+        let moment = format_commit_datetime(author.when().seconds());
         lines.push(format!(
-            "`{}` {date} — {}: {}",
+            "`{}` {moment} — {}: {}",
             short_oid(oid),
             signature_display(&author),
             commit.summary().ok().flatten().unwrap_or("")
@@ -259,6 +261,12 @@ mod tests {
         assert!(content.contains("Test User <test@example.local>"));
         assert!(content.contains("## Last 30 commits"));
         assert!(content.contains("second commit"));
+        // Each commit line carries the moment, not just the day: two commits made
+        // seconds apart (as these two are) are otherwise indistinguishable in order.
+        assert!(
+            content.contains(" UTC — Test User"),
+            "commit lines must carry hh:mm:ss UTC"
+        );
         assert!(content.contains("## Files with the most churn"));
         assert!(content.contains("main.py"));
         assert!(!content.contains("sk-super-secret-value"));

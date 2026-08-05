@@ -288,7 +288,8 @@ sessions; git is the coordination surface and the rule modules are shared.
 
 ## Coordination through git
 
-- Before non-trivial work, check `git log --oneline -10` and
+- Before non-trivial work, check
+  `git log -10 --date=iso-strict --pretty=format:"%h %cd %s"` and
   `git status --short --branch`: recent commits may be another assistant's finished
   work — not yours to redo or second-guess.
 - Never rewrite history on another assistant's in-flight branch. Build on top of it or
@@ -578,7 +579,7 @@ primary recovery mechanism after a lost conversation.
 | What must never break | `docs/architecture/invariants.md` |
 | Owner decisions and open questions | `docs/__arch__/open-questions.md` |
 | What the current or last task was | `task-checklist.md` |
-| What actually happened recently | `git log --oneline -15` |
+| What actually happened recently | `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` |
 | How the rules themselves changed | `.ai/CHANGELOG.md` |
 | How the legacy version worked | `docs/__arch__/codepack-main.zip` |
 
@@ -586,7 +587,9 @@ primary recovery mechanism after a lost conversation.
 
 In order, without skipping:
 
-1. `git status --short --branch` and `git log --oneline -15`.
+1. `git status --short --branch` and
+   `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` — with committer dates,
+   not `--oneline`: several commits a day is normal here.
 2. `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
    line is done; **the first stage without one is next**.
 3. `docs/architecture/overview.md` — what exists in the code right now.
@@ -642,6 +645,12 @@ when a task touches it — that is an obligation, not a suggestion.
 File: `.ai/universal/08-rules-evolution.md`
 
 Never weaken a rule to make a task easier — propose changes instead; autonomous edits may only clarify or correct, never loosen; every change needs a changelog entry and a regenerated entry point.
+
+## Time and Timestamps: Never Take a Date Without Its Moment
+
+File: `.ai/universal/09-time-and-timestamps.md`
+
+Read and report every date at full precision — hours, minutes, seconds, zone. For git use `--date=iso-strict` (`git log --pretty=format:"%h %cd %s"`); `--oneline`, `--date=short` and "2 days ago" never answer *when*.
 
 ## Legacy Reference: The Previous Python Implementation
 

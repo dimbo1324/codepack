@@ -5,7 +5,8 @@ sessions; git is the coordination surface and the rule modules are shared.
 
 ## Coordination through git
 
-- Before non-trivial work, check `git log --oneline -10` and
+- Before non-trivial work, check
+  `git log -10 --date=iso-strict --pretty=format:"%h %cd %s"` and
   `git status --short --branch`: recent commits may be another assistant's finished
   work — not yours to redo or second-guess.
 - Never rewrite history on another assistant's in-flight branch. Build on top of it or

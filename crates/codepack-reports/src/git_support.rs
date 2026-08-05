@@ -46,10 +46,21 @@ pub(crate) fn short_oid(oid: Oid) -> String {
     full.chars().take(7).collect()
 }
 
-/// `YYYY-MM-DD`, from a commit's author time (`git log --date=short`). Rendered in UTC
-/// via the workspace-wide calendar implementation in [`codepack_core::time`].
-pub(crate) fn format_commit_date(seconds_since_epoch: i64) -> String {
-    codepack_core::time::UtcDateTime::from_unix_seconds(seconds_since_epoch).format_date()
+/// `YYYY-MM-DD HH:MM:SS UTC` from a commit timestamp — the `git log --date=iso-strict`
+/// level of detail rather than legacy's `--date=short`.
+///
+/// Which of a commit's two timestamps is passed in is the caller's decision, and the
+/// two callers differ deliberately: `21_git_timeline_report.md` passes the **author**
+/// time, matching the legacy report it reproduces, while `05_git_deep.txt` passes the
+/// **committer** time, which is what its graph log orders by.
+///
+/// Legacy truncated to the day. Owner decision 2026-08-05 reverses that: several
+/// commits a day is the normal rhythm of this project, and a day-granular stamp cannot
+/// tell a reader which of them came first. The timezone offset Git stores alongside the
+/// timestamp is still dropped, for the reason every timestamp in this workspace renders
+/// UTC (see [`codepack_core::time`]).
+pub(crate) fn format_commit_datetime(seconds_since_epoch: i64) -> String {
+    codepack_core::time::UtcDateTime::from_unix_seconds(seconds_since_epoch).format_human_utc()
 }
 
 /// `Name <email>`, from a `git2::Signature` — falls back to `"(unknown)"` for a
@@ -147,8 +158,20 @@ mod tests {
     }
 
     #[test]
-    fn format_commit_date_matches_known_epoch_values() {
-        assert_eq!(format_commit_date(0), "1970-01-01");
-        assert_eq!(format_commit_date(1_704_112_496), "2024-01-01");
+    fn format_commit_datetime_carries_the_full_moment() {
+        assert_eq!(format_commit_datetime(0), "1970-01-01 00:00:00 UTC");
+        assert_eq!(
+            format_commit_datetime(1_704_112_496),
+            "2024-01-01 12:34:56 UTC"
+        );
+    }
+
+    #[test]
+    fn two_commits_on_the_same_day_render_distinguishably() {
+        // The whole point of the 2026-08-05 change: a day-granular stamp made these
+        // two identical, and the timeline report lists them in the same block.
+        let morning = format_commit_datetime(1_704_112_496);
+        let evening = format_commit_datetime(1_704_112_496 + 3_600);
+        assert_ne!(morning, evening);
     }
 }

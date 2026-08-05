@@ -14,7 +14,7 @@ primary recovery mechanism after a lost conversation.
 | What must never break | `docs/architecture/invariants.md` |
 | Owner decisions and open questions | `docs/__arch__/open-questions.md` |
 | What the current or last task was | `task-checklist.md` |
-| What actually happened recently | `git log --oneline -15` |
+| What actually happened recently | `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` |
 | How the rules themselves changed | `.ai/CHANGELOG.md` |
 | How the legacy version worked | `docs/__arch__/codepack-main.zip` |
 
@@ -22,7 +22,9 @@ primary recovery mechanism after a lost conversation.
 
 In order, without skipping:
 
-1. `git status --short --branch` and `git log --oneline -15`.
+1. `git status --short --branch` and
+   `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` — with committer dates,
+   not `--oneline`: several commits a day is normal here.
 2. `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
    line is done; **the first stage without one is next**.
 3. `docs/architecture/overview.md` — what exists in the code right now.
