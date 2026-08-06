@@ -1,81 +1,82 @@
 # Task Checklist
 
-**Task:** Full-precision timestamps everywhere a date is read or shown — hours, minutes
-and seconds, especially for Git commits.
+**Task:** Four owner-approved capabilities in one branch — the S13 door for local agents,
+git-history scanning, stable redaction pseudonyms, and a ready-made pre-commit hook plus
+a GitHub Action.
 
-**Date:** 2026-08-05
-**Branch:** feat/full-precision-timestamps
+**Date:** 2026-08-06
+**Branch:** feat/agent-handoff-history-scan-pseudonyms-ci-hooks
 
-Owner instruction, 2026-08-05: whenever information carrying a date is taken, the
-precise moment must come with it — hours, minutes, seconds. Git commit inspection is
-the named case. Owner approved, once green: merge into `main` and push.
+Owner instruction, 2026-08-06: implement proposals 1, 3, 5 and 6 in one pass, test
+everything, then merge into `main` and push.
 
 ## Preparation
 
-- [+] Orientation ritual: git status/log, ROADMAP, overview, previous checklist,
-      open questions — the previous task closed cleanly, nothing left open
-- [+] Inventory: every date-producing site was traced through
-      `codepack-core::time`, which is the single calendar implementation. Already at
-      full precision: `manifest.json` and every artifact header, the CLI `history`
-      table, file mtimes, all SQLite rows (epoch seconds). Truncating: the two Group C
-      Git reports, and the desktop history table
+- [ ] Orientation ritual: git status/log with `--date=iso-strict`, ROADMAP, overview,
+      previous checklist, open questions
+- [ ] Read the four affected areas before touching them: `codepack-ai`,
+      `codepack-security` redaction, `codepack-cli` (`scan`, `staged`), desktop commands
+      and the frontend client
+- [ ] Commit this checklist before the work
 
-## Implementation — product
+## Implementation — 1. The S13 door (local agent handoff)
 
-- [+] `codepack-core::time`: `format_date` removed. Without a date-only helper in the
-      shared module, truncation has to be written out at the call site where a reviewer
-      sees it. A test now asserts no formatter drops the time of day
-- [+] `21_git_timeline_report.md`: each of the last 30 commits carries
-      `YYYY-MM-DD HH:MM:SS UTC` instead of `YYYY-MM-DD`
-- [+] `05_git_deep.txt`: the graph log gained the same stamp — found during the sweep,
-      it had no time either
-- [+] `04_git_report.txt`: the recent-log section had **no** date at all
-      (`git log --oneline -5`); every line now carries the committer moment
-- [+] Desktop history table: the exact moment is the visible value; relative time
-      ("an hour ago") moved to the tooltip
+- [ ] `codepack-ai` gains an `api` feature so the **offline** handoff can be depended on
+      without the HTTP client and the credential store coming with it (invariant I1: a
+      front end that only prepares a handoff must not carry a network client at all)
+- [ ] `Config`: `ai_handoff_agent` + `ai_handoff_question`, normalized, `.codepack.toml`
+      keys, project-config round trip
+- [ ] CLI: `codepack handoff <bundle>` — `--agent`, `--question`, `--json`
+- [ ] Desktop: `list_local_agents` and `prepare_handoff` commands over the same crate
+- [ ] Frontend: handoff card on the Result page, typed client functions, RU/EN strings
 
-## Implementation — agent rules
+## Implementation — 2. Scanning git history
 
-- [+] New universal module `.ai/universal/09-time-and-timestamps.md`, `tier: extended`
-- [+] Orientation ritual (`13-progress-tracking.md`) and coordination check
-      (`07-multi-assistant.md`) now prescribe
-      `git log --date=iso-strict --pretty=format:"%h %cd %s"`
-- [+] `.claude/` and `.codex/` mirrors: `stage-episode` skill and the stage-planner
-      agent, both sides, same task
-- [+] `.ai/CHANGELOG.md` entry; `CLAUDE.md` import added; `AGENTS.md` regenerated
+- [ ] `codepack-cli::history_scan` — walk commits through `git2`, deduplicate by blob id,
+      materialise into a temporary directory, never shell out to `git`
+- [ ] `scan --history`, `--since <ref>`, `--max-commits <n>`; mutually exclusive with
+      `--staged`
+- [ ] Findings carry the commit they came from, at full timestamp precision
+      (`.ai/universal/09-time-and-timestamps.md`)
 
-## Documentation
+## Implementation — 3. Stable redaction pseudonyms
 
-- [+] Owner decision recorded in `docs/__arch__/open-questions.md`, including why
-      invariant I5 needs no `schema_version` bump: none of the five artifacts I5 names
-      is touched, no file name, section, or field changed — one line inside a section
-      got richer
-- [-] `docs/architecture/overview.md` unchanged, deliberately: no crate, layer, or
-      operational job changed shape. `README.md` likewise — it never described history
-      rows or Git report internals at this granularity
+- [ ] `codepack-security::Redactor` — plain (today's behaviour, unchanged) or labelled
+- [ ] Labels are assigned by first-seen order, never derived from the secret's value:
+      a hash would be a testable commitment to the secret and would weaken I3
+- [ ] `Config::redaction_labels`, default `false`, so every existing configuration and
+      every golden reference produces byte-identical output
+- [ ] Wired into the two surfaces an assistant actually reads: `03_text_dump.txt` and the
+      git reports
+
+## Implementation — 4. Pre-commit hook and GitHub Action
+
+- [ ] `codepack init --hook` — installs the hook into someone else's project, honouring
+      `core.hooksPath`, refusing to overwrite a foreign hook without `--force`
+- [ ] `scan --sarif <file>` — the Action needs SARIF from `scan`, not only from `export`
+- [ ] `scan --fail-on <severity>`, default `critical` so the published exit-code contract
+      is unchanged (closes Q25 by option (a))
+- [ ] `action.yml` at the repository root + README documentation
 
 ## Verification
 
-- [+] `cargo xtask fmt` (Rust and, after `pnpm install`, the frontend)
-- [+] `cargo xtask gate` — all eight sections green: format, clippy, tests (56 suites),
-      cargo-deny, frontend format/typecheck/lint, dev scripts (78 tests), agents sync,
-      network isolation
-- [+] Self-review of the diff; two doc comments corrected afterwards and re-verified
-- [-] No browser verification of the history table: it renders Tauri command output, so
-      a bare Vite dev server would show an empty table and prove nothing. Covered by
-      `svelte-check` and ESLint instead
+- [ ] New tests for every item above, including the negative cases
+- [ ] `cargo xtask fmt`
+- [ ] `cargo xtask gate` — every section green
+- [ ] Real runs, not only tests: `handoff`, `scan --history`, `scan --sarif`,
+      `init --hook` against a scratch repository
+- [ ] Frontend `typecheck` and `lint`
+- [ ] Self-review of the diff
+
+## Documentation
+
+- [ ] `README.md` — commands, hook, Action, pseudonyms
+- [ ] `docs/architecture/overview.md` — what changed shape
+- [ ] `docs/__arch__/ROADMAP.md` — status lines
+- [ ] `docs/__arch__/open-questions.md` — the owner decisions this task acts on
 
 ## Completion
 
-- [+] Checklist filled with `+`/`-`
+- [ ] Checklist filled with `+`/`-`
 - [ ] Merge into `main` fast-forward, push to `origin/main`
 - [ ] Final report
-- [ ] Shut down the PC (explicit owner instruction)
-
-## Rule debt carried out of this task
-
-`AGENTS.md` now assembles to 29.9 KiB of its 30 KiB budget. The next rule change of any
-size will fail `sync-agents` before it fails anything else. Fixing it properly means
-moving an existing module to the extended tier, which drops content from the compiled
-entry point and therefore needs an owner decision — not something to do as a side effect
-here.
