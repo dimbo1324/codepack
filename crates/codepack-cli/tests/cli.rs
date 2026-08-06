@@ -1347,3 +1347,289 @@ fn staged_scan_outside_a_repository_is_an_error_not_a_clean_result() {
         stderr(&output)
     );
 }
+
+// --- history scanning, the hook, SARIF and the handoff ------------------------------
+
+/// Commits `relative` with `contents`, then commits its removal. The credential is gone
+/// from the working tree and still in the history — the exact situation `--history`
+/// exists for.
+fn commit_then_delete(repository: &git2::Repository, relative: &str, contents: &str) {
+    let root = repository.workdir().unwrap().to_path_buf();
+    std::fs::write(root.join(relative), contents).unwrap();
+    stage(repository, relative);
+    commit_index(repository, "add the file");
+
+    std::fs::remove_file(root.join(relative)).unwrap();
+    let mut index = repository.index().unwrap();
+    index.remove_path(Path::new(relative)).unwrap();
+    index.write().unwrap();
+    commit_index(repository, "remove the file");
+}
+
+fn commit_index(repository: &git2::Repository, message: &str) {
+    let mut index = repository.index().unwrap();
+    let tree_id = index.write_tree().unwrap();
+    let tree = repository.find_tree(tree_id).unwrap();
+    let signature = git2::Signature::now("Test", "test@example.local").unwrap();
+    let parents = match repository
+        .head()
+        .ok()
+        .and_then(|head| head.peel_to_commit().ok())
+    {
+        Some(parent) => vec![parent],
+        None => Vec::new(),
+    };
+    let refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+    repository
+        .commit(Some("HEAD"), &signature, &signature, message, &tree, &refs)
+        .unwrap();
+    drop(tree);
+}
+
+#[test]
+fn a_history_scan_finds_a_credential_the_working_tree_no_longer_has() {
+    let sandbox = Sandbox::new();
+    let repository = init_repository_with_commit(sandbox.project());
+    commit_then_delete(
+        &repository,
+        "settings.py",
+        concat!(
+            "AWS_SECRET_ACCESS_KEY = \"",
+            "wJalrXUtnFEMIfake7MDENGbPxRfiCYKEY\"\n"
+        ),
+    );
+
+    let plain = sandbox.run(&["--json", "scan", &sandbox.project().display().to_string()]);
+    assert_eq!(
+        json(&plain)["summary"]["potential_secrets"],
+        0,
+        "the working tree really is clean"
+    );
+
+    let output = sandbox.run(&[
+        "--json",
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--history",
+    ]);
+    let report = json(&output);
+
+    assert_eq!(report["source"], "history");
+    assert!(
+        report["summary"]["potential_secrets"].as_u64().unwrap() > 0,
+        "the credential is still in the history:\n{report:#}"
+    );
+    let finding = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["kind"] == "potential_secret")
+        .expect("a historical finding");
+    assert!(finding["commit"].is_string(), "{finding:#}");
+    assert!(
+        finding["committed_at"].as_str().unwrap().ends_with(" UTC"),
+        "{finding:#}"
+    );
+    assert!(report["history"]["commits_walked"].as_u64().unwrap() >= 2);
+}
+
+#[test]
+fn a_history_scan_outside_a_repository_is_an_error_not_a_clean_result() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--history",
+    ]);
+    assert_eq!(code(&output), 1, "stderr:\n{}", stderr(&output));
+}
+
+#[test]
+fn history_and_staged_cannot_be_asked_for_together() {
+    // They answer different questions and would produce one report claiming to be both.
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--history",
+        "--staged",
+    ]);
+    assert_eq!(code(&output), 2, "stderr:\n{}", stderr(&output));
+}
+
+#[test]
+fn fail_on_raises_the_gate_without_changing_the_default() {
+    let sandbox = Sandbox::new();
+    // `high`, not `critical`: an assignment in a shell script.
+    std::fs::write(
+        sandbox.project().join("deploy.sh"),
+        concat!("export API_KEY=\"", "abcdef1234567890\"\n"),
+    )
+    .unwrap();
+
+    let default_run = sandbox.run(&["scan", &sandbox.project().display().to_string()]);
+    assert_eq!(
+        code(&default_run),
+        0,
+        "the published contract gates on critical only.\nstdout:\n{}",
+        stdout(&default_run)
+    );
+
+    let raised = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--fail-on",
+        "high",
+    ]);
+    assert_eq!(code(&raised), 3, "stdout:\n{}", stdout(&raised));
+}
+
+#[test]
+fn an_unknown_fail_on_severity_is_a_usage_error_listing_the_valid_ones() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--fail-on",
+        "catastrophic",
+    ]);
+    assert_eq!(code(&output), 2);
+    assert!(stderr(&output).contains("critical"), "{}", stderr(&output));
+}
+
+#[test]
+fn scan_writes_sarif_a_pipeline_can_upload() {
+    let sandbox = Sandbox::new().with_secret();
+    let sarif = sandbox.out().join("nested").join("codepack.sarif");
+
+    let output = sandbox.run(&[
+        "scan",
+        &sandbox.project().display().to_string(),
+        "--sarif",
+        &sarif.display().to_string(),
+    ]);
+    assert_eq!(code(&output), 3, "stdout:\n{}", stdout(&output));
+
+    let text = std::fs::read_to_string(&sarif).expect("the SARIF file was not written");
+    let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(parsed["version"], "2.1.0");
+    assert!(!parsed["runs"][0]["results"].as_array().unwrap().is_empty());
+    assert!(
+        !text.contains("totally-fake-value-0001"),
+        "invariant I3: the value must not reach the SARIF file"
+    );
+}
+
+#[test]
+fn init_installs_a_hook_that_runs_the_staged_scan() {
+    let sandbox = Sandbox::new();
+    let repository = init_repository_with_commit(sandbox.project());
+
+    let output = sandbox.run(&[
+        "--json",
+        "init",
+        &sandbox.project().display().to_string(),
+        "--hook",
+    ]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    let report = json(&output);
+    assert_eq!(report["action"], "installed");
+
+    let hook = repository.path().join("hooks").join("pre-commit");
+    let body = std::fs::read_to_string(&hook).unwrap();
+    assert!(body.contains("codepack scan --staged"));
+}
+
+#[test]
+fn init_without_hook_says_what_it_expected_rather_than_doing_nothing() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&["init", &sandbox.project().display().to_string()]);
+    assert_eq!(code(&output), 1);
+    assert!(stderr(&output).contains("--hook"), "{}", stderr(&output));
+}
+
+#[test]
+fn init_refuses_to_replace_a_hook_it_did_not_write() {
+    let sandbox = Sandbox::new();
+    let repository = init_repository_with_commit(sandbox.project());
+    let hooks = repository.path().join("hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    std::fs::write(hooks.join("pre-commit"), "#!/bin/sh\nmake lint\n").unwrap();
+
+    let output = sandbox.run(&["init", &sandbox.project().display().to_string(), "--hook"]);
+    assert_eq!(code(&output), 1);
+    assert!(
+        std::fs::read_to_string(hooks.join("pre-commit"))
+            .unwrap()
+            .contains("make lint"),
+        "someone else's hook was destroyed"
+    );
+}
+
+#[test]
+fn handoff_writes_the_briefing_and_prints_the_command_without_sending_anything() {
+    let sandbox = Sandbox::new();
+    let bundle = sandbox.out().join("bundle");
+    std::fs::create_dir_all(bundle.join("AI_CONTEXT")).unwrap();
+
+    let output = sandbox.run(&[
+        "--json",
+        "handoff",
+        &bundle.display().to_string(),
+        "--agent",
+        "claude-code",
+        "--question",
+        "review the export pipeline",
+    ]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert_eq!(report["command"], "claude");
+    assert_eq!(report["extracted"], false);
+    let briefing = std::fs::read_to_string(report["handoff_file"].as_str().unwrap()).unwrap();
+    assert!(briefing.contains("review the export pipeline"));
+}
+
+#[test]
+fn handoff_names_the_available_agents_when_asked_for_one_that_does_not_exist() {
+    let sandbox = Sandbox::new();
+    let bundle = sandbox.out().join("bundle");
+    std::fs::create_dir_all(&bundle).unwrap();
+
+    let output = sandbox.run(&[
+        "handoff",
+        &bundle.display().to_string(),
+        "--agent",
+        "gpt-typo",
+    ]);
+    assert_eq!(code(&output), 1);
+    assert!(
+        stderr(&output).contains("claude-code"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn an_exported_bundle_can_be_handed_to_an_agent_end_to_end() {
+    // The realistic path: export, then point an agent at what came out. A `.zip` has to
+    // be unpacked first, because an agent cannot read a project inside an archive.
+    let sandbox = Sandbox::new();
+    let export = sandbox.run(&[
+        "--json",
+        "export",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+    ]);
+    assert_eq!(code(&export), 0, "stderr:\n{}", stderr(&export));
+    let archive = json(&export)["result_path"].as_str().unwrap().to_string();
+
+    let output = sandbox.run(&["--json", "handoff", &archive]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert_eq!(report["extracted"], true);
+    let briefing = std::fs::read_to_string(report["handoff_file"].as_str().unwrap()).unwrap();
+    assert!(briefing.contains("partial by design"));
+}

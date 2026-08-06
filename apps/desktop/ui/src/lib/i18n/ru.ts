@@ -269,6 +269,20 @@ export const ru: Record<TranslationKey, string> = {
   "result.copyPath": "Скопировать путь",
   "result.viewHistory": "История экспортов",
   "result.newExport": "Экспортировать снова",
+  "settings.redactionLabels": "Помечать каждый секрет отдельно",
+  "settings.redactionLabels.hint":
+    "Вместо <REDACTED> пишется <REDACTED:s1>, поэтому видно, один и тот же это секрет или разные. Сами значения не попадают в вывод ни в том, ни в другом случае.",
+  "result.handoff": "Передать локальному агенту",
+  "result.handoff.lede":
+    "Кладёт в бандл файл с задачей для агента, который уже работает на этой машине.",
+  "result.handoff.agent": "Агент",
+  "result.handoff.question": "Что он должен сделать?",
+  "result.handoff.questionPlaceholder": "Изучи проект и расскажи, что найдёшь.",
+  "result.handoff.prepare": "Подготовить передачу",
+  "result.handoff.ready": "AI_HANDOFF.md лежит в бандле. Выполните в терминале:",
+  "result.handoff.copyCommand": "Скопировать команду",
+  "result.handoff.local": "Никуда ничего не отправлено — агент сам читает папку.",
+  "result.handoff.failed": "Не удалось подготовить передачу",
 
   "history.title": "История",
   "history.lede":

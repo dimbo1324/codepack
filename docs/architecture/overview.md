@@ -9,7 +9,7 @@
 > log and in the internal plan; this file answers "what is built and how does it fit
 > together".
 
-**Last revised:** 2026-07-30
+**Last revised:** 2026-08-06
 **Target platform:** Windows 10/11 only. macOS and Linux remain a product goal but are
 switched off; the disabled cross-platform code is marked `TODO(cross-platform)` rather
 than deleted, and lives in exactly one domain crate (`codepack-core::paths`).
@@ -38,7 +38,7 @@ does not shell out to the CLI. No `codepack-*` crate knows about Tauri or the fr
 |---|---|
 | `codepack-core` | Domain types and `Config` (27 fields plus `schema_version`), normalization, migration from the legacy settings file, the six AI presets, `AppPaths`, `CancellationToken`, progress and log events. Also the single home for things that were once duplicated: text/binary classification (`classify`), the civil-date algorithm (`time`), and the `.codepack-allow` format and fingerprint recipe (`allowlist`). |
 | `codepack-scanner` | Walks the tree, applies ignore rules (base, per-stack, `.exportignore`, user rules), detects the stack, and builds the export plan. Symlinks are never followed (invariant I7). |
-| `codepack-security` | Safe-export modes, secret redaction, and the detector: provider signatures, entropy, a keyword cascade and named risky-code shapes. Carries an accuracy corpus test whose precision/recall thresholds may never be lowered (invariant I9). Emits SARIF 2.1.0. |
+| `codepack-security` | Safe-export modes, secret redaction (plain, or with a stable per-secret label — `Redactor`), and the detector: provider signatures, entropy, a keyword cascade and named risky-code shapes. Carries an accuracy corpus test whose precision/recall thresholds may never be lowered (invariant I9). Emits SARIF 2.1.0. |
 | `codepack-diff` | Differential export and snapshots through `git2`. Never requires a `git` binary. |
 | `codepack-storage` | SQLite: seven tables plus `schema_version`, numbered migrations, run history, snapshots, findings, and per-project retention. Has no runtime dependency on any other `codepack-*` crate. |
 | `codepack-tokens` | Byte formatting (preserved verbatim from the previous version — invariant I4), token estimation, the budget selection, and `ModelContextLimits`, the model→context-window table that `--budget <model>` resolves through. |
@@ -46,13 +46,18 @@ does not shell out to the CLI. No `codepack-*` crate knows about Tauri or the fr
 | `codepack-archive` | Archive building and restore. Two entry points: the export pipeline's planned, splittable, reported output, and `pack_files`, which packs a caller-named list of files into one archive. Both honour `ArchiveFormat` — ZIP by default, 7z on request, RAR reserved and refused. Extraction is path-traversal safe (invariant I7). |
 | `codepack-sanitize` | The "sterile copy": comments stripped with real tree-sitter parsers (never regex) and code reformatted by whichever formatter is found on `PATH`. Reuses the scanner's file selection, the security crate's safety filter and its redaction — never a second, less guarded path out of the project. Optionally packs the result into one archive. |
 | `codepack-engine` | The orchestrator: plan → copy → structure → git → text dump → analytics → manifest → archive. Cancellation is checked inside each step's loops, not only between steps. The only place `codepack_security::scan_project` is called in the pipeline. |
-| `codepack-ai` | The stage S13 integration — the one and only crate permitted to reach the network. |
+| `codepack-ai` | The stage S13 integration. Split by the `api` feature: the offline handoff is always available, while the HTTP client and the credential store arrive only with `api`. Both front ends take the crate without default features, so neither binary links a transport — invariant I1 enforced by what is compiled, and checked by the gate. |
 | `xtask` | The task runner and quality gate. |
 
 ## The two front ends
 
-**`codepack-cli`** — the `codepack` binary. Nine commands: `export`, `preview`, `scan`,
-`history`, `doctor`, `sanitize`, `completions`, `verify`, `explain`. Its published
+**`codepack-cli`** — the `codepack` binary. Eleven commands: `export`, `preview`, `scan`,
+`history`, `doctor`, `sanitize`, `completions`, `verify`, `explain`, `handoff` (points a
+local coding agent at a bundle), `init --hook` (installs the pre-commit hook into the
+user's own project). `scan` reads three different file sets — the working tree, the git
+index (`--staged`), or every distinct version in the history (`--history`) — writes SARIF
+with `--sarif`, and gates on `--fail-on <severity>`, defaulting to `critical` so the
+published exit-code contract is unchanged. Its published
 contracts live in their own modules with their own tests, because other people's
 pipelines depend on them:
 
@@ -82,7 +87,8 @@ run id and can be cancelled.
 | Project config (`.codepack.toml`) | TOML at the project root, all fields optional, overrides global settings. An unknown key is an error naming the key, not a silent no-op. |
 | Golden parity (`tests/golden/`) | References produced by actually running the archived previous implementation, on three fixtures. Regenerated by `cargo xtask golden`; never edited to make a comparison pass. |
 | Quality gate (`cargo xtask gate`) | Eight sections: format, clippy with warnings denied, tests, `cargo deny`, frontend format/typecheck/lint, the `scripts/` suite, agent-rule sync, and network isolation. |
-| Network isolation | A gate step, not a convention: it reads every crate manifest and fails if an HTTP client appears anywhere but `codepack-ai`. |
+| Network isolation | A gate step, not a convention: it reads every crate manifest and fails if an HTTP client appears anywhere but `codepack-ai`, or if a dependent would inherit `codepack-ai`'s `api` feature. |
+| GitHub Action (`action.yml`) | A composite action running `scan` on a runner and emitting SARIF. Builds from source: there are no signed release binaries yet. |
 | Dev scripts (`dev_tools_scripts_runner.py`, `scripts/`) | The cross-platform door to routine jobs — quality gate, formatting, dev run, installer, doctor, hooks, clean, selftest. |
 | CI (`.github/workflows/ci.yml`) | `windows-latest` only; the other legs are commented out rather than deleted. |
 | Packaging | `cargo xtask package` produces an NSIS installer. Signing, notarisation, checksums and auto-update are not done. |
@@ -91,6 +97,12 @@ run id and can be cancelled.
 
 - Artifact localization is still a pilot on a single report; the rest of the catalogue
   is English only.
+- Redaction labels reach `03_text_dump.txt` and the git reports — the two surfaces an
+  assistant reads — but not the ~30 insight reports or scan findings. Widening them into
+  the scan artifacts would move `06_security_scan.json` and SARIF, which is an I5 change
+  and therefore a separate decision.
+- A history scan stops at 500 commits and 8 MB per file version unless told otherwise.
+  Both limits are reported rather than silent, but a default run is not a full audit.
 - Archive splitting uses First-Fit rather than First-Fit Decreasing. This only matters
   for projects large enough to need splitting at all.
 - The "one finding per line" rule applies only when the keyword cascade fired; on a line

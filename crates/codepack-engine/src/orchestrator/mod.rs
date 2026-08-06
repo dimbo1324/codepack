@@ -224,6 +224,12 @@ pub fn run_export(
     };
 
     let extra_ignored_vec = extra_ignored_display(&paths.source_root, config);
+    // One redactor for the whole run, so the git report and the text dump agree about
+    // which secret is which. `None` is "redaction is switched off" — the same toggle
+    // legacy had, expressed once instead of as a boolean beside every call.
+    let redactor = config
+        .redact_secrets
+        .then(|| codepack_security::Redactor::new(config.redaction_labels));
     let mut cancelled = cancel.is_cancelled();
     let mut text_stats = TextDumpStats::default();
     // `None` means the text-dump step never ran, which is different from "ran and
@@ -250,7 +256,7 @@ pub fn run_export(
             &paths.source_root,
             &paths.git_report,
             config.include_git_patch,
-            config.redact_secrets,
+            redactor.as_ref(),
             &log,
             cancel,
         )?;
@@ -263,7 +269,7 @@ pub fn run_export(
             &paths.project_dir,
             &paths.text_dump,
             config.effective_max_text_file_bytes(),
-            config.redact_secrets,
+            redactor.as_ref(),
             config.developer_context.trim(),
             &log,
             cancel,

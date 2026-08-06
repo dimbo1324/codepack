@@ -92,6 +92,8 @@ pub fn run() {
             commands::export::open_project_overview,
             commands::export::open_onboarding_guide,
             commands::export::open_review_checklist,
+            commands::ai::list_local_agents,
+            commands::ai::prepare_handoff,
             commands::sanitize::start_sanitize,
             commands::sanitize::cancel_sanitize,
             commands::history::fetch_history,

@@ -268,6 +268,20 @@ export const en = {
   "result.copyPath": "Copy the path",
   "result.viewHistory": "Export history",
   "result.newExport": "Export again",
+  "settings.redactionLabels": "Label each secret separately",
+  "settings.redactionLabels.hint":
+    "Writes <REDACTED:s1> instead of <REDACTED>, so a reader can tell whether two redacted values are the same credential. The values themselves are never written either way.",
+  "result.handoff": "Hand it to a local agent",
+  "result.handoff.lede":
+    "Writes a briefing file into the bundle for a coding agent already on this machine.",
+  "result.handoff.agent": "Agent",
+  "result.handoff.question": "What should it do?",
+  "result.handoff.questionPlaceholder": "Review this project and report what you find.",
+  "result.handoff.prepare": "Prepare the handoff",
+  "result.handoff.ready": "AI_HANDOFF.md is in the bundle. Run this in a terminal:",
+  "result.handoff.copyCommand": "Copy the command",
+  "result.handoff.local": "Nothing was sent anywhere. The agent reads the folder itself.",
+  "result.handoff.failed": "Could not prepare the handoff",
 
   "history.title": "History",
   "history.lede":

@@ -39,6 +39,28 @@ export interface Config {
   prompt_goals: string[];
   history_keep_last_n: number;
   token_budget: number;
+  /** Which local coding agent a handoff file is addressed to. */
+  ai_handoff_agent: string;
+  /** The question a handoff carries when none is typed. */
+  ai_handoff_question: string;
+  /** Replace `<REDACTED>` with a stable per-secret label (`<REDACTED:s1>`). Off by
+   * default, and off means every artifact is byte-identical to what it always was. */
+  redaction_labels: boolean;
+}
+
+/** A coding agent on this machine that a bundle can be handed to (stage S13). */
+export interface LocalAgentInfo {
+  id: string;
+  display_name: string;
+  command: string;
+}
+
+/** What `prepare_handoff` wrote, and how to use it. */
+export interface HandoffResult {
+  path: string;
+  working_dir: string;
+  command: string;
+  agent_name: string;
 }
 
 export interface PresetInfo {

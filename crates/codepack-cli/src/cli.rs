@@ -50,6 +50,44 @@ pub(crate) enum Command {
     Verify(VerifyArgs),
     /// Explain why one file would, or would not, end up in the export.
     Explain(ExplainArgs),
+    /// Prepare an already-exported bundle for a coding agent running on this machine.
+    Handoff(HandoffArgs),
+    /// Set this project up to use codepack: install the pre-commit hook.
+    Init(InitArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct HandoffArgs {
+    /// The bundle to hand over: a `.zip`, an archive-set directory, or an extracted
+    /// folder. Which one it is gets decided by looking at it, not by a flag.
+    pub bundle: PathBuf,
+
+    /// Which agent the handoff file is addressed to.
+    #[arg(long, value_name = "ID")]
+    pub agent: Option<String>,
+
+    /// What the agent should do with the project. Falls back to the stored question,
+    /// then to a general-purpose one.
+    #[arg(long, value_name = "TEXT")]
+    pub question: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct InitArgs {
+    /// Install the pre-commit hook that runs `codepack scan --staged`.
+    ///
+    /// Required rather than implied: `init` will grow other setup steps, and a command
+    /// that silently writes into `.git/` because it was run bare is a command people
+    /// stop trusting.
+    #[arg(long)]
+    pub hook: bool,
+
+    /// Replace an existing hook that codepack did not write.
+    #[arg(long)]
+    pub force: bool,
+
+    #[command(flatten)]
+    pub project: ProjectArgs,
 }
 
 #[derive(Debug, Args)]
@@ -156,6 +194,89 @@ pub(crate) struct ScanArgs {
     /// file has been edited again.
     #[arg(long)]
     pub staged: bool,
+
+    /// Scan the project's git history instead of its working tree.
+    ///
+    /// Deleting a credential from a file does not remove it from the commits that
+    /// carried it, and those travel with every clone. This is the mode that answers
+    /// "was a secret ever committed", which is the question rotation depends on.
+    #[arg(long, conflicts_with = "staged")]
+    pub history: bool,
+
+    /// With `--history`: exclude everything reachable from this ref, leaving "what has
+    /// been added since". Typically a base branch, in CI.
+    #[arg(long, value_name = "REF", requires = "history")]
+    pub since: Option<String>,
+
+    /// With `--history`: how many commits to walk, newest first. `0` walks all of them.
+    #[arg(long, value_name = "N", requires = "history")]
+    pub max_commits: Option<usize>,
+
+    /// Also write the findings as SARIF 2.1.0 to this file.
+    ///
+    /// The same writer the export pipeline uses, so a scan and an export describe a
+    /// finding identically. This is what makes `scan` usable in a code-scanning
+    /// pipeline that consumes SARIF.
+    #[arg(long, value_name = "FILE")]
+    pub sarif: Option<PathBuf>,
+
+    /// Lowest severity that should make this command exit with code 3.
+    ///
+    /// Defaults to `critical`, which is exactly the published contract; raising it is
+    /// opt-in. A staged `.env` is `critical` and always gated, while
+    /// `export API_KEY=…` in a shell script is `high` and is not — same secret,
+    /// different rule, and only the person running the gate can say whether that should
+    /// stop a commit.
+    #[arg(long, value_name = "SEVERITY", default_value = "critical")]
+    pub fail_on: SeverityArg,
+}
+
+/// Severity levels the scanner assigns, ordered from most to least severe.
+///
+/// An enum rather than a string so a typo is a usage error listing the valid values,
+/// not a threshold that silently means something else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "lower")]
+pub(crate) enum SeverityArg {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+impl SeverityArg {
+    /// Rank, lower being more severe — the same ordering `codepack-security` sorts by.
+    pub(crate) fn rank(self) -> u8 {
+        match self {
+            Self::Critical => 0,
+            Self::High => 1,
+            Self::Medium => 2,
+            Self::Low => 3,
+        }
+    }
+
+    /// Whether a finding of `severity` reaches this threshold. An unrecognised severity
+    /// never gates: inventing a rank for a value this build does not know would be a
+    /// guess, and a guess that fails a pipeline is worse than one that does not.
+    pub(crate) fn is_reached_by(self, severity: &str) -> bool {
+        let rank = match severity {
+            "critical" => 0,
+            "high" => 1,
+            "medium" => 2,
+            "low" => 3,
+            _ => return false,
+        };
+        rank <= self.rank()
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+        }
+    }
 }
 
 #[derive(Debug, Args)]

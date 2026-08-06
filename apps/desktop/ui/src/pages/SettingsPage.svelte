@@ -223,6 +223,12 @@
           onchange={(checked) => (config.redact_secrets = checked)}
         />
         <Switch
+          label={t("settings.redactionLabels")}
+          hint={t("settings.redactionLabels.hint")}
+          checked={config.redaction_labels}
+          onchange={(checked) => (config.redaction_labels = checked)}
+        />
+        <Switch
           label={t("settings.includeGitPatch")}
           hint={t("settings.includeGitPatch.hint")}
           checked={config.include_git_patch}

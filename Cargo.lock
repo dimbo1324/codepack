@@ -623,6 +623,7 @@ version = "2.0.0-dev"
 dependencies = [
  "clap",
  "clap_complete",
+ "codepack-ai",
  "codepack-archive",
  "codepack-core",
  "codepack-engine",
@@ -657,6 +658,7 @@ dependencies = [
 name = "codepack-desktop"
 version = "2.0.0-dev"
 dependencies = [
+ "codepack-ai",
  "codepack-archive",
  "codepack-core",
  "codepack-engine",

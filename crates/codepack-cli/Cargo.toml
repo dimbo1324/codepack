@@ -26,6 +26,10 @@ codepack-storage.workspace = true
 codepack-tokens.workspace = true
 # `verify` reuses S8's traversal-safe extraction rather than opening archives itself.
 codepack-archive.workspace = true
+# `handoff` writes the file a local agent reads. `default-features = false` on purpose:
+# that path needs no HTTP client and no credential store, and this binary must not link
+# a transport it can never reach (invariant I1, checked by `cargo xtask gate`).
+codepack-ai.workspace = true
 # `scan --staged` reads staged blob content out of the index. Same read-only, no-network
 # feature set the rest of the workspace already pins.
 git2.workspace = true

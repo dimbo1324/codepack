@@ -323,8 +323,13 @@ fn kind_label(kind: FindingKind) -> &'static str {
 
 /// Codepack's own redaction placeholders. Any of these in a line means that position
 /// was already redacted before the bundle was written.
-const REDACTION_PLACEHOLDERS: [&str; 3] =
-    ["<REDACTED_SECRET_LINE>", "<REDACTED_SECRET>", "<REDACTED>"];
+///
+/// Taken from `codepack-security` rather than restated, because a labelled bundle spells
+/// them `<REDACTED:s1>`: a copy of this list that knew only the plain shapes would read
+/// every label as a leftover credential and call a clean bundle dirty.
+fn redaction_placeholders() -> &'static [&'static str] {
+    codepack_security::REDACTION_PLACEHOLDER_PREFIXES
+}
 
 /// The shortest run of alphanumerics `verify` still treats as possibly-a-secret once
 /// placeholders are removed. Below this a leftover is a label or a word, not a
@@ -355,9 +360,15 @@ const RESIDUAL_SECRET_MIN_RUN: usize = 12;
 /// shape alone is not possible, and the project already records that trade-off.
 fn is_not_credential_shaped(raw_line: &str) -> bool {
     let mut residue = raw_line.to_string();
-    for placeholder in REDACTION_PLACEHOLDERS {
+    for placeholder in redaction_placeholders() {
         residue = residue.replace(placeholder, " ");
     }
+    // A label's own suffix (`s1>`) is what a prefix-only match leaves behind. Removing
+    // the digits and the closing bracket keeps the residue free of text redaction
+    // itself introduced; it is far too short to reach the run threshold either way, but
+    // leaving it would make the residue depend on how many secrets a bundle happened to
+    // have.
+    residue = residue.replace(['>'], " ");
 
     let mut run = 0usize;
     for character in residue.chars() {
@@ -566,6 +577,10 @@ mod tests {
     fn an_already_redacted_bundle_line_is_not_reported_as_a_secret() {
         // The marker exists because the secret was removed; reporting it says the
         // opposite of the truth about the one place there provably is no secret.
+        // A labelled bundle spells them with a suffix; `verify` must read those as
+        // redaction having worked, not as a leftover value.
+        assert!(is_not_credential_shaped("API_KEY=<REDACTED:s1>"));
+        assert!(is_not_credential_shaped("  token: <REDACTED_SECRET:s12>,"));
         assert!(is_not_credential_shaped("<REDACTED_SECRET_LINE>"));
         assert!(is_not_credential_shaped("- Secret redaction: <REDACTED>"));
         assert!(is_not_credential_shaped("API_KEY=<REDACTED>"));

@@ -39,6 +39,10 @@ codepack-security.workspace = true
 codepack-storage.workspace = true
 codepack-tokens.workspace = true
 codepack-archive.workspace = true
+# Stage S13's offline handoff. Inherited without default features (declared that way at
+# the workspace root), so no HTTP client and no credential store reach this binary —
+# `cargo xtask gate` checks exactly that.
+codepack-ai.workspace = true
 notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true

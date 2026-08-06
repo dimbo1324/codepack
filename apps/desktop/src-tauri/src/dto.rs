@@ -11,6 +11,29 @@
 
 use serde::{Deserialize, Serialize};
 
+// --- Local AI handoff (stage S13, offline path) -----------------------------------
+
+/// A coding agent this build can address a handoff to.
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalAgentInfo {
+    pub id: String,
+    pub display_name: String,
+    /// The command to run inside the bundle directory.
+    pub command: String,
+}
+
+/// What a prepared handoff left behind, and what to do with it.
+#[derive(Debug, Clone, Serialize)]
+pub struct HandoffResult {
+    /// The file that was written.
+    pub path: String,
+    /// Where to start the agent.
+    pub working_dir: String,
+    /// The command to run there.
+    pub command: String,
+    pub agent_name: String,
+}
+
 // --- Application metadata ---------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]

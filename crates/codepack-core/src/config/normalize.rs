@@ -9,8 +9,9 @@
 use super::Config;
 use super::valid_sets::{
     ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
-    DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES,
-    LANGUAGES, SAFE_EXPORT_MODES, THEMES, resolve_diff_export_mode_alias,
+    DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME,
+    DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES, LOCAL_AI_AGENTS, SAFE_EXPORT_MODES, THEMES,
+    resolve_diff_export_mode_alias,
 };
 
 pub const UI_ZOOM_MIN: f64 = 0.7;
@@ -59,6 +60,18 @@ impl Config {
             &self.archive_format
         } else {
             DEFAULT_ARCHIVE_FORMAT
+        }
+    }
+
+    /// Falls back to the default agent for anything unrecognised, like every other
+    /// string field. A handoff file addressed to an agent this build cannot describe
+    /// would still be written — it is only Markdown — but it would name a command
+    /// nobody can run, which is worse than addressing the common case.
+    pub fn normalized_ai_handoff_agent(&self) -> &str {
+        if LOCAL_AI_AGENTS.contains(&self.ai_handoff_agent.as_str()) {
+            &self.ai_handoff_agent
+        } else {
+            DEFAULT_LOCAL_AI_AGENT
         }
     }
 
@@ -114,6 +127,27 @@ mod tests {
 
     fn config() -> Config {
         Config::default()
+    }
+
+    #[test]
+    fn ai_handoff_agent_passes_through_a_known_agent() {
+        let mut cfg = config();
+        cfg.ai_handoff_agent = "codex".to_string();
+        assert_eq!(cfg.normalized_ai_handoff_agent(), "codex");
+    }
+
+    #[test]
+    fn ai_handoff_agent_falls_back_for_an_unknown_one() {
+        let mut cfg = config();
+        cfg.ai_handoff_agent = "some-agent-that-shipped-later".to_string();
+        assert_eq!(cfg.normalized_ai_handoff_agent(), DEFAULT_LOCAL_AI_AGENT);
+    }
+
+    #[test]
+    fn redaction_labels_are_off_until_someone_asks_for_them() {
+        // The default is what keeps every existing bundle, and every golden reference,
+        // byte-identical to what it was before this option existed.
+        assert!(!config().redaction_labels);
     }
 
     #[test]

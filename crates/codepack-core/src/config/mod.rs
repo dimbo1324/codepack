@@ -24,8 +24,9 @@ pub use presets::{AiPreset, ai_presets};
 pub use project::{PROJECT_CONFIG_FILE_NAME, ProjectConfig, ProjectConfigError};
 pub use valid_sets::{
     ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
-    DEFAULT_LANGUAGE, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES,
-    IMPLEMENTED_ARCHIVE_FORMATS, LANGUAGES, SAFE_EXPORT_MODES, THEMES,
+    DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME,
+    DIFF_EXPORT_MODES, EXPORT_PROFILES, IMPLEMENTED_ARCHIVE_FORMATS, LANGUAGES, LOCAL_AI_AGENTS,
+    SAFE_EXPORT_MODES, THEMES,
 };
 
 use serde::{Deserialize, Serialize};
@@ -76,6 +77,22 @@ pub struct Config {
     /// Token budget for BLUEPRINT §B.3 "fit to budget". `0` means no budget, which is
     /// the default and the only behavior legacy ever had.
     pub token_budget: u64,
+    /// Which local coding agent the handoff file is addressed to (stage S13's offline
+    /// path). One of [`valid_sets::LOCAL_AI_AGENTS`].
+    pub ai_handoff_agent: String,
+    /// The question a handoff file carries when the user does not type a new one.
+    /// Stored because people reuse the same prompt across exports; empty means the
+    /// handoff's own general-purpose default is used.
+    pub ai_handoff_question: String,
+    /// Replace redacted secrets with a stable per-secret label (`<REDACTED:s1>`) rather
+    /// than a single indistinguishable placeholder.
+    ///
+    /// `false` by default, and deliberately: with it off, every artifact this product
+    /// writes is byte-identical to what it wrote before the option existed, so no
+    /// golden reference moves and no `schema_version` changes. On, the two surfaces an
+    /// assistant actually reads keep the *structure* of the secrets — which occurrences
+    /// are the same value — without any of them carrying the value itself.
+    pub redaction_labels: bool,
 }
 
 impl Default for Config {
@@ -111,6 +128,9 @@ impl Default for Config {
             prompt_goals: default_prompt_goals(),
             history_keep_last_n: 50,
             token_budget: 0,
+            ai_handoff_agent: DEFAULT_LOCAL_AI_AGENT.to_string(),
+            ai_handoff_question: String::new(),
+            redaction_labels: false,
         }
     }
 }

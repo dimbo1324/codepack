@@ -1,0 +1,127 @@
+name: "codepack secret scan"
+description: >-
+  Scan a repository for committed secrets and risky code, entirely on the runner,
+  and optionally upload the findings as SARIF.
+author: "codepack"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+# Why this file sits at the repository root: GitHub resolves `uses: owner/repo@ref` to
+# an `action.yml` at the root of that repository, and nowhere else. It is the one file
+# in this project whose location is dictated by somebody else's tool.
+#
+# What this action is NOT: a network scanner. `codepack scan` reads the checkout on the
+# runner and nothing else — invariant I1 holds here exactly as it does on a laptop, and
+# the binary this action installs contains no HTTP client at all.
+
+inputs:
+  project:
+    description: "Directory to scan. Defaults to the checkout root."
+    required: false
+    default: "."
+  fail-on:
+    description: >-
+      Lowest severity that fails the job: critical (default), high, medium or low.
+      The default matches codepack's published exit-code contract.
+    required: false
+    default: "critical"
+  history:
+    description: >-
+      Scan the git history instead of the working tree — the check that finds a
+      credential which was committed and later deleted. Needs a checkout with history
+      (`actions/checkout` with `fetch-depth: 0`).
+    required: false
+    default: "false"
+  since:
+    description: >-
+      With history scanning: only look at what has been added since this ref, typically
+      the base branch. Empty means the whole history, up to max-commits.
+    required: false
+    default: ""
+  max-commits:
+    description: "With history scanning: how many commits to walk. 0 walks all of them."
+    required: false
+    default: "500"
+  sarif:
+    description: >-
+      Where to write SARIF 2.1.0. Empty writes none. Upload it with
+      github/codeql-action/upload-sarif to get findings as code-scanning alerts.
+    required: false
+    default: "codepack.sarif"
+  ref:
+    description: "Git ref of codepack to install. Pin this for reproducible runs."
+    required: false
+    default: "main"
+
+outputs:
+  exit-code:
+    description: "0 clean, 3 findings at or above fail-on, 1 error, 2 bad arguments."
+    value: ${{ steps.scan.outputs.exit-code }}
+  sarif-file:
+    description: "The SARIF file that was written, if any."
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    # Built from source rather than downloaded: codepack has no signed release binaries
+    # yet (stage S14), and an action that curls an unsigned binary from the internet
+    # would be doing the exact thing this tool exists to argue against. GitHub-hosted
+    # runners ship a Rust toolchain, so this needs no toolchain action.
+    - name: Install codepack
+      shell: bash
+      run: |
+        set -e
+        if command -v codepack >/dev/null 2>&1; then
+          echo "codepack is already on PATH; using it."
+          exit 0
+        fi
+        # A full commit sha is a `--rev`; anything else is a branch or a tag. Cargo
+        # rejects the wrong one rather than guessing, so the choice is made here.
+        ref='${{ inputs.ref }}'
+        if printf '%s' "$ref" | grep -Eq '^[0-9a-f]{40}$'; then
+          selector=(--rev "$ref")
+        elif printf '%s' "$ref" | grep -Eq '^v[0-9]'; then
+          selector=(--tag "$ref")
+        else
+          selector=(--branch "$ref")
+        fi
+        cargo install --locked --git https://github.com/dimbo1324/codepack \
+          "${selector[@]}" codepack-cli
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        # `set -e` is deliberately NOT used: exit code 3 is a *result*, not a crash, and
+        # this step has to read it before deciding anything. GitHub runs `bash -eo
+        # pipefail` by default, which is why the command is written to swallow its own
+        # status explicitly.
+        set +e
+
+        args=(scan "${{ inputs.project }}" --fail-on "${{ inputs.fail-on }}")
+
+        if [ "${{ inputs.history }}" = "true" ]; then
+          args+=(--history --max-commits "${{ inputs.max-commits }}")
+          if [ -n "${{ inputs.since }}" ]; then
+            args+=(--since "${{ inputs.since }}")
+          fi
+        fi
+
+        if [ -n "${{ inputs.sarif }}" ]; then
+          args+=(--sarif "${{ inputs.sarif }}")
+          echo "sarif-file=${{ inputs.sarif }}" >> "$GITHUB_OUTPUT"
+        fi
+
+        codepack "${args[@]}"
+        status=$?
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+
+        case $status in
+          0) echo "::notice::codepack found nothing at or above ${{ inputs.fail-on }}." ;;
+          3) echo "::error::codepack found secrets at or above ${{ inputs.fail-on }}." ;;
+          *) echo "::error::codepack failed with exit code $status." ;;
+        esac
+        exit $status

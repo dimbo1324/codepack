@@ -113,6 +113,10 @@ pub struct ProjectConfig {
     pub always_include_files: Option<Vec<String>>,
     pub always_include_dirs: Option<Vec<String>>,
     pub developer_context: Option<String>,
+    /// Stable per-secret redaction labels. A team decision rather than a personal one:
+    /// it changes what every bundle produced from this repository looks like, and the
+    /// people reading those bundles have to agree on what `<REDACTED:s1>` means.
+    pub redaction_labels: Option<bool>,
 }
 
 impl ProjectConfig {
@@ -174,6 +178,7 @@ impl ProjectConfig {
             always_include_files,
             always_include_dirs,
             developer_context,
+            redaction_labels,
         );
     }
 }

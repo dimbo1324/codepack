@@ -19,7 +19,11 @@ Everything runs **locally**. Nothing is uploaded, ever.
 - [Commands](#commands)
 - [Archive formats](#archive-formats)
 - [Sterile copy](#sterile-copy)
+- [Hand a bundle to a local agent](#hand-a-bundle-to-a-local-agent)
+- [Scanning git history](#scanning-git-history)
+- [Labelled redaction](#labelled-redaction)
 - [Pre-commit use](#pre-commit-use)
+- [In CI](#in-ci)
 - [Guarantees](#guarantees)
 - [Documentation](#documentation)
 - [Developing](#developing)
@@ -34,8 +38,8 @@ Two ways to use it, both over the same engine — neither is a wrapper around th
 what goes in and what stays out, a results panel, run history, folder watching, light and
 dark themes, English and Russian interfaces switchable without a restart, and a tray icon.
 
-**Command line** — the `codepack` binary. Nine commands, a stable exit-code contract, and
-`--json` on everything.
+**Command line** — the `codepack` binary. Eleven commands, a stable exit-code contract,
+and `--json` on everything.
 
 A finished export contains the selected source files, a directory structure report, git
 history and optionally a patch, a full text dump, roughly thirty analysis reports, an
@@ -112,6 +116,8 @@ success, because "it was excluded, here is why" is the explanation working.
 | `verify` | Re-scan a bundle that already exists — the only check its recipient can run |
 | `explain <file>` | Why one file did or did not make it into the export |
 | `sanitize` | Sterile copy: code with comments stripped and reformatted, optionally archived |
+| `handoff <bundle>` | Point a coding agent on this machine at a finished bundle |
+| `init --hook` | Install the pre-commit hook into this project |
 | `history` | Previous runs |
 | `doctor` | Environment diagnostics |
 | `completions <shell>` | A shell completion script |
@@ -161,7 +167,72 @@ The archive contains exactly the files this run produced, plus
 `STERILE_COPY_REPORT.json`/`.md` — so whoever receives it gets the account of what was
 stripped, skipped and redacted alongside the code it describes.
 
+## Hand a bundle to a local agent
+
+Claude Code and Codex run on your machine and read your filesystem, so there is nothing to
+upload:
+
+```bash
+codepack handoff ../out/myproject.zip --agent claude-code --question "Find the auth bugs"
+```
+
+It writes `AI_HANDOFF.md` into the bundle — a briefing that says where to start and warns
+that the snapshot is partial by design — and prints the command to run there. A `.zip` is
+unpacked beside itself first, because an agent cannot read a project inside an archive.
+The desktop app offers the same thing on the Result page.
+
+Nothing is sent anywhere and nothing is launched. The binary contains **no HTTP client at
+all**: the crate that can reach the network is compiled without it, and the quality gate
+fails the build if that ever changes.
+
+## Scanning git history
+
+Deleting a credential from a file does not remove it from the commits that carried it,
+and those travel with every clone. This is the check that answers "was a secret ever
+committed", which is the question rotation depends on:
+
+```bash
+codepack scan --history
+codepack scan --history --since origin/main
+```
+
+Each distinct version of each file is scanned once and every finding names the commit that
+introduced it, with the full timestamp. Two limits keep the walk bounded — 500 commits by
+default (`--max-commits 0` for all of them) and 8 MB per file version — and **both are
+reported**, because a clean result over part of a history is not a clean history.
+
+## Labelled redaction
+
+By default every secret is replaced with the same `<REDACTED>`, so a reader cannot tell
+whether two redacted values are one credential or two. Turn labels on and each distinct
+secret gets a stable name instead:
+
+```toml
+# .codepack.toml
+redaction_labels = true
+```
+
+```text
+api.py:    api_key = <REDACTED:s1>
+worker.py: token: <REDACTED:s1>      ← the same credential
+worker.py: password = <REDACTED:s2>  ← a different one
+```
+
+The label is a position in a list, never derived from the value: a hash would let anyone
+holding the bundle confirm a guessed password, and the value never leaves the redactor.
+Labels are per-bundle, and off by default, so an existing configuration produces exactly
+what it always did.
+
 ## Pre-commit use
+
+```bash
+codepack init --hook
+```
+
+That installs a hook running `codepack scan --staged` on every commit. It honours
+`core.hooksPath`, refuses to overwrite a hook it did not write (`--force` overrides), and
+— if `codepack` is not installed on the machine running it — says so loudly on stderr and
+lets the commit through rather than blocking a colleague over a tool they never chose.
 
 ```bash
 codepack scan --staged
@@ -174,6 +245,42 @@ Findings you have reviewed and accepted go in a `.codepack-allow` file beside th
 The fingerprint is computed from the rule, the file, and the **already-redacted** message —
 the secret itself is never an input. Suppressed findings are still counted and printed, so
 they never disappear silently.
+
+By default a commit is blocked only by a `critical` finding, which is the published
+contract. Raise it when you want to:
+
+```bash
+codepack scan --staged --fail-on high
+```
+
+## In CI
+
+`scan` writes SARIF 2.1.0, so findings can become code-scanning alerts:
+
+```bash
+codepack scan --sarif codepack.sarif
+```
+
+There is a ready-made GitHub Action in this repository:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0 # only needed for history scanning
+- uses: dimbo1324/codepack@main
+  with:
+    history: "true"
+    since: ${{ github.event.pull_request.base.ref }}
+    fail-on: critical
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: codepack.sarif
+```
+
+The action builds codepack from source on the runner: there are no signed release
+binaries yet, and downloading an unsigned one would be the very thing this tool argues
+against. Pin `ref:` to a commit for reproducible runs.
 
 ## Guarantees
 

@@ -17,20 +17,38 @@
 //!
 //! Nothing here starts on its own. Every entry point is called from a user action, and
 //! the guards in [`plan::SendPlan::check`] run before anything leaves the machine.
+//!
+//! ## The `api` feature
+//!
+//! Only the API path is behind the `api` feature (on by default); [`handoff`] and
+//! [`error`] are always compiled. A dependent that offers the offline path alone —
+//! which is both front ends today — takes this crate with `default-features = false`
+//! and never links an HTTP client or the credential store at all. That is invariant I1
+//! made structural instead of trusted: `cargo xtask gate` can only read declared
+//! dependencies, so "the binary contains a transport it never calls" is exactly the
+//! shape of risk it cannot see, and the fix is not to have the transport.
 
 pub mod error;
 pub mod handoff;
+#[cfg(feature = "api")]
 pub mod keys;
+#[cfg(feature = "api")]
 pub mod plan;
+#[cfg(feature = "api")]
 pub mod provider;
+#[cfg(feature = "api")]
 pub mod providers;
 
 pub use error::{AiError, Refusal};
-pub use handoff::{Handoff, LocalAgent};
+pub use handoff::{AGENTS, Handoff, LocalAgent};
+#[cfg(feature = "api")]
 pub use plan::SendPlan;
+#[cfg(feature = "api")]
 pub use provider::{AiAnswer, AiProvider, AiRequest, ModelInfo};
+#[cfg(feature = "api")]
 pub use providers::DEFAULT_PROVIDER;
 
+#[cfg(feature = "api")]
 use std::path::Path;
 
 /// The whole API path, in the order it must happen.
@@ -41,6 +59,7 @@ use std::path::Path;
 ///
 /// `override_critical` is threaded from an explicit user action; see
 /// [`plan::SendPlan::check`] for why it exists and why it is not a default.
+#[cfg(feature = "api")]
 pub fn ask(
     bundle_dir: &Path,
     provider_id: &str,
@@ -63,7 +82,7 @@ pub fn ask(
     Ok(answer)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "api"))]
 mod tests {
     use super::*;
 

@@ -26,8 +26,8 @@
 //!
 //! ## Redaction: the stronger keyword cascade, not legacy's own choice
 //!
-//! Every line is redacted through [`codepack_security::patterns::keyword::redacted_line`]
-//! when `redact` is `true` — **not** the narrower [`codepack_security::redact_secrets`],
+//! Every line is redacted through `codepack_security::Redactor::redacted_line`
+//! when a redactor is supplied — **not** the narrower [`codepack_security::redact_secrets`],
 //! which is legacy's own `git_report.py` call. Stage S7's independent review found and
 //! fixed a real secret-leak bug caused by exactly that weaker function in a report
 //! context (a `DATABASE_URL=...` value slipping through `docker_report.py`'s call
@@ -314,16 +314,20 @@ fn show_patch(repo: &Repository) -> Vec<String> {
     raw.lines().map(str::to_string).collect()
 }
 
-fn write_section(out: &mut String, command: &str, lines: &[String], redact: bool) {
+fn write_section(
+    out: &mut String,
+    command: &str,
+    lines: &[String],
+    redactor: Option<&codepack_security::Redactor>,
+) {
     out.push_str(&format!("$ {command}\n"));
     if lines.is_empty() {
         out.push_str("(no output)\n");
     } else {
         for line in lines {
-            let rendered = if redact {
-                codepack_security::patterns::keyword::redacted_line(line)
-            } else {
-                line.clone()
+            let rendered = match redactor {
+                Some(redactor) => redactor.redacted_line(line),
+                None => line.clone(),
             };
             out.push_str(&rendered);
             out.push('\n');
@@ -341,8 +345,10 @@ fn finish(out: String, output_file: &Path) -> Result<()> {
     })
 }
 
-/// Runs pipeline step 4. `include_patch`/`redact` mirror legacy's own toggles
-/// (`config.include_git_patch`/`config.redact_secrets`). Never returns `Err` for a
+/// Runs pipeline step 4. `include_patch` mirrors `config.include_git_patch`;
+/// `redactor` is `Some` exactly when `config.redact_secrets` is set, and carries the
+/// run's placeholder policy with it — one argument rather than a boolean and a redactor
+/// that could disagree with each other. Never returns `Err` for a
 /// missing or unreadable Git repository — an un-versioned project must still export
 /// cleanly, the same principle `codepack_diff`'s `disabled_by_git_error` already
 /// encodes for diff selection.
@@ -350,7 +356,7 @@ pub fn write_git_report(
     source_root: &Path,
     output_file: &Path,
     include_patch: bool,
-    redact: bool,
+    redactor: Option<&codepack_security::Redactor>,
     log: &dyn Fn(&str),
     cancel: &CancellationToken,
 ) -> Result<()> {
@@ -363,7 +369,7 @@ pub fn write_git_report(
         if include_patch { "yes" } else { "no" }
     ));
     out.push_str("Git commands are read-only. The .git directory is not copied.\n");
-    out.push_str(if redact {
+    out.push_str(if redactor.is_some() {
         "Secret redaction is applied to command output.\n"
     } else {
         "Secret redaction is disabled.\n"
@@ -391,7 +397,7 @@ pub fn write_git_report(
         &mut out,
         "git status --short --branch",
         &status_short(&repo),
-        redact,
+        redactor,
     );
 
     bail_if_cancelled!();
@@ -399,7 +405,7 @@ pub fn write_git_report(
         &mut out,
         "git branch --show-current",
         &[current_branch_name(&repo).unwrap_or_default()],
-        redact,
+        redactor,
     );
 
     bail_if_cancelled!();
@@ -407,7 +413,7 @@ pub fn write_git_report(
         &mut out,
         "git log -5 --date=iso-strict --pretty=%h %cd %s",
         &recent_log(&repo, 5),
-        redact,
+        redactor,
     );
 
     bail_if_cancelled!();
@@ -415,7 +421,7 @@ pub fn write_git_report(
         &mut out,
         "git show --stat --name-status HEAD",
         &show_stat_name_status(&repo),
-        redact,
+        redactor,
     );
 
     if include_patch {
@@ -424,7 +430,7 @@ pub fn write_git_report(
             &mut out,
             "git show --patch --find-renames HEAD",
             &show_patch(&repo),
-            redact,
+            redactor,
         );
     }
 
@@ -482,7 +488,7 @@ mod tests {
             dir.path(),
             &output,
             false,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             &no_log,
             &CancellationToken::new(),
         )
@@ -504,7 +510,7 @@ mod tests {
             dir.path(),
             &output,
             false,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             &no_log,
             &CancellationToken::new(),
         )
@@ -526,7 +532,7 @@ mod tests {
             dir.path(),
             &output,
             true,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             &no_log,
             &CancellationToken::new(),
         )
@@ -552,7 +558,7 @@ mod tests {
             dir.path(),
             &output,
             false,
-            false,
+            None,
             &no_log,
             &CancellationToken::new(),
         )
@@ -595,7 +601,7 @@ mod tests {
             dir.path(),
             &output,
             false,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             &no_log,
             &CancellationToken::new(),
         )

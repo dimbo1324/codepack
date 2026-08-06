@@ -24,6 +24,16 @@ pub const DEFAULT_ARCHIVE_FORMAT: &str = "zip";
 /// than filtered at each call site so "listed" and "usable" can never drift apart.
 pub const IMPLEMENTED_ARCHIVE_FORMATS: &[&str] = &["zip", "7z"];
 
+/// Local coding agents a bundle can be handed to (stage S13's offline path).
+///
+/// The ids live here, not in `codepack-ai`, because `Config` has to normalize the
+/// stored value and the dependency direction is `ai → core`, never the reverse. The
+/// display name and the command belong to `codepack-ai::handoff::AGENTS`, which owns
+/// what an agent *is*; a test there asserts the two lists name the same agents, so the
+/// split cannot drift into a setting that resolves to nothing.
+pub const LOCAL_AI_AGENTS: &[&str] = &["claude-code", "codex"];
+pub const DEFAULT_LOCAL_AI_AGENT: &str = "claude-code";
+
 pub const THEMES: &[&str] = &["system", "light", "dark"];
 pub const DEFAULT_THEME: &str = "system";
 

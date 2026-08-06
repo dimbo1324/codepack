@@ -7,12 +7,15 @@
   // matters more than hiding it: an incomplete bundle that looks complete is the one
   // outcome a tool about safe handoff must never produce.
   import {
+    listLocalAgents,
     openDashboard,
     openOnboardingGuide,
     openProjectOverview,
     openResultLocation,
     openReviewChecklist,
+    prepareHandoff,
   } from "$lib/api/client";
+  import type { HandoffResult, LocalAgentInfo } from "$lib/api/types";
   import Callout from "$lib/components/Callout.svelte";
   import EmptyState from "$lib/components/EmptyState.svelte";
   import Icon, { type IconName } from "$lib/components/Icon.svelte";
@@ -71,6 +74,46 @@
 
   async function copyPath(path: string): Promise<void> {
     const copied = await copyText(path);
+    pushToast(copied ? "success" : "danger", copied ? "common.copied" : "common.copyFailed");
+  }
+
+  // --- Hand the bundle to a local agent (stage S13, offline path) -------------------
+  //
+  // Nothing is sent anywhere and nothing is launched: the agent runs on this machine and
+  // reads the folder. The page's whole job is to write the file and show the command.
+  let agents = $state<LocalAgentInfo[]>([]);
+  let selectedAgent = $state("");
+  let question = $state("");
+  let handoff = $state<HandoffResult | null>(null);
+  let preparing = $state(false);
+
+  $effect(() => {
+    void (async () => {
+      try {
+        agents = await listLocalAgents();
+        if (!selectedAgent && agents.length > 0) selectedAgent = agents[0].id;
+      } catch (error) {
+        reportError("result.handoff.failed", error);
+      }
+    })();
+  });
+
+  async function prepare(path: string): Promise<void> {
+    preparing = true;
+    try {
+      handoff = await prepareHandoff(path, selectedAgent, question);
+    } catch (error) {
+      reportError("result.handoff.failed", error);
+    } finally {
+      preparing = false;
+    }
+  }
+
+  async function copyCommand(): Promise<void> {
+    if (!handoff) return;
+    // Both halves, because the command only works from inside the bundle: copying just
+    // `claude` hands over something that runs in the wrong directory.
+    const copied = await copyText(`cd "${handoff.working_dir}"\n${handoff.command}`);
     pushToast(copied ? "success" : "danger", copied ? "common.copied" : "common.copyFailed");
   }
 </script>
@@ -177,6 +220,59 @@
       <section class="card">
         <div class="card__header">
           <div>
+            <h2 class="card__title">{t("result.handoff")}</h2>
+            <p class="card__subtitle">{t("result.handoff.lede")}</p>
+          </div>
+        </div>
+        <div class="card__body handoff">
+          <div class="handoff__controls">
+            <label class="field">
+              <span class="field__label">{t("result.handoff.agent")}</span>
+              <select class="input" bind:value={selectedAgent}>
+                {#each agents as agent (agent.id)}
+                  <option value={agent.id}>{agent.display_name}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="field field--grow">
+              <span class="field__label">{t("result.handoff.question")}</span>
+              <input
+                class="input"
+                type="text"
+                bind:value={question}
+                placeholder={t("result.handoff.questionPlaceholder")}
+              />
+            </label>
+            <button
+              class="btn btn--primary"
+              disabled={preparing || agents.length === 0}
+              onclick={() => prepare(path)}
+            >
+              <Icon name="package" size={14} />
+              {t("result.handoff.prepare")}
+            </button>
+          </div>
+
+          {#if handoff}
+            <div class="handoff__result">
+              <p class="text-sm">{t("result.handoff.ready")}</p>
+              <pre class="handoff__command selectable">cd "{handoff.working_dir}"
+{handoff.command}</pre>
+              <div class="row row--tight">
+                <button class="btn btn--sm" onclick={copyCommand}>
+                  <Icon name="copy" size={13} />
+                  {t("result.handoff.copyCommand")}
+                </button>
+              </div>
+              <p class="text-muted text-xs">{t("result.handoff.local")}</p>
+            </div>
+          {/if}
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__header">
+          <div>
             <h2 class="card__title">{t("result.reports")}</h2>
             <p class="card__subtitle">{t("result.reports.lede")}</p>
           </div>
@@ -276,6 +372,54 @@
     gap: var(--space-2);
     padding: var(--space-4) var(--space-6) var(--space-6);
     font-size: var(--text-sm);
+    word-break: break-all;
+  }
+
+  .handoff {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .handoff__controls {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 180px;
+  }
+
+  .field--grow {
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .field__label {
+    color: var(--fg-muted);
+    font-size: var(--text-xs);
+  }
+
+  .handoff__result {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+  }
+
+  .handoff__command {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunken, var(--surface-hover));
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    white-space: pre-wrap;
     word-break: break-all;
   }
 

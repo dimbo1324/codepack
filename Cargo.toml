@@ -130,7 +130,12 @@ notify = { version = "8", default-features = false, features = ["macos_fsevent"]
 # S13 (codepack-ai): the only crate in this workspace allowed to reach the network,
 # and only on an explicit user action (invariant I1). `cargo xtask gate` fails if any
 # other crate declares an HTTP client.
-codepack-ai = { path = "crates/codepack-ai" }
+#
+# Taken WITHOUT default features: `codepack-ai`'s offline handoff — the only part either
+# front end uses — needs no HTTP client and no credential store, and a binary should not
+# link a transport it cannot reach. A dependent that genuinely wants the API path asks
+# for `features = ["api"]` in its own manifest, where the gate can see it.
+codepack-ai = { path = "crates/codepack-ai", default-features = false }
 # S13: chosen over `reqwest` deliberately. This workspace has no async runtime — the
 # engine parallelises with rayon and the desktop runs exports on plain threads — and
 # `reqwest` would pull tokio in for a handful of request/response round trips. `ureq`

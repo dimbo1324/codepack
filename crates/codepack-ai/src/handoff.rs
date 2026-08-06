@@ -159,4 +159,19 @@ mod tests {
             assert_eq!(agent(entry.id), Some(*entry));
         }
     }
+
+    #[test]
+    fn the_agents_here_are_exactly_the_ones_config_will_accept() {
+        // The ids are duplicated on purpose: `Config` must normalize the stored value
+        // and cannot depend on this crate (the dependency points `ai → core`). A split
+        // like that is only safe while something fails when it drifts — a setting
+        // naming an agent this list does not describe would resolve to nothing at all.
+        let here: Vec<&str> = AGENTS.iter().map(|entry| entry.id).collect();
+        assert_eq!(
+            here,
+            codepack_core::config::LOCAL_AI_AGENTS.to_vec(),
+            "codepack-ai::handoff::AGENTS and Config's LOCAL_AI_AGENTS have drifted"
+        );
+        assert!(agent(codepack_core::config::DEFAULT_LOCAL_AI_AGENT).is_some());
+    }
 }

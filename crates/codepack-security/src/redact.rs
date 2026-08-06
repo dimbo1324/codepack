@@ -59,6 +59,7 @@
 use crate::patterns::keyword::{KeySpacing, redact_value_after_separator};
 use crate::patterns::keyword_scan::{find_bearer_tokens, find_keyword_assignments, scan_roots};
 use crate::patterns::{credentials, prefilter, provider};
+use crate::pseudonym::Placeholders;
 
 /// Every span content redaction must replace on one line.
 ///
@@ -116,15 +117,17 @@ fn find_redaction_spans(line: &str) -> Vec<(usize, usize)> {
 /// assignment operator and masks the run in front of it via `sanitize_key_prefix`,
 /// which is the correct, conservative outcome even though it produces a slightly
 /// unlovely doubled placeholder rather than a single clean one.
-fn replace_match(matched: &str) -> String {
+fn replace_match(matched: &str, placeholders: Placeholders<'_>) -> String {
     redact_value_after_separator(
         matched,
         // The match span starts at the keyword itself, and legacy preserved any space
         // before the separator; golden references contain that spelling.
         KeySpacing::Preserve,
         // A span with no key of its own — a bare token, a provider signature, a URL
-        // password — has nothing to name.
-        "<REDACTED_SECRET>",
+        // password — has nothing to name, so the whole span is the secret and the whole
+        // span is what a label is keyed on.
+        || placeholders.bare(matched),
+        placeholders,
     )
 }
 
@@ -137,14 +140,27 @@ fn replace_match(matched: &str) -> String {
 /// a newline. Scanning per line also keeps the span offsets simple and bounds the work
 /// on a very large file.
 pub fn redact_secrets(text: &str) -> String {
+    redact_text_with(text, Placeholders::plain())
+}
+
+/// [`redact_secrets`] with an explicit placeholder policy — the form
+/// [`crate::Redactor`] calls.
+pub(crate) fn redact_text_with(text: &str, placeholders: Placeholders<'_>) -> String {
     // `split_inclusive` keeps each line's terminator attached, so joining the results
     // reproduces the original line endings exactly — including a missing final newline,
     // and including `\r\n`, whose `\r` is simply part of the line's tail.
-    text.split_inclusive('\n').map(redact_line_spans).collect()
+    text.split_inclusive('\n')
+        .map(|line| redact_line_spans(line, placeholders))
+        .collect()
+}
+
+/// One line, for the scan-report path that works line by line.
+pub(crate) fn redact_line_with(line: &str, placeholders: Placeholders<'_>) -> String {
+    redact_text_with(line, placeholders)
 }
 
 /// Replaces every secret span on one line, left to right.
-fn redact_line_spans(line: &str) -> String {
+fn redact_line_spans(line: &str, placeholders: Placeholders<'_>) -> String {
     let spans = find_redaction_spans(line);
     if spans.is_empty() {
         return line.to_string();
@@ -165,7 +181,7 @@ fn redact_line_spans(line: &str) -> String {
             continue;
         }
         out.push_str(&line[cursor..start]);
-        out.push_str(&replace_match(&line[start..end]));
+        out.push_str(&replace_match(&line[start..end], placeholders));
         cursor = end;
     }
     out.push_str(&line[cursor..]);

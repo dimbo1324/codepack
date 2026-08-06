@@ -125,6 +125,11 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         "developer_context",
         "theme",
         "language",
+        // Added 2026-08-06 with the S13 handoff door. Same reasoning as the numeric
+        // additions below: new fields with `#[serde(default)]`, so an old settings file
+        // loads unchanged and takes the defaults.
+        "ai_handoff_agent",
+        "ai_handoff_question",
     ];
     let bool_fields = [
         "text_file_size_limit_enabled",
@@ -135,6 +140,7 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         "incremental_export_enabled",
         "watch_enabled",
         "watch_clipboard_auto_update",
+        "redaction_labels",
     ];
     let number_fields = [
         "schema_version",

@@ -9,6 +9,7 @@
 use crate::patterns::keyword_scan::{
     self, REDACT_ROOTS, assignment_roots, contains_root, find_keyword_assignments, scan_roots,
 };
+use crate::pseudonym::Placeholders;
 
 /// Every keyword/value span on the line — legacy's first `SECRET_PATTERNS` entry —
 /// followed by every `BEARER <token>` span, the second entry.
@@ -111,14 +112,23 @@ pub fn secret_confidence(line: &str) -> Option<&'static str> {
 /// through this function (invariant I3): the raw matched substring never reaches the
 /// output, only the key name survives.
 pub fn redacted_line(line: &str) -> String {
-    let redacted = crate::redact::redact_secrets(line);
+    redacted_line_with(line, Placeholders::plain())
+}
+
+/// [`redacted_line`] with an explicit placeholder policy — the form the pseudonym
+/// feature calls.
+pub(crate) fn redacted_line_with(line: &str, placeholders: Placeholders<'_>) -> String {
+    let redacted = crate::redact::redact_line_with(line, placeholders);
     if mentions_scan_keyword(&redacted) {
         return redact_value_after_separator(
             &redacted,
             KeySpacing::Trim,
             // No separator on the line means there is no key name worth keeping, so the
-            // whole line collapses rather than leaking an unidentifiable fragment.
-            "<REDACTED_SECRET_LINE>",
+            // whole line collapses rather than leaking an unidentifiable fragment. Never
+            // labelled: the "secret" here is a whole line of source, so a label would
+            // claim two lines are the same credential when all they share is their text.
+            || "<REDACTED_SECRET_LINE>".to_string(),
+            placeholders,
         );
     }
     redacted.trim().to_string()
@@ -182,12 +192,18 @@ pub(crate) enum KeySpacing {
 /// the bug, and content redaction is the more dangerous of the two because its output
 /// is handed to whoever receives the bundle.
 ///
-/// `fallback` is returned when the text holds neither separator, so the caller can
-/// distinguish "a matched value with no key" from "a whole line collapsed".
+/// `fallback` is called when the text holds neither separator, so the caller can
+/// distinguish "a matched value with no key" from "a whole line collapsed". A closure
+/// rather than a string because one of those two cases wants a per-secret label and the
+/// other does not, and only the caller knows which it is.
+///
+/// `placeholders` decides how a removed value is spelled — one fixed marker, or a
+/// stable per-secret label (see [`crate::pseudonym`]).
 pub(crate) fn redact_value_after_separator(
     text: &str,
     spacing: KeySpacing,
-    fallback: &str,
+    fallback: impl FnOnce() -> String,
+    placeholders: Placeholders<'_>,
 ) -> String {
     // `=` is probed before `:` so that `key=value:with:colons` keeps `key`, matching
     // legacy's ordering.
@@ -200,18 +216,30 @@ pub(crate) fn redact_value_after_separator(
             KeySpacing::Preserve => raw_key,
             KeySpacing::Trim => raw_key.trim(),
         };
-        return format!("{}{joiner}<REDACTED>", sanitize_key_prefix(key));
+        // The value is everything after the separator — the thing being removed, and
+        // therefore the thing a label has to be keyed on.
+        let value = &text[position + separator.len_utf8()..];
+        return format!(
+            "{}{joiner}{}",
+            sanitize_key_prefix(key, placeholders),
+            placeholders.value(value)
+        );
     }
-    fallback.to_string()
+    fallback()
 }
 
-pub(crate) fn sanitize_key_prefix(prefix: &str) -> String {
+/// Masks a suspicious run inside the retained key name.
+///
+/// A masked run is a secret that happened to sit before the separator, so it is labelled
+/// like any other: two lines whose "key name" is the same encoded value are recognisably
+/// about the same thing.
+pub(crate) fn sanitize_key_prefix(prefix: &str, placeholders: Placeholders<'_>) -> String {
     let mut out = String::with_capacity(prefix.len());
     let mut run = String::new();
 
     let flush = |run: &mut String, out: &mut String| {
         if run.len() >= ENCODED_RUN_MIN_LEN && !run.chars().all(|c| c.is_ascii_alphabetic()) {
-            out.push_str("<REDACTED>");
+            out.push_str(&placeholders.value(run));
         } else {
             out.push_str(run);
         }
@@ -233,6 +261,11 @@ pub(crate) fn sanitize_key_prefix(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The fallback every test that does not exercise it can share.
+    fn fallback() -> String {
+        "fallback".to_string()
+    }
 
     #[test]
     fn a_secret_containing_an_equals_sign_does_not_survive_as_the_key_name() {
@@ -287,26 +320,45 @@ mod tests {
 
     #[test]
     fn sanitizer_keeps_words_and_masks_encoded_runs() {
-        assert_eq!(sanitize_key_prefix("- JWT_SECRET"), "- JWT_SECRET");
-        assert_eq!(sanitize_key_prefix("Authorization"), "Authorization");
         assert_eq!(
-            sanitize_key_prefix("Basic aHVudGVyMnBhc3M"),
+            sanitize_key_prefix("- JWT_SECRET", Placeholders::plain()),
+            "- JWT_SECRET"
+        );
+        assert_eq!(
+            sanitize_key_prefix("Authorization", Placeholders::plain()),
+            "Authorization"
+        );
+        assert_eq!(
+            sanitize_key_prefix("Basic aHVudGVyMnBhc3M", Placeholders::plain()),
             "Basic <REDACTED>"
         );
         // Documented over-masking: a legitimate identifier carrying a digit is masked
         // rather than risked. Information loss, never exposure.
-        assert_eq!(sanitize_key_prefix("oauth2ClientSecret"), "<REDACTED>");
+        assert_eq!(
+            sanitize_key_prefix("oauth2ClientSecret", Placeholders::plain()),
+            "<REDACTED>"
+        );
     }
 
     #[test]
     fn separator_redaction_splits_on_equals_before_colon() {
         // `=` wins so that a value containing colons still yields the real key name.
         assert_eq!(
-            redact_value_after_separator("key=host:5432", KeySpacing::Trim, "fallback"),
+            redact_value_after_separator(
+                "key=host:5432",
+                KeySpacing::Trim,
+                fallback,
+                Placeholders::plain()
+            ),
             "key=<REDACTED>"
         );
         assert_eq!(
-            redact_value_after_separator("key: value", KeySpacing::Trim, "fallback"),
+            redact_value_after_separator(
+                "key: value",
+                KeySpacing::Trim,
+                fallback,
+                Placeholders::plain()
+            ),
             "key: <REDACTED>"
         );
     }
@@ -317,7 +369,8 @@ mod tests {
             redact_value_after_separator(
                 "BEARER abcdef",
                 KeySpacing::Preserve,
-                "<REDACTED_SECRET>"
+                || "<REDACTED_SECRET>".to_string(),
+                Placeholders::plain()
             ),
             "<REDACTED_SECRET>"
         );
@@ -330,11 +383,21 @@ mod tests {
         // scan message needs, since it redacts a whole indented source line. Pinning
         // both here is what stops the two paths drifting apart again.
         assert_eq!(
-            redact_value_after_separator("  API_KEY = x", KeySpacing::Preserve, "f"),
+            redact_value_after_separator(
+                "  API_KEY = x",
+                KeySpacing::Preserve,
+                fallback,
+                Placeholders::plain()
+            ),
             "  API_KEY =<REDACTED>"
         );
         assert_eq!(
-            redact_value_after_separator("  API_KEY = x", KeySpacing::Trim, "f"),
+            redact_value_after_separator(
+                "  API_KEY = x",
+                KeySpacing::Trim,
+                fallback,
+                Placeholders::plain()
+            ),
             "API_KEY=<REDACTED>"
         );
     }
@@ -347,7 +410,8 @@ mod tests {
             let out = redact_value_after_separator(
                 "Basic dXNlcjpwYXNzd29yZA==",
                 spacing,
-                "<REDACTED_SECRET>",
+                || "<REDACTED_SECRET>".to_string(),
+                Placeholders::plain(),
             );
             assert!(
                 !out.contains("dXNlcjpwYXNzd29yZA"),

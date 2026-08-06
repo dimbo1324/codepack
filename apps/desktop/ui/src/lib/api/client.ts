@@ -19,6 +19,8 @@ import type {
   HistoryReport,
   PreviewReport,
   ProjectContext,
+  HandoffResult,
+  LocalAgentInfo,
   ProjectProfileSummary,
   SanitizeFinishedEvent,
   ScanReport,
@@ -227,6 +229,24 @@ export function onSanitizeFinished(
   handler: (event: SanitizeFinishedEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<SanitizeFinishedEvent>("sanitize:finished", (event) => handler(event.payload));
+}
+
+// --- Local AI handoff -------------------------------------------------------------
+
+/** The coding agents this build can address a handoff to. */
+export function listLocalAgents(): Promise<LocalAgentInfo[]> {
+  return invoke("list_local_agents");
+}
+
+/** Writes `AI_HANDOFF.md` into the bundle and returns the command to run beside it.
+ * Nothing is sent anywhere and nothing is launched: the agent already runs on this
+ * machine and reads the folder itself. */
+export function prepareHandoff(
+  resultPath: string,
+  agentId: string,
+  question: string,
+): Promise<HandoffResult> {
+  return invoke("prepare_handoff", { resultPath, agentId, question });
 }
 
 // --- Window chrome ---------------------------------------------------------------

@@ -231,7 +231,7 @@ pub fn cancel_export(state: State<'_, AppState>, run_id: String) -> CommandResul
 /// one, so the dashboard's relative links to the other reports keep resolving after this
 /// call returns and the user can browse them. Extracting again over an existing
 /// directory is harmless and keeps the copy current.
-fn extracted_bundle_dir(result_path: &str) -> CommandResult<std::path::PathBuf> {
+pub(crate) fn extracted_bundle_dir(result_path: &str) -> CommandResult<std::path::PathBuf> {
     let path = std::path::Path::new(result_path);
 
     // A split export hands back the archive-set *directory*; a single-ZIP export hands

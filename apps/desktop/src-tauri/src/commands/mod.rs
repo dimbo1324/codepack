@@ -10,6 +10,7 @@
 //! that belongs to the domain stays in the domain crates, so the GUI and the CLI cannot
 //! drift apart in what an export actually means.
 
+pub mod ai;
 pub mod app_info;
 pub mod export;
 pub mod history;

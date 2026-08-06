@@ -193,20 +193,29 @@ pub struct TextDumpOutcome {
     pub redacted_substitutions: u32,
 }
 
-/// Counts `<REDACTED>` markers, which is how many substitutions the redaction made.
+/// Counts redaction markers, which is how many substitutions the redaction made.
+///
+/// Both spellings, because a labelled run writes `<REDACTED:s1>` where a plain one
+/// writes `<REDACTED>` — counting only the plain marker would report zero
+/// substitutions for a bundle full of them. `<REDACTED_SECRET>` stays uncounted, as it
+/// always has been: this figure is the one the history has recorded since S5 and
+/// widening it would silently change what a stored number means.
 fn count_redaction_markers(text: &str) -> u32 {
-    u32::try_from(text.matches("<REDACTED>").count()).unwrap_or(u32::MAX)
+    let plain = text.matches("<REDACTED>").count();
+    let labelled = text.matches("<REDACTED:").count();
+    u32::try_from(plain + labelled).unwrap_or(u32::MAX)
 }
 
 /// Runs pipeline step 5. `max_bytes_per_file` mirrors
-/// `config.effective_max_text_file_bytes()`; `redact` mirrors `config.redact_secrets`;
+/// `config.effective_max_text_file_bytes()`; `redactor` is `Some` exactly when
+/// `config.redact_secrets` is set, and carries the run's placeholder policy;
 /// `developer_context` mirrors `config.developer_context.trim()` — pass an empty string
 /// to skip the header-prepend step entirely.
 pub fn write_text_dump(
     root: &Path,
     output_file: &Path,
     max_bytes_per_file: Option<u64>,
-    redact: bool,
+    redactor: Option<&codepack_security::Redactor>,
     developer_context: &str,
     log: &dyn Fn(&str),
     cancel: &CancellationToken,
@@ -231,7 +240,14 @@ pub fn write_text_dump(
     ));
     out.push_str(&format!(
         "Secrets redaction: {}\n",
-        if redact { "enabled" } else { "disabled" }
+        match redactor {
+            // Said out loud so a reader meeting `<REDACTED:s1>` for the first time knows
+            // it is a label for one particular secret and not part of the value.
+            Some(redactor) if redactor.is_labelled() =>
+                "enabled, with a stable label per distinct secret (<REDACTED:sN>)",
+            Some(_) => "enabled",
+            None => "disabled",
+        }
     ));
     out.push_str("Only readable text-like files are included.\n");
     out.push_str(&section_rule('='));
@@ -284,12 +300,13 @@ pub fn write_text_dump(
         };
 
         let (text, encoding) = decode_best_effort(&raw);
-        let text = if redact {
-            let redacted = codepack_security::redact_secrets(&text);
-            redacted_substitutions += count_redaction_markers(&redacted);
-            redacted
-        } else {
-            text
+        let text = match redactor {
+            Some(redactor) => {
+                let redacted = redactor.redact_secrets(&text);
+                redacted_substitutions += count_redaction_markers(&redacted);
+                redacted
+            }
+            None => text,
         };
         let modified = metadata
             .modified()
@@ -359,7 +376,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "",
             &no_log,
             &CancellationToken::new(),
@@ -381,7 +398,7 @@ mod tests {
             dir.path(),
             &output,
             Some(10),
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "",
             &no_log,
             &CancellationToken::new(),
@@ -403,7 +420,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "",
             &no_log,
             &CancellationToken::new(),
@@ -429,7 +446,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "",
             &no_log,
             &CancellationToken::new(),
@@ -457,7 +474,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "",
             &no_log,
             &CancellationToken::new(),
@@ -479,7 +496,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "  fix the login bug  ",
             &no_log,
             &CancellationToken::new(),
@@ -502,7 +519,7 @@ mod tests {
             dir.path(),
             &output,
             None,
-            true,
+            Some(&codepack_security::Redactor::plain()),
             "   ",
             &no_log,
             &CancellationToken::new(),
@@ -524,9 +541,17 @@ mod tests {
         let cancel = CancellationToken::new();
         cancel.cancel();
 
-        let stats = write_text_dump(dir.path(), &output, None, true, "", &no_log, &cancel)
-            .unwrap()
-            .stats;
+        let stats = write_text_dump(
+            dir.path(),
+            &output,
+            None,
+            Some(&codepack_security::Redactor::plain()),
+            "",
+            &no_log,
+            &cancel,
+        )
+        .unwrap()
+        .stats;
 
         assert_eq!(stats.scanned, 0);
         assert_eq!(stats.written, 0);

@@ -195,6 +195,108 @@ fn planted_secrets_never_reach_the_text_dump() {
     }
 }
 
+/// `redaction_labels` end to end: the same credential used twice must come out of the
+/// pipeline wearing the same label, a different one must not, and neither value may
+/// appear anywhere in the bundle.
+#[test]
+fn stable_labels_survive_the_pipeline_without_the_secrets_doing_so() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(
+        source.path().join("api.py"),
+        "api_key = \"sharedFAKEsecretvalue1234\"\n",
+    )
+    .unwrap();
+    fs::write(
+        source.path().join("worker.py"),
+        "token: \"sharedFAKEsecretvalue1234\"\npassword = \"aDifferentFAKEvalue5678\"\n",
+    )
+    .unwrap();
+    init_git_repo(source.path());
+
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    let config = Config {
+        redact_secrets: true,
+        redaction_labels: true,
+        ..Config::default()
+    };
+    let cancel = CancellationToken::new();
+    let (tx, _rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+    assert!(outcome.successful, "copy_stats = {:?}", outcome.copy_stats);
+
+    let dump = read_zip_entry(&outcome.paths.final_zip, "reports/03_text_dump.txt");
+
+    for secret in ["sharedFAKEsecretvalue1234", "aDifferentFAKEvalue5678"] {
+        assert!(!dump.contains(secret), "{secret} leaked into the text dump");
+    }
+
+    // Two occurrences of one secret, one of another: three labelled placeholders over
+    // two distinct labels.
+    assert_eq!(
+        dump.matches("<REDACTED:s1>").count(),
+        2,
+        "the shared credential must carry one label in both files:\n{dump}"
+    );
+    assert_eq!(
+        dump.matches("<REDACTED:s2>").count(),
+        1,
+        "the second, different credential must not share that label:\n{dump}"
+    );
+    assert!(
+        dump.contains("stable label per distinct secret"),
+        "the header must explain what <REDACTED:sN> means"
+    );
+}
+
+/// The default must remain byte-identical to what the product produced before labels
+/// existed. This is what lets the feature ship without moving a golden reference.
+#[test]
+fn labels_off_by_default_leaves_the_placeholder_exactly_as_it_was() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(
+        source.path().join("api.py"),
+        "api_key = \"sharedFAKEsecretvalue1234\"\n",
+    )
+    .unwrap();
+
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    let cancel = CancellationToken::new();
+    let (tx, _rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &Config::default(),
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+
+    let dump = read_zip_entry(&outcome.paths.final_zip, "reports/03_text_dump.txt");
+    assert!(dump.contains("<REDACTED>"), "{dump}");
+    assert!(
+        !dump.contains("<REDACTED:"),
+        "a default run must not label anything"
+    );
+    assert!(dump.contains("Secrets redaction: enabled\n"));
+}
+
 #[test]
 fn keep_staging_folder_true_leaves_the_staging_tree_in_place() {
     let source = tempfile::tempdir().unwrap();

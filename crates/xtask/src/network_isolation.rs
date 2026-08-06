@@ -24,6 +24,10 @@ const ALLOWED: &str = "codepack-ai";
 /// `default-features = false` precisely to exclude its network features, and that
 /// narrowing is verified by the manifest it already lives in.
 const NETWORK_CRATES: &[&str] = &[
+    // The client `codepack-ai` itself uses. Its absence here was a real hole: the one
+    // transport already proven to build in this workspace — the one a developer would
+    // copy from the crate next door — was the one the check could not see.
+    "ureq",
     "reqwest",
     "hyper",
     "ureq",
@@ -58,6 +62,23 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         for dependency in declared_dependencies(&text) {
             if NETWORK_CRATES.contains(&dependency.as_str()) {
                 offenders.push(format!("{package} depends on {dependency}"));
+            }
+        }
+
+        if let Some(line) = declaration_of(&text, ALLOWED) {
+            // Only the API path carries a client. A dependent that asks for it by name
+            // has made a decision; one that inherits it has not.
+            if line.contains("\"api\"") {
+                offenders.push(format!(
+                    "{package} enables {ALLOWED}'s \"api\" feature, which brings an HTTP \
+                     client and the credential store with it"
+                ));
+            }
+            if !workspace_takes_ai_without_default_features(root)? {
+                offenders.push(format!(
+                    "{package} depends on {ALLOWED}, but the workspace declares it with \
+                     default features, so the HTTP client arrives transitively"
+                ));
             }
         }
     }
@@ -134,9 +155,120 @@ fn declared_dependencies(manifest: &str) -> Vec<String> {
     names
 }
 
+/// Whether the workspace root hands [`ALLOWED`] out without its default features.
+///
+/// Checked at the root rather than per member because that is where cargo resolves it:
+/// a member inheriting `workspace = true` cannot switch default features off itself
+/// (cargo rejects the override), so the root entry is the only place the decision can
+/// live — and therefore the only honest place to verify it.
+///
+/// A root that does not mention the crate at all satisfies this vacuously: nothing can
+/// inherit what is not declared, and the per-member checks still apply.
+fn workspace_takes_ai_without_default_features(root: &Path) -> Result<bool, String> {
+    let manifest = root.join("Cargo.toml");
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        return Err(format!("could not read {}", manifest.display()));
+    };
+    Ok(match declaration_of(&text, ALLOWED) {
+        Some(line) => line.contains("default-features = false"),
+        None => true,
+    })
+}
+
+/// The whole declaration line for `name`, if the manifest declares it as a dependency.
+///
+/// Returned as raw text rather than parsed: the only question asked of it is whether it
+/// switches default features off, and that is one substring.
+fn declaration_of(manifest: &str, name: &str) -> Option<String> {
+    let mut in_dependencies = false;
+
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_dependencies = trimmed.contains("dependencies");
+            continue;
+        }
+        if !in_dependencies || trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, _)) = trimmed.split_once('=')
+            && key.trim().trim_matches('"') == name
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Writes the workspace root's own manifest, which is where the `codepack-ai`
+    /// default-features decision has to live (a member cannot override it).
+    fn write_root_manifest(root: &Path, ai_declaration: &str) {
+        std::fs::write(
+            root.join("Cargo.toml"),
+            format!("[workspace.dependencies]\n{ai_declaration}\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_front_end_inheriting_the_ai_crate_with_default_features_is_rejected() {
+        // `codepack-ai`'s offline handoff needs no transport, so a front end that offers
+        // only that must not link one. Declared dependencies are all this check can see,
+        // which is exactly why the feature split has to be visible in a manifest.
+        let root = scratch_workspace("ai-default-features");
+        write_root_manifest(&root, "codepack-ai = { path = \"crates/codepack-ai\" }");
+        write_crate(
+            &root,
+            "codepack-cli",
+            "[dependencies]\ncodepack-ai = { workspace = true }\n",
+        );
+
+        let error = check(&root).unwrap_err();
+        assert!(error.contains("default features"), "{error}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_front_end_asking_for_the_api_feature_by_name_is_rejected() {
+        let root = scratch_workspace("ai-api-feature");
+        write_root_manifest(
+            &root,
+            "codepack-ai = { path = \"c\", default-features = false }",
+        );
+        write_crate(
+            &root,
+            "codepack-cli",
+            "[dependencies]\ncodepack-ai = { workspace = true, features = [\"api\"] }\n",
+        );
+
+        let error = check(&root).unwrap_err();
+        assert!(error.contains("\"api\" feature"), "{error}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_front_end_taking_only_the_offline_handoff_is_accepted() {
+        let root = scratch_workspace("ai-handoff-only");
+        write_root_manifest(
+            &root,
+            "codepack-ai = { path = \"c\", default-features = false }",
+        );
+        write_crate(
+            &root,
+            "codepack-cli",
+            "[dependencies]\ncodepack-ai = { workspace = true }\n",
+        );
+
+        assert!(check(&root).is_ok());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn dependency_names_are_read_from_every_dependency_table() {
