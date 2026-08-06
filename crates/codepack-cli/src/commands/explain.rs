@@ -74,7 +74,7 @@ pub(crate) fn run(args: &ExplainArgs, format: Format) -> Result<Outcome> {
     Ok(Outcome::Success)
 }
 
-fn build(context: &ProjectContext, requested: &Path) -> Result<ExplainReport> {
+pub(crate) fn build(context: &ProjectContext, requested: &Path) -> Result<ExplainReport> {
     let relative = relative_to_project(&context.root, requested)?;
     let key = plan_spelling(&relative);
     // `symlink_metadata` rather than `exists()`: the walker never follows a symlink

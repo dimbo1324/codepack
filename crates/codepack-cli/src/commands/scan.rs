@@ -173,7 +173,7 @@ fn write_sarif(report: &ScanReport, path: &std::path::Path) -> Result<()> {
         .map_err(|error| crate::error::CliError::message(error.to_string()))
 }
 
-fn build(context: &ProjectContext, fail_on: SeverityArg) -> Result<ScanReport> {
+pub(crate) fn build(context: &ProjectContext, fail_on: SeverityArg) -> Result<ScanReport> {
     let cancel = CancellationToken::new();
 
     // Scanned with safe mode forced to `full`, meaning "exclude nothing on safety
@@ -247,7 +247,7 @@ fn build(context: &ProjectContext, fail_on: SeverityArg) -> Result<ScanReport> {
 /// back onto the paths they had in the repository, **before** the allowlist runs: a
 /// fingerprint has to be stable and has to name something a person recognises, and a
 /// path containing a blob id is neither.
-fn build_history(context: &ProjectContext, args: &ScanArgs) -> Result<ScanReport> {
+pub(crate) fn build_history(context: &ProjectContext, args: &ScanArgs) -> Result<ScanReport> {
     let cancel = CancellationToken::new();
     let options = crate::history_scan::HistoryOptions {
         since: args.since.clone(),
@@ -370,7 +370,7 @@ fn display_of(relative: &std::path::Path) -> String {
 /// directory the staged blobs were unpacked into: `.codepack-allow` is a property of the
 /// repository, and a staged scan that ignored it would report findings a team has
 /// already accepted — the exact noise this feature exists to remove.
-fn build_staged(context: &ProjectContext, fail_on: SeverityArg) -> Result<ScanReport> {
+pub(crate) fn build_staged(context: &ProjectContext, fail_on: SeverityArg) -> Result<ScanReport> {
     let cancel = CancellationToken::new();
     let staged = crate::staged::collect(&context.root)?;
 

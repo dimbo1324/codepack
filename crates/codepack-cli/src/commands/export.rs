@@ -11,7 +11,7 @@ use codepack_core::{CancellationToken, ProgressEvent};
 use serde::Serialize;
 
 use crate::cli::ExportArgs;
-use crate::commands;
+use crate::commands::{self, ProjectContext};
 use crate::error::{CliError, Result};
 use crate::exit::Outcome;
 use crate::output::{self, Format};
@@ -42,16 +42,49 @@ pub(crate) struct ExportReport {
 
 pub(crate) fn run(args: &ExportArgs, format: Format) -> Result<Outcome> {
     let context = commands::prepare(&args.project)?;
-    let output_root = resolve_output_root(args.out.as_deref(), &context.root)?;
+    let report = build(&context, args.out.as_deref(), format.is_json())?;
+
+    if format.is_json() {
+        output::emit_json("export", &report)?;
+    } else {
+        print_human(&report);
+    }
+
+    // Order matters, and it is the same rule the rest of this binary follows: whether
+    // the work succeeded outranks what the work found. An export that hit copy errors
+    // or was cancelled still writes a bundle — steps 7 and 8 always run — so returning
+    // 0 or 3 for it would tell a pipeline an incomplete snapshot is fit to publish.
+    Ok(if !report.successful {
+        Outcome::Incomplete
+    } else if report.critical_findings > 0 {
+        Outcome::CriticalSecretsFound
+    } else {
+        Outcome::Success
+    })
+}
+
+/// Runs the pipeline and shapes the report, without printing anything.
+///
+/// Split out of [`run`] so the MCP server can produce exactly the export a user would
+/// get from the command line — the same output-root rule, the same history record, the
+/// same report — rather than assembling a second one beside it. `quiet` suppresses the
+/// per-file log; step transitions still go to stderr, because a long-running job that
+/// says nothing at all is indistinguishable from a hung one.
+pub(crate) fn build(
+    context: &ProjectContext,
+    out: Option<&std::path::Path>,
+    quiet: bool,
+) -> Result<ExportReport> {
+    let output_root = resolve_output_root(out, &context.root)?;
 
     let mut conn = commands::open_history_db()?;
     let (progress, events) = codepack_core::progress_channel();
 
-    // Progress goes to stderr so `--json` stdout stays a single parseable document.
-    // The receiver runs on its own thread because the export fills the channel as it
-    // goes; draining afterwards would buffer the whole run in memory and show the user
+    // Progress goes to stderr so `--json` stdout stays a single parseable document —
+    // and, for the MCP server, so the JSON-RPC stream stays parseable at all. The
+    // receiver runs on its own thread because the export fills the channel as it goes;
+    // draining afterwards would buffer the whole run in memory and show the user
     // nothing until it finished.
-    let quiet = format.is_json();
     let printer = std::thread::spawn(move || {
         for event in events {
             if let ProgressEvent::Log(log) = event {
@@ -119,23 +152,7 @@ pub(crate) fn run(args: &ExportArgs, format: Format) -> Result<Outcome> {
         resolution: context.resolution_for_output(),
     };
 
-    if format.is_json() {
-        output::emit_json("export", &report)?;
-    } else {
-        print_human(&report);
-    }
-
-    // Order matters, and it is the same rule the rest of this binary follows: whether
-    // the work succeeded outranks what the work found. An export that hit copy errors
-    // or was cancelled still writes a bundle — steps 7 and 8 always run — so returning
-    // 0 or 3 for it would tell a pipeline an incomplete snapshot is fit to publish.
-    Ok(if !report.successful {
-        Outcome::Incomplete
-    } else if report.critical_findings > 0 {
-        Outcome::CriticalSecretsFound
-    } else {
-        Outcome::Success
-    })
+    Ok(report)
 }
 
 /// Decides where the bundle is written, and refuses to put it inside the project.

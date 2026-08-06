@@ -55,7 +55,7 @@ pub(crate) fn run(args: &PreviewArgs, format: Format) -> Result<Outcome> {
     Ok(Outcome::Success)
 }
 
-fn build(context: &ProjectContext, list_files: bool) -> Result<PreviewReport> {
+pub(crate) fn build(context: &ProjectContext, list_files: bool) -> Result<PreviewReport> {
     // No previous snapshot is consulted: `preview` must not touch the history
     // database, so a `last_export` diff degrades to "everything", which
     // `codepack-diff` already reports as a warning in its own selection.

@@ -1633,3 +1633,217 @@ fn an_exported_bundle_can_be_handed_to_an_agent_end_to_end() {
     let briefing = std::fs::read_to_string(report["handoff_file"].as_str().unwrap()).unwrap();
     assert!(briefing.contains("partial by design"));
 }
+
+// --- the MCP server, spoken to over real pipes --------------------------------------
+
+/// Runs `codepack mcp` as a process, writes `lines` to its stdin, closes it, and parses
+/// every response line.
+///
+/// A process, not the loop called in-process: the framing, the flushing and the promise
+/// that nothing but protocol reaches stdout are properties of the program, and an
+/// in-process test cannot observe any of them.
+fn mcp_session(sandbox: &Sandbox, lines: &[String]) -> (Vec<serde_json::Value>, String, i32) {
+    use std::io::Write;
+
+    let mut child = Command::new(binary())
+        .arg("mcp")
+        .env("HOME", sandbox.home.path())
+        .env("APPDATA", sandbox.home.path())
+        .env("LOCALAPPDATA", sandbox.home.path())
+        .env("USERPROFILE", sandbox.home.path())
+        .env("XDG_CONFIG_HOME", sandbox.home.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        for line in lines {
+            writeln!(stdin, "{line}").unwrap();
+        }
+    }
+    // Dropping stdin is how a client shuts the server down; the process must then exit
+    // on its own rather than having to be killed.
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    let stdout_text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let responses = stdout_text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str(line).unwrap_or_else(|error| {
+                panic!("stdout carried something that is not JSON-RPC ({error}): {line}")
+            })
+        })
+        .collect();
+
+    (
+        responses,
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+        output.status.code().unwrap_or(-1),
+    )
+}
+
+fn rpc(id: u32, method: &str, params: serde_json::Value) -> String {
+    serde_json::json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string()
+}
+
+#[test]
+fn the_mcp_server_completes_a_handshake_and_lists_its_tools() {
+    let sandbox = Sandbox::new();
+    let (responses, _stderr, code) = mcp_session(
+        &sandbox,
+        &[
+            rpc(
+                1,
+                "initialize",
+                serde_json::json!({"protocolVersion": "2025-06-18"}),
+            ),
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#.to_string(),
+            rpc(2, "tools/list", serde_json::json!({})),
+        ],
+    );
+
+    assert_eq!(code, 0, "closing stdin must end the session cleanly");
+    // Two requests and one notification: the notification must draw no reply.
+    assert_eq!(responses.len(), 2, "{responses:#?}");
+    assert!(responses[0]["result"]["serverInfo"]["name"].is_string());
+    assert!(
+        !responses[1]["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn an_agent_can_ask_why_a_file_is_missing_from_the_export() {
+    // The scenario the server exists for: a `.env` is absent from a bundle, and the
+    // agent finds out why instead of assuming the project does not have one.
+    let sandbox = Sandbox::new().with_secret();
+    let project = sandbox.project().display().to_string();
+
+    let (responses, _stderr, code) = mcp_session(
+        &sandbox,
+        &[
+            rpc(1, "initialize", serde_json::json!({})),
+            rpc(
+                2,
+                "tools/call",
+                serde_json::json!({
+                    "name": "codepack_explain",
+                    "arguments": {"project": project, "file": ".env"}
+                }),
+            ),
+        ],
+    );
+
+    assert_eq!(code, 0);
+    let result = &responses[1]["result"];
+    assert_eq!(result["isError"], false, "{result:#}");
+    assert_eq!(result["structuredContent"]["verdict"], "excluded");
+    let reason = result["structuredContent"]["reason"].as_str().unwrap();
+    assert!(
+        !reason.is_empty(),
+        "a verdict with no reason explains nothing"
+    );
+}
+
+#[test]
+fn a_scan_through_the_server_reports_what_the_command_reports() {
+    let sandbox = Sandbox::new().with_secret();
+    let project = sandbox.project().display().to_string();
+
+    let (responses, _stderr, _code) = mcp_session(
+        &sandbox,
+        &[rpc(
+            1,
+            "tools/call",
+            serde_json::json!({
+                "name": "codepack_scan",
+                "arguments": {"project": project}
+            }),
+        )],
+    );
+
+    let structured = &responses[0]["result"]["structuredContent"];
+    assert_eq!(structured["safe_mode"], "full");
+    assert!(structured["summary"]["critical"].as_u64().unwrap() > 0);
+    // Invariant I3 does not stop applying because the reader is a program.
+    let text = responses[0]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
+    assert!(
+        !text.contains("totally-fake-value-0001"),
+        "the secret reached the agent: {text}"
+    );
+}
+
+#[test]
+fn an_export_through_the_server_writes_a_bundle_and_keeps_stdout_clean() {
+    // The export prints progress. If any of it reached stdout the JSON-RPC stream would
+    // stop parsing mid-session, which is why `mcp_session` fails on a non-JSON line.
+    let sandbox = Sandbox::new();
+    let project = sandbox.project().display().to_string();
+    let out = sandbox.out().display().to_string();
+
+    let (responses, _stderr, code) = mcp_session(
+        &sandbox,
+        &[rpc(
+            1,
+            "tools/call",
+            serde_json::json!({
+                "name": "codepack_export",
+                "arguments": {"project": project, "out_dir": out}
+            }),
+        )],
+    );
+
+    assert_eq!(code, 0);
+    let structured = &responses[0]["result"]["structuredContent"];
+    assert_eq!(structured["successful"], true, "{structured:#}");
+    let archive = structured["result_path"].as_str().unwrap();
+    assert!(Path::new(archive).is_file(), "no bundle at {archive}");
+}
+
+#[test]
+fn a_tool_failure_reaches_the_model_instead_of_the_transport() {
+    let sandbox = Sandbox::new();
+    let (responses, _stderr, code) = mcp_session(
+        &sandbox,
+        &[rpc(
+            1,
+            "tools/call",
+            serde_json::json!({
+                "name": "codepack_preview",
+                "arguments": {"project": "/definitely/not/a/project"}
+            }),
+        )],
+    );
+
+    assert_eq!(code, 0, "a failed tool must not end the session");
+    assert!(responses[0]["error"].is_null(), "{}", responses[0]);
+    assert_eq!(responses[0]["result"]["isError"], true);
+}
+
+#[test]
+fn the_server_survives_a_malformed_message_and_keeps_answering() {
+    let sandbox = Sandbox::new();
+    let (responses, _stderr, code) = mcp_session(
+        &sandbox,
+        &[
+            rpc(1, "ping", serde_json::json!({})),
+            "{not json at all".to_string(),
+            rpc(2, "ping", serde_json::json!({})),
+        ],
+    );
+
+    assert_eq!(code, 0);
+    assert_eq!(responses.len(), 3);
+    assert_eq!(responses[0]["id"], 1);
+    assert_eq!(responses[1]["error"]["code"], -32700);
+    assert_eq!(responses[2]["id"], 2);
+}

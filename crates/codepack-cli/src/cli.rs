@@ -54,6 +54,9 @@ pub(crate) enum Command {
     Handoff(HandoffArgs),
     /// Set this project up to use codepack: install the pre-commit hook.
     Init(InitArgs),
+    /// Serve the Model Context Protocol over stdin/stdout, so a coding agent can ask
+    /// these questions itself. Speaks JSON-RPC on stdout; nothing else may go there.
+    Mcp,
 }
 
 #[derive(Debug, Args)]

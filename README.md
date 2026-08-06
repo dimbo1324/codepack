@@ -20,6 +20,7 @@ Everything runs **locally**. Nothing is uploaded, ever.
 - [Archive formats](#archive-formats)
 - [Sterile copy](#sterile-copy)
 - [Hand a bundle to a local agent](#hand-a-bundle-to-a-local-agent)
+- [Let an agent ask for itself (MCP)](#let-an-agent-ask-for-itself-mcp)
 - [Scanning git history](#scanning-git-history)
 - [Labelled redaction](#labelled-redaction)
 - [Pre-commit use](#pre-commit-use)
@@ -38,8 +39,11 @@ Two ways to use it, both over the same engine — neither is a wrapper around th
 what goes in and what stays out, a results panel, run history, folder watching, light and
 dark themes, English and Russian interfaces switchable without a restart, and a tray icon.
 
-**Command line** — the `codepack` binary. Eleven commands, a stable exit-code contract,
+**Command line** — the `codepack` binary. Twelve commands, a stable exit-code contract,
 and `--json` on everything.
+
+**MCP server** — `codepack mcp`, for a coding agent rather than a person. Same engine,
+same answers, spoken over a pipe.
 
 A finished export contains the selected source files, a directory structure report, git
 history and optionally a patch, a full text dump, roughly thirty analysis reports, an
@@ -118,6 +122,7 @@ success, because "it was excluded, here is why" is the explanation working.
 | `sanitize` | Sterile copy: code with comments stripped and reformatted, optionally archived |
 | `handoff <bundle>` | Point a coding agent on this machine at a finished bundle |
 | `init --hook` | Install the pre-commit hook into this project |
+| `mcp` | Serve the Model Context Protocol on stdin/stdout, for a coding agent |
 | `history` | Previous runs |
 | `doctor` | Environment diagnostics |
 | `completions <shell>` | A shell completion script |
@@ -184,6 +189,43 @@ The desktop app offers the same thing on the Result page.
 Nothing is sent anywhere and nothing is launched. The binary contains **no HTTP client at
 all**: the crate that can reach the network is compiled without it, and the quality gate
 fails the build if that ever changes.
+
+## Let an agent ask for itself (MCP)
+
+Handing a bundle over is a one-way gesture: the assistant reads what it was given, and
+when a file is missing it can only guess why. `codepack mcp` closes that loop — it speaks
+the Model Context Protocol over stdin/stdout, so an agent already running on your machine
+can ask the same questions you ask at the terminal.
+
+Point Claude Code at it:
+
+```bash
+claude mcp add codepack -- codepack mcp
+```
+
+or, for any client that reads a JSON config:
+
+```json
+{
+  "mcpServers": {
+    "codepack": { "command": "codepack", "args": ["mcp"] }
+  }
+}
+```
+
+Four tools:
+
+| Tool | What the agent gets |
+|---|---|
+| `codepack_preview` | What an export would include and what it would drop, and why. Writes nothing |
+| `codepack_scan` | Secrets in the working tree, in the staged changes, or anywhere in the git history |
+| `codepack_explain` | Why one specific file is in or out — the question a bundle alone cannot answer |
+| `codepack_export` | The full pipeline. The only tool that writes anything, and it says so |
+
+It is **stdio, not HTTP**: no port, no network client in the binary, nothing to expose.
+The tools call the same code the commands call, so an agent and a person cannot get
+different answers about the same project. A tool that fails answers with the reason
+rather than an error the model never sees.
 
 ## Scanning git history
 

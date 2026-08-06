@@ -25,11 +25,17 @@ codepack-reports  codepack-archive   codepack-sanitize
 codepack-engine          the eight-step export pipeline
    ↑                ↑
 codepack-cli      apps/desktop (Tauri + Svelte)
+   ↑
+codepack mcp             the MCP server, inside the CLI binary
 ```
 
 Dependencies point strictly downward and there are no cycles. The two front ends sit
 **side by side** over the engine — the desktop app calls `codepack-engine` directly, it
-does not shell out to the CLI. No `codepack-*` crate knows about Tauri or the frontend
+does not shell out to the CLI. The MCP server is a third *surface* rather than a third
+front end: it lives inside `codepack-cli` and calls that binary's own command builders,
+because what a preset means and why `scan` forces safe mode to `full` are the CLI's
+decisions, not the engine's, and restating them elsewhere is how two answers to one
+question appear. No `codepack-*` crate knows about Tauri or the frontend
 (invariant I8), so the whole core builds and tests headless.
 
 ## The crates
@@ -73,6 +79,15 @@ pipelines depend on them:
   flags, because a preset is a named bundle of flags and must not override one the user
   typed.
 
+**`codepack mcp`** — the Model Context Protocol over stdin/stdout (JSON-RPC 2.0,
+newline-delimited), so a coding agent on the same machine can ask `preview`, `scan`,
+`explain` and `export` itself. stdio only: no dependency was added, no manifest gained a
+network client, and the gate's network-isolation step is unaffected. stdout carries
+protocol and nothing else — the rule `--json` already lived by, applied to a stream that
+is parsed continuously. A tool that fails answers with `isError` inside a successful
+result, so the model can read the reason and correct itself; JSON-RPC errors are reserved
+for protocol faults.
+
 **`apps/desktop`** — the Tauri shell (`codepack-desktop`) and a Svelte 5 + TypeScript
 frontend. The webview holds **no filesystem permission**: every file operation is a
 `#[tauri::command]`, and the frontend's only route to the backend is one typed client
@@ -101,6 +116,9 @@ run id and can be cancelled.
   assistant reads — but not the ~30 insight reports or scan findings. Widening them into
   the scan artifacts would move `06_security_scan.json` and SARIF, which is an I5 change
   and therefore a separate decision.
+- The MCP server handles one request at a time and does not implement cancellation: a
+  tool call blocks the loop until it finishes, so a large export cannot be interrupted
+  from the client.
 - A history scan stops at 500 commits and 8 MB per file version unless told otherwise.
   Both limits are reported rather than silent, but a default run is not a full audit.
 - Archive splitting uses First-Fit rather than First-Fit Decreasing. This only matters

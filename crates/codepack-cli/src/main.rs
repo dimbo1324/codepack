@@ -13,6 +13,7 @@ mod commands;
 mod error;
 mod exit;
 mod history_scan;
+mod mcp;
 mod output;
 mod settings;
 mod staged;
@@ -57,6 +58,7 @@ fn main() -> std::process::ExitCode {
         Command::Explain(args) => commands::explain::run(&args, format),
         Command::Handoff(args) => commands::handoff::run(&args, format),
         Command::Init(args) => commands::init::run(&args, format),
+        Command::Mcp => mcp::run(),
     };
 
     if let Err(error) = &result {
