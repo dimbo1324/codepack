@@ -298,10 +298,16 @@ mod tests {
         let report = install_hook(dir.path(), false).unwrap();
 
         assert!(report.custom_hooks_path);
-        assert_eq!(
-            PathBuf::from(&report.hook),
-            dir.path().join(".githooks").join("pre-commit")
-        );
+        // Canonicalised on both sides, and never compared as text. `git2` reports the
+        // working directory in its own spelling — long form, forward slashes — while
+        // `tempfile` hands back whatever `TEMP` holds, which on a GitHub Windows runner
+        // is the 8.3 short form (`RUNNER~1` against `runneradmin`). Two spellings of one
+        // path are equal as paths and unequal as strings, and this project has already
+        // lost a CI run to exactly that (`explain`, 2026-07-30).
+        let written = std::fs::canonicalize(&report.hook).unwrap();
+        let expected =
+            std::fs::canonicalize(dir.path().join(".githooks").join("pre-commit")).unwrap();
+        assert_eq!(written, expected);
     }
 
     #[test]
