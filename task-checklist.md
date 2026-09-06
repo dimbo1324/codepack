@@ -1,102 +1,115 @@
 # Task Checklist
 
-**Task:** Make codepack install and behave on Linux the way it does on Windows — the
-seven items of the 2026-09-06 audit, in order.
+**Task:** Remediate every finding from `AUDIT-2026-09-07/` (67 findings across Linux,
+security, code quality, tests, concurrency/performance, CI) plus the two owner-requested
+features (application logging, a root-level installer duplicate), in the order set out in
+`AUDIT-2026-09-07/09-PLAN.txt`.
 
-**Date:** 2026-09-06
-**Branch:** feat/linux-distribution
+**Date:** 2026-09-07
+**Branch:** fix/audit-2026-09-07-remediation
 
-Owner instruction, 2026-09-06: work through audit items 1–7 in order, unhurried, with
-intermediate commits.
+Owner instruction, 2026-09-07: fix everything the audit found, in a working branch, with
+microcommits step by step; run the full gate and tests at the end; update documentation;
+remove dead code, magic numbers and duplication; rebuild the installer so the `.exe` is
+current; merge to main and push; then shut down the machine. Work unhurried, double-check,
+debug and test along the way.
 
-## The constraint that shapes this work
+## How this checklist is organized
 
-**There is no Linux machine here.** Docker Desktop's daemon is not running and there is
-no WSL distribution; the host is Windows 11. Every Linux claim in this task is therefore
-verified on CI or not verified at all, and the checklist says which. Where a step cannot
-be proven, it is marked `-` with the reason, never `+` on the strength of the code
-looking right.
+Mirrors `AUDIT-2026-09-07/09-PLAN.txt`'s eight steps. Each finding code (L-, S-, Q-, T-,
+P-, C-, G-, D-) is checked off individually. Where the audit's own plan calls for an
+owner decision before code, the interim safe default from the audit is implemented and the
+open question is recorded in `docs/__arch__/open-questions.md` instead of blocking — this
+mirrors the audit's own Step 5 guidance and the project's rule that a blocking rule
+conflict gets escalated, not guessed past silently.
 
-## 1. AppImage, and `cargo xtask package` on Linux
+## Step 0 — non-behavior-changing corrections
 
-- [+] `tauri.conf.json`: bundle targets for Linux (`deb`, `rpm`, `appimage`) beside `nsis`
-- [+] `bundle.linux`: per-distro runtime dependencies, desktop entry metadata
-- [+] Icons Linux themes actually ask for — nothing to do: `icon.png` is 512x512 and
-      `128x128@2x.png` is 256x256, both already listed. The audit was wrong about this
-- [+] `xtask package` stops hardcoding `bundle/nsis`; reports every artifact produced
-- [+] `build-installer` script and `doctor` stop calling packaging Windows-only
-- [+] CI proves it: a packaging job on `ubuntu-latest` that uploads the artifacts
+- [ ] Q-6 README / overview.md / xtask USAGE / ROADMAP §1 status line: Linux packaging is real
+- [ ] S-3 deny.toml: rewrite the eleven GTK3 ignore reasons, add a revisit date
+- [ ] Q-1 (partial) fix the two false comments in export/mod.rs (mechanism comes in Step 1)
+- [ ] C-2 (partial) add `permissions: contents: read` to ci.yml
+- [ ] L-12/S-6 (partial) one line in README about unsigned Linux packages
 
-## 2. Unix permissions
+## Step 1 — broken and claimed (the critical findings)
 
-- [+] The copy step preserves the executable bit
-- [+] The ZIP writers record Unix modes rather than defaulting every entry to 0644
-- [+] Restore applies the recorded mode
-- [+] Tests under `#[cfg(unix)]` for each, running on the macOS and Ubuntu legs
+- [ ] T-2/S-7 `CODEPACK_HOME` override for `AppPaths::resolve()`, `TestHome` test helper
+- [ ] S-2 fix `resolve_export_result`'s `LIMIT 0` query (switch to EXISTS, no full scan)
+- [ ] T-1 acceptance-path tests: path accepted when a run produced it; all 6 commands reject a stranger path
+- [ ] S-1 `ValidatedResultPath` newtype; `extract_validated_bundle` becomes its method
+- [ ] Record the "boundary you can bypass gets a type or a gate step" rule in `.ai/universal/04-architecture-boundaries.md`
 
-## 3. The database moves to `$XDG_DATA_HOME`
+## Step 2 — process-halting / crashing risks
 
-- [+] `AppPaths` grows a data directory; the database and history live there on Linux
-- [+] Existing installations migrate rather than losing their history
-- [+] Windows and macOS layouts unchanged
-- [+] Tests for the layout and for the migration
+- [ ] P-1 sanitize formatter: write stdin on its own thread, add timeout, honor cancellation
+- [ ] P-2/Q-3 shared file-read-size ceiling in codepack-core; scan reports partial-scan instead of silent skip
+- [ ] C-1 fix `.deb` inspection step in CI: read full output before matching, no `grep -q` under `pipefail`
+- [ ] L-5 tray build failure downgraded to a warning, does not abort startup
 
-## 4. deb and rpm as real packages
+## Step 3 — Linux brought to a working state
 
-**Not started.** The owner stopped the run after item 3 to consolidate.
+- [ ] C-4/L-13/T-9 CI job: install built package in ubuntu/debian/fedora containers, run headless export
+- [ ] L-1/L-10 CLI + shell completions + man page bundled into deb/rpm
+- [ ] L-2 watcher subscribes only to non-ignored directories; ENOSPC reported with guidance
+- [ ] L-3/L-4 non-UTF-8 / backslash-named files excluded with a clear reason instead of silently breaking the baseline; open question recorded for the larger schema change
+- [ ] L-6 `$XDG_STATE_HOME` respected for the log directory
+- [ ] L-8 Linux font names added to the stacks
+- [ ] L-7 WebKitGTK DMABUF workaround documented in README
 
-- [-] The CLI ships in the package, not only the desktop binary
-- [-] Shell completions and a man page where a distro expects them
-- [~] Dependencies for Debian/Ubuntu are declared and read back out of the built `.deb`
-      by CI; the Fedora names are declared but nothing has installed an `.rpm` yet —
-      that is item 5's job
+## Step 4 — owner-requested features
 
-## 5. Proof that installation works
+- [ ] G-1 application log file: `LogLine` with redaction in its constructor, sink on the
+      existing progress channel, rotation/retention config, panic hook
+- [ ] S-8 closed by the same mechanism (redaction moves into the send path)
+- [ ] D-1 `setup.exe` + `SETUP.txt` duplicate in repo root, gate step guarding staleness,
+      `.gitattributes`, `.exportignore`
+- [ ] G-2 gate run report: per-section timing, JUnit XML, `$GITHUB_STEP_SUMMARY`
 
-**Not started.** What exists today proves the packages *build* and declare the right
-things; nothing has yet installed one and run it.
+## Step 5 — decisions resolved via safe interim default + recorded open question
 
-- [-] A CI job that installs the built package in a clean container and runs an export
-- [-] `ubuntu:24.04`, `debian:12`, `fedora:41`
+- [ ] Q-2 7z format declared one-directional in help text/README/UI (Q44)
+- [ ] L-4 schema change (backslash → forward slash separator) recorded as Q45, not implemented this pass
+- [ ] L-9 case-insensitive directory matching on Linux documented as-is (Q46)
+- [ ] S-6 GitHub Releases + build provenance attestation (no paid cert this pass) (Q47)
+- [ ] D-1 git-history-growth caveat recorded alongside the decision (Q48)
+- [ ] Q-5 legacy archive checked for the Russian header string; decision recorded
 
-## 6. The small Linux differences
+## Step 6 — security and supply chain
 
-**Mostly not started.**
+- [ ] S-4 pin GitHub Actions by SHA, add Dependabot for github-actions, `persist-credentials: false`
+- [ ] S-5 mask world/group-write on extraction (`& !0o022`)
+- [ ] S-9 extracted bundles moved to `data_dir`, given a ceiling and a retention sweep
+- [ ] S-10 `cargo auditable` in the packaging step
+- [ ] S-12 weekly scheduled job building `codepack-ai-api`
+- [ ] C-7 release job on tag
 
-- [-] inotify watch-descriptor exhaustion reports what to do about it
-- [+] `xdg-utils` declared as a dependency (done as part of item 1, and CI reads it back
-      out of the built package)
-- [-] Font stack names Linux fonts before the generic fallback
-- [-] Symlinks excluded from an export are counted where a user can see it
+## Step 7 — performance, measured first
 
-## 7. Backslash-separated paths in artifacts (owner decision inside)
+- [ ] T-3/C-3 perf_smoke runs on a schedule
+- [ ] Break perf_smoke's timing down per pipeline step
+- [ ] P-4/Q-7 parallelize copy step if measurement shows it matters, else record why not
+- [ ] P-5 fix scan-cache mutex poisoning asymmetry (one-line fix, do regardless of measurement)
+- [ ] P-3/Q-8 observable WAL fallback in `doctor`; single shared connection in desktop `AppState`
+- [ ] P-9/Q-9/Q-11 `sort_by_cached_key`, formatter PATH lookup cache
 
-**Not started**, and it is the one item that cannot be finished without a decision: a
-filename containing a backslash is legal on Linux, and `display_backslash` turns it into
-a path separator, so the file is addressed wrongly. Fixing it changes the artifact
-contract (I5) and needs a `schema_version` bump.
+## Step 8 — remaining tests and hygiene
 
-- [-] Establish exactly what breaks on Linux, with a test that fails first
-- [-] Decide the fix with the owner
+- [ ] The 15 adversarial tests from `04-TESTS.txt` not already covered above
+- [ ] T-11 print skip reason instead of silently passing when a tool is absent
+- [ ] T-12 split unit tests from against-the-real-repository tests in xtask
+- [ ] C-5 completions test stops flooding the gate log
+- [ ] C-6 package-linux job scoped to relevant paths
+- [ ] C-8 rust-cache prefix keys for package-linux
+- [ ] S-11 test for `core.hooksPath` pointing outside the repo
 
 ## Completion
 
-- [+] Full gate green; CI green on all three runners and on the packaging job
-- [-] Documentation not updated: README still says the Linux bundles "are still to come",
-      and `overview.md`, `ROADMAP.md` and the decisions log say nothing about the XDG move
-      or the permission work. This is real debt and it is the first thing to do next
-- [+] Final report, naming everything not done and everything unverifiable from here
-
-## What was verified, and where
-
-Nothing Linux-specific can be executed on this machine. So, explicitly:
-
-| Claim | Proven by |
-|---|---|
-| The Linux packages build | CI `package (ubuntu-latest)` |
-| The `.deb` declares its webview, GTK and `xdg-utils` dependencies | CI reads them back out of the built package |
-| The `.deb` installs a desktop entry and 128px/512px icons | the same |
-| Permissions survive copy → archive → extract | `#[cfg(unix)]` tests on the macOS and Ubuntu gate legs |
-| setuid is never restored from an archive | the same |
-| The XDG layout and the migration | tests that force the split layout, so they run everywhere |
-| **That an installed package actually runs** | **nothing yet — item 5** |
+- [ ] Full `cargo xtask gate` green locally (Windows leg)
+- [ ] Push and confirm CI green on all three OS legs and the packaging job
+- [ ] `docs/architecture/overview.md`, README, ROADMAP `**Status.**` lines updated
+- [ ] No dead code, no magic numbers left unexplained, duplication from the audit resolved
+- [ ] `cargo xtask package` run; `setup.exe`/`SETUP.txt` reflect the final state
+- [ ] Fast-forward merge into `main`, push to `origin/main`
+- [ ] Final report naming everything done, everything deferred with its open-question number,
+      and everything that could not be verified from a Windows machine (Linux runtime behavior
+      is proven only by CI, exactly as the audit itself could only do)
