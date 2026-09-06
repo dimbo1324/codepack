@@ -13,28 +13,40 @@ yanked = "deny"
 # anything in the graph, so the list prunes itself instead of outliving its cause.
 ignore = [
     # unic-* (open-i18n/rust-unic, archived) -- via urlpattern -> tauri-utils -> tauri
-    { id = "RUSTSEC-2025-0075", reason = "unic-char-range: archived upstream, reached only through tauri-utils" },
-    { id = "RUSTSEC-2025-0080", reason = "unic-common: archived upstream, reached only through tauri-utils" },
-    { id = "RUSTSEC-2025-0081", reason = "unic-char-property: archived upstream, reached only through tauri-utils" },
-    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: archived upstream, reached only through tauri-utils" },
-    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: archived upstream, reached only through tauri-utils" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range: archived upstream, reached only through tauri-utils. Revisit: 2027-03-01" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common: archived upstream, reached only through tauri-utils. Revisit: 2027-03-01" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property: archived upstream, reached only through tauri-utils. Revisit: 2027-03-01" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: archived upstream, reached only through tauri-utils. Revisit: 2027-03-01" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: archived upstream, reached only through tauri-utils. Revisit: 2027-03-01" },
 
     # gtk-rs GTK3 bindings (unmaintained; GTK4 bindings exist but Tauri's tray crates
-    # have not migrated) -- via tray-icon/muda -> tauri, the Linux tray backend, which
-    # this Windows-only build does not even compile.
-    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0412", reason = "gdk: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0413", reason = "atk: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0415", reason = "gtk: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0416", reason = "atk-sys: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0417", reason = "gdkx11: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0418", reason = "gdk-sys: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: GTK3 binding, Linux tray backend only" },
-    { id = "RUSTSEC-2024-0420", reason = "gtk-sys: GTK3 binding, Linux tray backend only" },
+    # have not migrated) -- via tray-icon/muda -> tauri, the Linux tray backend.
+    #
+    # These are "unmaintained" advisories, not vulnerabilities, and the only real fix is
+    # Tauri migrating to GTK4. Until 2026-09-06 this comment said the Windows-only build
+    # "does not even compile" this stack -- true the day it was written, false from the
+    # moment Linux packaging shipped: the `.deb`/`.rpm`/`.AppImage` targets in
+    # `tauri.conf.json` build and ship this exact stack, and `libgtk-3-0` is a declared
+    # runtime dependency of the package (audit 2026-09-07, S-3). A stale justification in
+    # a security-policy file is worse than an honest "still ignored, and here is why" --
+    # a reader who trusts the old comment stops asking the question it should have
+    # prompted.
+    #
+    # Revisit: 2026-12-01 (`xtask::ignored_advisories` reports any entry whose revisit
+    # date has passed, so this list cannot go silently stale a second time).
+    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0412", reason = "gdk: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0413", reason = "atk: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0415", reason = "gtk: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0416", reason = "atk-sys: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0417", reason = "gdkx11: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0418", reason = "gdk-sys: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
+    { id = "RUSTSEC-2024-0420", reason = "gtk-sys: GTK3 binding, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
 
     # pulled in by glib-macros, part of the same GTK3 stack above
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: via glib-macros, same GTK3 stack" },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: via glib-macros, same GTK3 stack, unmaintained, shipped in the Linux desktop package. Revisit: 2026-12-01" },
 ]
 
 [bans]

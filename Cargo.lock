@@ -5590,6 +5590,7 @@ dependencies = [
 name = "xtask"
 version = "2.0.0"
 dependencies = [
+ "codepack-core",
  "sha2",
  "tempfile",
  "toml 0.9.12+spec-1.1.0",

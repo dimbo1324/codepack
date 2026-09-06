@@ -17,6 +17,12 @@ sha2.workspace = true
 # Audit No. 5: the isolation check parses manifests properly now. A hand-rolled line
 # reader was what let `[dependencies.reqwest]` past it.
 toml.workspace = true
+# `codepack-core::time` for one thing only: comparing an ignored-advisory's revisit date
+# against today (audit 2026-09-07, S-3). A workspace path dependency, already built by
+# `cargo build --workspace`, costs this crate nothing that duplicating the calendar
+# arithmetic by hand would not also cost in a second, divergent copy of it — precisely
+# the reason `time.rs` exists at all (see its own module doc).
+codepack-core = { path = "../codepack-core" }
 
 # Test-only: the checksum writer's tests need a throwaway bundle directory.
 [dev-dependencies]
