@@ -32,7 +32,7 @@ Commands:
   deny                    cargo-deny: advisories, bans, licenses, sources
   sync-agents [--check]   Regenerate AGENTS.md from the .ai/ modules
   install-hooks           Install the formatting pre-commit hook
-  package                 Build the Windows NSIS installer
+  package                 Build the platform's installer(s) (NSIS on Windows; deb/rpm/AppImage on Linux)
   golden                  Regenerate golden references by running legacy (needs Python)
   ai-api                  Format, lint and test codepack-ai-api, which the gate cannot see
   doctor                  Read-only environment diagnostics

@@ -9,12 +9,14 @@
 > log and in the internal plan; this file answers "what is built and how does it fit
 > together".
 
-**Last revised:** 2026-09-06 · **Version:** 2.0.0
+**Last revised:** 2026-09-07 · **Version:** 2.0.0
 **Target platforms:** Windows 10/11, macOS and Linux. The 2026-07-26 narrowing to
 Windows was reversed on 2026-09-06; `codepack-core::paths` carries all three layouts
-again and CI runs the gate on all three runners. Packaging is still Windows-only — the
-NSIS installer is what `cargo xtask package` produces, and there is no macOS or Linux
-bundle yet (stage S14).
+again and CI runs the gate on all three runners. Packaging followed on the same day:
+`cargo xtask package` produces an NSIS `.exe` on Windows and `.deb`/`.rpm`/`.AppImage`
+on Linux (`tauri.conf.json`'s `bundle.linux`), each with dependencies declared per
+distribution and a `SHA256SUMS.txt` beside it. There is still no macOS bundle
+(stage S14), and none of the produced packages are signed yet.
 
 ## The shape of the system
 
@@ -112,7 +114,7 @@ run id and can be cancelled.
 | GitHub Action (`action.yml`) | A composite action running `scan` on a runner and emitting SARIF. Builds from source: there are no signed release binaries yet. |
 | Dev scripts (`dev_tools_scripts_runner.py`, `scripts/`) | The cross-platform door to routine jobs — quality gate, formatting, dev run, installer, doctor, hooks, clean, selftest. |
 | CI (`.github/workflows/ci.yml`) | Three independent legs — `ubuntu-latest`, `macos-latest`, `windows-latest` — since 2026-09-06. A failing gate emits workflow annotations naming the section and every failing test, because a step's log needs admin rights on the repository and an annotation does not. |
-| Packaging | `cargo xtask package` produces an NSIS installer and a `SHA256SUMS.txt` beside it. Signing, notarisation, auto-update, and macOS/Linux bundles are not done. |
+| Packaging | `cargo xtask package` produces an NSIS installer on Windows and `.deb`/`.rpm`/`.AppImage` on Linux, each with a `SHA256SUMS.txt` beside it; a Linux CI job installs the built `.deb` and reads its declared dependencies back out. Signing, notarisation, auto-update, and a macOS bundle are not done. |
 
 ## Known debt
 

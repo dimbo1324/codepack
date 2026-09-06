@@ -66,19 +66,21 @@ Build the installer from the repository:
 cargo xtask package
 ```
 
-The NSIS `.exe` and a `SHA256SUMS.txt` beside it land in `target/release/bundle/nsis/`.
-Verify the download before running it:
+On Windows this produces an NSIS `.exe`; on Linux, `.deb`, `.rpm` and an `.AppImage`.
+Each lands under its own `target/release/bundle/<format>/`, with a `SHA256SUMS.txt`
+beside it. Verify the download before running it:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
 ```
 
-The build is **not code-signed**, so Windows SmartScreen warns about an unknown publisher
-— a checksum proves the file arrived intact, not who made it, and only a certificate says
-the second thing. Signing, notarisation and auto-update are not done.
+None of these are signed: on Windows, SmartScreen warns about an unknown publisher; on
+Linux, there is no GPG signature on the `.deb`/`.rpm` yet. A checksum proves the file
+arrived intact, not who made it, and only a signature says the second thing. Signing,
+notarisation and auto-update are not done.
 
-Windows is the only platform with an installer. The code, the tests and the quality gate
-run on macOS and Linux too; those bundles are still to come.
+There is no macOS bundle yet — the code, the tests and the quality gate run there too,
+but `tauri.conf.json` names no `dmg` target (stage S14).
 
 For the command line only:
 
@@ -386,6 +388,6 @@ pnpm desktop:dev                          # run the app with hot reload
 tests, dependency audit, frontend checks, the dev-script suite, agent-rule sync, and
 network isolation.
 
-Targets **Windows 10/11, macOS and Linux** — the gate runs on all three. Only the
-installer is Windows-specific so far: `cargo xtask package` produces an NSIS `.exe`, and
-macOS and Linux bundles are still to come.
+Targets **Windows 10/11, macOS and Linux** — the gate runs on all three. `cargo xtask
+package` produces an NSIS `.exe` on Windows and `.deb`/`.rpm`/`.AppImage` on Linux; there
+is no macOS bundle yet.
