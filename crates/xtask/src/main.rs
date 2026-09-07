@@ -11,6 +11,7 @@ mod golden;
 mod hooks;
 mod ignored_advisories;
 mod network_isolation;
+mod packaging_assets;
 mod report_redaction;
 mod scripts;
 mod sync_agents;

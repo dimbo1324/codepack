@@ -46,6 +46,13 @@ pub(crate) enum Command {
     Sanitize(SanitizeArgs),
     /// Print a shell completion script to stdout.
     Completions(CompletionsArgs),
+    /// Print a roff man page to stdout.
+    ///
+    /// Hidden: this exists for the packaging step (audit 2026-09-07, L-1/L-10) to
+    /// capture into `usr/share/man/man1/codepack.1.gz`, not for a person to type —
+    /// `man codepack` is how the result is meant to be read, once installed.
+    #[command(hide = true)]
+    Manpage,
     /// Re-scan an already-produced bundle and report what is actually inside it.
     Verify(VerifyArgs),
     /// Explain why one file would, or would not, end up in the export.

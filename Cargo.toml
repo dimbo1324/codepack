@@ -106,6 +106,13 @@ codepack-storage = { path = "crates/codepack-storage" }
 # depend on whether stdout is a TTY.
 clap = { version = "4.5", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 clap_complete = "4.5"
+# Audit 2026-09-07, L-1/L-10: the Linux packages ship no man page at all, and this is
+# the standard, single-purpose way to generate one from the same `clap::Command` the
+# help text already comes from — maintained by the same project as `clap_complete`
+# above, which this crate already depends on for the identical shape of problem
+# (`codepack completions <shell>`). Its own dependency footprint is `clap_builder` and
+# `roff`, nothing a CI-facing binary was not already linking or would object to.
+clap_mangen = "0.2"
 # S10: `.codepack.toml`, the versioned per-project configuration (BLUEPRINT §B.7,
 # decision Q6). TOML rather than JSON because this file is written by hand, by humans,
 # and lives in the user's repository next to their other tool configuration.

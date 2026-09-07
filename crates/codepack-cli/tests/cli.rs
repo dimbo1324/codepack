@@ -606,6 +606,36 @@ fn completions_prints_a_script_for_every_supported_shell() {
     }
 }
 
+/// Not offered on `--help` (audit 2026-09-07, L-1/L-10: this is the packaging step's
+/// tool, not a user-facing command), but still real: `cargo xtask package` runs it
+/// exactly this way — through the compiled binary, not by calling into the crate as a
+/// library, since it has no library target — to produce
+/// `usr/share/man/man1/codepack.1.gz`.
+#[test]
+fn manpage_prints_roff_naming_the_binary() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&["manpage"]);
+    assert_eq!(code(&output), 0);
+    let page = stdout(&output);
+    assert!(!page.is_empty());
+    assert!(page.contains("codepack"));
+    assert!(
+        page.contains(".TH codepack 1"),
+        "expected a roff man page with a .TH title line, got: {}",
+        &page[..page.len().min(120)]
+    );
+}
+
+#[test]
+fn manpage_is_not_advertised_on_help() {
+    let sandbox = Sandbox::new();
+    let output = sandbox.run(&["--help"]);
+    assert!(
+        !stdout(&output).contains("manpage"),
+        "the packaging-only command must stay hidden from --help"
+    );
+}
+
 /// Every path under `root`, recursively. A non-recursive listing would not notice a
 /// file written into a subdirectory, which is exactly what "writes nothing anywhere"
 /// has to rule out.

@@ -104,6 +104,10 @@ pub(crate) fn package(root: &Path) -> Result<(), String> {
     if !dependencies_installed(root) {
         return Err("packaging needs the frontend toolchain: run `pnpm install` first".to_string());
     }
+    // Linux only, and before `tauri build`: `deb.files`/`rpm.files` need the CLI binary
+    // and its completions/man page already on disk, not produced by the bundler itself
+    // (audit 2026-09-07, L-1/L-10).
+    crate::packaging_assets::prepare(root)?;
     pnpm(
         &root.join("apps/desktop"),
         "tauri build",

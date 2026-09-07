@@ -82,7 +82,10 @@ notarisation and auto-update are not done.
 There is no macOS bundle yet — the code, the tests and the quality gate run there too,
 but `tauri.conf.json` names no `dmg` target (stage S14).
 
-For the command line only:
+The `.deb` and `.rpm` also install the CLI at `/usr/bin/codepack`, its man page
+(`man codepack`), and completions for bash, zsh and fish — everything the Quick start
+below runs. The NSIS installer and the AppImage do not (audit 2026-09-07, L-1/L-10); on
+Windows, macOS, or from the AppImage, build the CLI separately:
 
 ```bash
 cargo build --release -p codepack-cli

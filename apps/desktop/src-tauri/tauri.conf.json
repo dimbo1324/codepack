@@ -53,7 +53,14 @@
           "xdg-utils"
         ],
         "section": "devel",
-        "desktopTemplate": "linux/codepack.desktop"
+        "desktopTemplate": "linux/codepack.desktop",
+        "files": {
+          "/usr/bin/codepack": "../../../target/release/codepack",
+          "/usr/share/bash-completion/completions/codepack": "../../../target/packaging-assets/codepack.bash",
+          "/usr/share/zsh/site-functions/_codepack": "../../../target/packaging-assets/_codepack",
+          "/usr/share/fish/vendor_completions.d/codepack.fish": "../../../target/packaging-assets/codepack.fish",
+          "/usr/share/man/man1/codepack.1.gz": "../../../target/packaging-assets/codepack.1.gz"
+        }
       },
       "rpm": {
         "depends": [
@@ -63,7 +70,14 @@
           "librsvg2",
           "xdg-utils"
         ],
-        "desktopTemplate": "linux/codepack.desktop"
+        "desktopTemplate": "linux/codepack.desktop",
+        "files": {
+          "/usr/bin/codepack": "../../../target/release/codepack",
+          "/usr/share/bash-completion/completions/codepack": "../../../target/packaging-assets/codepack.bash",
+          "/usr/share/zsh/site-functions/_codepack": "../../../target/packaging-assets/_codepack",
+          "/usr/share/fish/vendor_completions.d/codepack.fish": "../../../target/packaging-assets/codepack.fish",
+          "/usr/share/man/man1/codepack.1.gz": "../../../target/packaging-assets/codepack.1.gz"
+        }
       },
       "appimage": {
         "bundleMediaFramework": false

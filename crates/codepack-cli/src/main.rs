@@ -56,6 +56,7 @@ fn main() -> std::process::ExitCode {
         Command::Doctor => commands::doctor::run(format),
         Command::Sanitize(args) => commands::sanitize::run(&args, format),
         Command::Completions(args) => Ok(commands::completions::run(&args)),
+        Command::Manpage => commands::manpage::run(),
         Command::Verify(args) => commands::verify::run(&args, format),
         Command::Explain(args) => commands::explain::run(&args, format),
         Command::Handoff(args) => commands::handoff::run(&args, format),

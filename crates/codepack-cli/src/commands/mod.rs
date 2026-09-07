@@ -7,6 +7,7 @@ pub(crate) mod export;
 pub(crate) mod handoff;
 pub(crate) mod history;
 pub(crate) mod init;
+pub(crate) mod manpage;
 pub(crate) mod preview;
 pub(crate) mod sanitize;
 pub(crate) mod scan;
