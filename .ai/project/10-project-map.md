@@ -76,9 +76,8 @@ readers by design.
   product intent changes, and only by owner agreement.
 - `docs/__arch__/ROADMAP.md` is the plan and progress record; update it when a stage
   completes.
-- New documents are created only on direct request. Exception: `docs/architecture/`,
-  `README.md` and `docs/__arch__/ROADMAP.md` must stay accurate when architecture or
-  progress changes.
+- The no-new-docs rule's exception (`03-scope-and-code-style.md`) names
+  `docs/architecture/`, `README.md` and `ROADMAP.md`.
 
 ## Product guardrails
 

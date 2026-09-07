@@ -8,6 +8,33 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+### 2026-09-07 — A checked-but-not-enforced boundary, and a check tested one-sided
+
+**What changed.** `04-architecture-boundaries.md` gains a rule under "Boundaries": a
+value that must be checked before use needs a type only the check can construct (a
+newtype with a private field and a validating constructor) or a gate step no caller can
+route around — a doc comment telling callers to check first is not an enforced boundary.
+`06-quality-and-testing.md` gains a matching rule under "Tests": a check with two
+outcomes needs a test for each outcome, because a suite that only feeds a check inputs
+it should reject cannot distinguish a correct check from one that rejects everything.
+
+**Why.** The 2026-09-07 audit's two critical desktop-app findings were both this exact
+shape. Five of six bundle-opening commands validated a result path only by convention —
+each was supposed to call the one command that checked it, and one had simply forgotten
+to — so the check was bypassable by omission, not by any hostile input. The check itself,
+once found and reached, turned out to reject every path unconditionally (a `LIMIT 0` SQL
+query that SQLite defines as "zero rows", mistaken for "no limit"), and no test caught
+it because every existing test fed it a path that was supposed to be rejected anyway; a
+check that always fails passes every one of them identically to a correct check. Both
+defects reached the point of a security audit rather than a code review because nothing
+in the rules named either shape as a thing to watch for.
+
+**Who decided.** Assistant, under `08-rules-evolution.md`: a review (the audit) found the
+same class of defect twice in one codebase, which is the rule's own trigger for adding
+guidance rather than only fixing the instances.
+
+---
+
 ### 2026-09-06 — Q21 has a name, and the platform notes stop hedging
 
 **What changed.** `11-commands.md` now states plainly that CI runs all three OS legs

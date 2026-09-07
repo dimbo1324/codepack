@@ -41,10 +41,10 @@ recognize the current folder as a Tauri project" — which is why the once-docum
 run from `apps/desktop`, and the CLI is a workspace-root dev dependency so it resolves
 there.
 
-`cargo xtask package` (or the `build-installer` script) leaves an NSIS `.exe` in
-`target/release/bundle/nsis/`. Signing, notarisation, `SHA256SUMS.txt`, and auto-update
-stay in stage S14 — only the installer itself was pulled forward, by owner decision
-2026-07-26.
+`cargo xtask package` (or the `build-installer` script) produces an NSIS installer on
+Windows and `.deb`/`.rpm`/`.AppImage` on Linux under `target/release/bundle/`, each with
+a `SHA256SUMS.txt` beside it (owner decisions 2026-07-26 and 2026-09-06). Signing,
+notarisation, auto-update, and a macOS bundle stay in stage S14.
 
 ## Formatting, and the pre-commit hook
 

@@ -30,7 +30,6 @@ Security is part of every task, not a future task.
 
 ## Portability
 
-- No machine-specific values in code: local absolute paths, usernames, IDE settings,
-  unconfigured local ports, or anything environment-dependent. Such values go to
-  configuration.
+- No machine-specific values in code: local absolute paths, usernames, or anything
+  environment-dependent. Such values go to configuration.
 - The project must remain runnable by someone else using the project's documented tools.

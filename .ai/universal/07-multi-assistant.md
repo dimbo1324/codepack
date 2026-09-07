@@ -19,8 +19,7 @@ sessions; git is the coordination surface and the rule modules are shared.
 - All assistants obey the same rules from `.ai/universal/` and `.ai/project/`. There is
   exactly one source of truth.
 - `CLAUDE.md` imports the modules natively; `AGENTS.md` is GENERATED from them. Never
-  hand-edit `AGENTS.md`; edit the module and regenerate (see the project commands
-  module for the sync command).
+  hand-edit `AGENTS.md`; edit the module and run `cargo xtask sync-agents`.
 - When a task changes shared behavior (workflow, gates, style, guardrails), change the
   module once — every assistant picks it up. Mirror-maintained per-assistant files
   (`.claude/` and `.codex/`: agents and skills) still need the same edit on both sides

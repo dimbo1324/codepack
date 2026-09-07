@@ -10,6 +10,8 @@ Purpose: respect the project's layering; make every shortcut visible.
   circular module dependencies; dumping unrelated logic into catch-all files.
 - If the architecture genuinely blocks the task, do not hack around it — propose a
   proper structural change and reflect it in the architecture docs once approved.
+- A doc-comment-only boundary is not enforced. Use a type only the check can construct,
+  or a gate no caller can skip — and test that it accepts, not only that it rejects.
 
 ## Temporary solutions
 

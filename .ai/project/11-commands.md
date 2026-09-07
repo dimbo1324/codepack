@@ -37,7 +37,7 @@ cargo xtask deny            # cargo-deny: advisories, bans, licenses, sources
 cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
 cargo xtask sync-agents --check   # verify AGENTS.md is in sync
 cargo xtask install-hooks   # install the formatting pre-commit hook
-cargo xtask package         # build the Windows NSIS installer
+cargo xtask package         # build this platform's installer bundle(s)
 cargo xtask doctor          # read-only environment diagnostics
 cargo xtask golden          # regenerate the legacy golden references (needs Python)
 ```

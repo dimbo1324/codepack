@@ -54,8 +54,8 @@ Changing one requires bumping `schema_version` and recording the decision in
 
 ## Assistant workspaces
 
-- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors; changing
-  one side requires the equivalent change on the other in the same task.
+- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors (mirror
+  discipline: `07-multi-assistant.md`).
 - `.claude/settings.json` allowlists routine read and verification commands and denies
   destructive git operations and crate publishing. Extend the allowlist rather than
   routing around it; never remove a deny entry without explicit owner approval.

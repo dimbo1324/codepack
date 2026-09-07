@@ -168,6 +168,8 @@ Purpose: respect the project's layering; make every shortcut visible.
   circular module dependencies; dumping unrelated logic into catch-all files.
 - If the architecture genuinely blocks the task, do not hack around it — propose a
   proper structural change and reflect it in the architecture docs once approved.
+- A doc-comment-only boundary is not enforced. Use a type only the check can construct,
+  or a gate no caller can skip — and test that it accepts, not only that it rejects.
 
 ## Temporary solutions
 
@@ -220,9 +222,8 @@ Security is part of every task, not a future task.
 
 ## Portability
 
-- No machine-specific values in code: local absolute paths, usernames, IDE settings,
-  unconfigured local ports, or anything environment-dependent. Such values go to
-  configuration.
+- No machine-specific values in code: local absolute paths, usernames, or anything
+  environment-dependent. Such values go to configuration.
 - The project must remain runnable by someone else using the project's documented tools.
 
 ---
@@ -302,8 +303,7 @@ sessions; git is the coordination surface and the rule modules are shared.
 - All assistants obey the same rules from `.ai/universal/` and `.ai/project/`. There is
   exactly one source of truth.
 - `CLAUDE.md` imports the modules natively; `AGENTS.md` is GENERATED from them. Never
-  hand-edit `AGENTS.md`; edit the module and regenerate (see the project commands
-  module for the sync command).
+  hand-edit `AGENTS.md`; edit the module and run `cargo xtask sync-agents`.
 - When a task changes shared behavior (workflow, gates, style, guardrails), change the
   module once — every assistant picks it up. Mirror-maintained per-assistant files
   (`.claude/` and `.codex/`: agents and skills) still need the same edit on both sides
@@ -401,9 +401,8 @@ readers by design.
   product intent changes, and only by owner agreement.
 - `docs/__arch__/ROADMAP.md` is the plan and progress record; update it when a stage
   completes.
-- New documents are created only on direct request. Exception: `docs/architecture/`,
-  `README.md` and `docs/__arch__/ROADMAP.md` must stay accurate when architecture or
-  progress changes.
+- The no-new-docs rule's exception (`03-scope-and-code-style.md`) names
+  `docs/architecture/`, `README.md` and `ROADMAP.md`.
 
 ## Product guardrails
 
@@ -462,7 +461,7 @@ cargo xtask deny            # cargo-deny: advisories, bans, licenses, sources
 cargo xtask sync-agents     # regenerate AGENTS.md from the .ai/ modules
 cargo xtask sync-agents --check   # verify AGENTS.md is in sync
 cargo xtask install-hooks   # install the formatting pre-commit hook
-cargo xtask package         # build the Windows NSIS installer
+cargo xtask package         # build this platform's installer bundle(s)
 cargo xtask doctor          # read-only environment diagnostics
 cargo xtask golden          # regenerate the legacy golden references (needs Python)
 ```
@@ -552,8 +551,8 @@ Changing one requires bumping `schema_version` and recording the decision in
 
 ## Assistant workspaces
 
-- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors; changing
-  one side requires the equivalent change on the other in the same task.
+- `.claude/agents|skills` and `.codex/agents|skills` are name-for-name mirrors (mirror
+  discipline: `07-multi-assistant.md`).
 - `.claude/settings.json` allowlists routine read and verification commands and denies
   destructive git operations and crate publishing. Extend the allowlist rather than
   routing around it; never remove a deny entry without explicit owner approval.
@@ -589,8 +588,8 @@ In order, without skipping:
 1. `git status --short --branch` and
    `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` — with committer dates,
    not `--oneline`: several commits a day is normal here.
-2. `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
-   line is done; **the first stage without one is next**.
+2. `docs/__arch__/ROADMAP.md` §1 and each stage's `**Status.**` line: a stage with one is
+   done; **the first stage without one is next**.
 3. `docs/architecture/overview.md` — what exists in the code right now.
 4. `task-checklist.md` — what the previous task was and whether it finished cleanly.
 5. `docs/__arch__/open-questions.md` — whether a decision changes the plan.

@@ -25,8 +25,8 @@ In order, without skipping:
 1. `git status --short --branch` and
    `git log -15 --date=iso-strict --pretty=format:"%h %cd %s"` — with committer dates,
    not `--oneline`: several commits a day is normal here.
-2. `docs/__arch__/ROADMAP.md` §1 and the `**Status.**` lines under each stage: a stage with a status
-   line is done; **the first stage without one is next**.
+2. `docs/__arch__/ROADMAP.md` §1 and each stage's `**Status.**` line: a stage with one is
+   done; **the first stage without one is next**.
 3. `docs/architecture/overview.md` — what exists in the code right now.
 4. `task-checklist.md` — what the previous task was and whether it finished cleanly.
 5. `docs/__arch__/open-questions.md` — whether a decision changes the plan.
