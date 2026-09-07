@@ -68,9 +68,11 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 4 — owner-requested features
 
-- [ ] G-1 application log file: `LogLine` with redaction in its constructor, sink on the
-      existing progress channel, rotation/retention config, panic hook
-- [ ] S-8 closed by the same mechanism (redaction moves into the send path)
+- [x] G-1 application log file: `LogLine` with redaction in its constructor, sink on the
+      existing progress channel, rotation/retention config, panic hook, `--collect-logs`,
+      README documentation, a desktop settings toggle for verbosity
+- [x] S-8 closed by the same mechanism (redaction moves into the send path — the `log`
+      closure in `run_export`, the one place every step's narration funnels through)
 - [ ] D-1 `setup.exe` + `SETUP.txt` duplicate in repo root, gate step guarding staleness,
       `.gitattributes`, `.exportignore`
 - [ ] G-2 gate run report: per-section timing, JUnit XML, `$GITHUB_STEP_SUMMARY`
