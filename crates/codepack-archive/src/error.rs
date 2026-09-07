@@ -72,6 +72,20 @@ pub enum ArchiveError {
     /// "something broke", and report it as neither an error nor a success.
     #[error("archiving was cancelled")]
     Cancelled,
+
+    /// A `.7z` bundle handed to `verify`, `handoff`, the desktop app, or an MCP
+    /// resource — none of which can read one back (audit 2026-09-07, Q-2). Writing 7z
+    /// is one-directional by design, not a bug: extraction would need re-deriving this
+    /// crate's `ExtractLimits` budget against a different API, which is out of scope for
+    /// what is otherwise a "smaller archive" option. Named here rather than left to
+    /// surface as a generic "invalid Zip archive" from the ZIP reader that a 7z file was
+    /// handed to by mistake.
+    #[error(
+        "{path} is a 7z archive: writing 7z is one-directional, so verify, handoff, the \
+         desktop app, and MCP cannot read one back. Extract it with a 7z tool and point \
+         this at the extracted folder instead, or export with the default zip format."
+    )]
+    CannotReopenSevenZip { path: PathBuf },
 }
 
 pub type Result<T> = std::result::Result<T, ArchiveError>;

@@ -189,10 +189,17 @@ the first log line.
 
 ## Archive formats
 
-ZIP by default, everywhere. 7z is available when you want smaller archives. RAR is offered
-in the interface but **not implemented** — there is no permissively licensed RAR encoder to
-depend on, so it is reserved and refused with a message rather than silently producing a
-ZIP with the wrong extension.
+ZIP by default, everywhere. 7z is available when you want smaller archives, but it is
+**one-directional**: `codepack verify`, `codepack handoff`, and the desktop app's own
+bundle-opening screens (dashboard, project overview, onboarding, review checklist,
+analytics) can all read a ZIP bundle back and none of them can read a 7z one — writing 7z
+does not (yet) come with reading it back out. A 7z bundle also carries no Unix file
+permissions on the files inside it, unlike ZIP. Pick 7z for a smaller file you or someone
+else will extract with a general-purpose 7z tool, not for one codepack itself will need to
+reopen.
+RAR is offered in the interface but **not implemented** — there is no permissively licensed
+RAR encoder to depend on, so it is reserved and refused with a message rather than silently
+producing a ZIP with the wrong extension.
 
 ```bash
 codepack export . --archive-format 7z

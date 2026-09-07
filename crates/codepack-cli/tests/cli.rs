@@ -1227,6 +1227,33 @@ fn verify_refuses_a_file_that_is_not_an_archive_instead_of_calling_it_clean() {
     );
 }
 
+/// Audit 2026-09-07, Q-2: writing 7z is one-directional by owner decision — `verify`
+/// (and `handoff`, and the desktop app) cannot read one back. This fails on the code as
+/// it stood before the fix, where the same bundle produced a raw "invalid Zip archive"
+/// with no indication of why.
+#[test]
+fn verify_names_the_reason_a_7z_bundle_cannot_be_reopened() {
+    let sandbox = Sandbox::new();
+    let exported = sandbox.run(&[
+        "export",
+        &sandbox.project().display().to_string(),
+        "--out",
+        &sandbox.out().display().to_string(),
+        "--archive-format",
+        "7z",
+        "--json",
+    ]);
+    assert_eq!(code(&exported), 0, "stderr:\n{}", stderr(&exported));
+    let bundle = json(&exported)["result_path"].as_str().unwrap().to_string();
+    assert!(bundle.ends_with(".7z"), "{bundle}");
+
+    let verified = sandbox.run(&["verify", &bundle]);
+    assert_eq!(code(&verified), 1);
+    let message = stderr(&verified);
+    assert!(message.contains("one-directional"), "{message}");
+    assert!(message.contains("verify"), "{message}");
+}
+
 #[test]
 fn verify_rejects_a_path_that_does_not_exist() {
     let sandbox = Sandbox::new();

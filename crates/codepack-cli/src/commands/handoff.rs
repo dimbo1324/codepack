@@ -131,6 +131,8 @@ fn open_bundle(bundle: &Path) -> Result<OpenedBundle> {
     }
 
     if bundle.is_file() {
+        codepack_archive::ArchiveFormat::ensure_reopenable(bundle)
+            .map_err(|error| CliError::message(error.to_string()))?;
         let parent = bundle.parent().ok_or_else(|| {
             CliError::message(format!("{} has no parent directory", bundle.display()))
         })?;

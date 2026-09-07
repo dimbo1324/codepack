@@ -440,7 +440,8 @@ impl SafeMode {
 pub(crate) enum ArchiveFormat {
     /// The default. What every earlier release produced.
     Zip,
-    /// Smaller archives, at some cost in time.
+    /// Smaller archives, at some cost in time. One-directional: `verify`, `handoff`,
+    /// and the desktop app cannot read a 7z bundle back (owner decision 2026-09-07).
     #[value(name = "7z")]
     SevenZip,
     /// Reserved — not implemented yet.

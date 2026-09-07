@@ -87,6 +87,23 @@ impl ArchiveFormat {
             })
         }
     }
+
+    /// The check every bundle-opening consumer runs before attempting to extract
+    /// `path` — `verify`, `handoff`, the desktop app's bundle-opening commands, and the
+    /// MCP resource reader all go through this rather than discovering a 7z file the
+    /// hard way, as a ZIP parse failure with no explanation (audit 2026-09-07, Q-2).
+    /// `None` from [`Self::from_path`] (an unrecognised or absent extension) is not
+    /// rejected here — the caller's own ZIP-reading attempt is still the right way to
+    /// find out whether an extensionless or oddly-named file is actually a bundle.
+    pub fn ensure_reopenable(path: &Path) -> Result<()> {
+        if Self::from_path(path) == Some(Self::SevenZip) {
+            Err(ArchiveError::CannotReopenSevenZip {
+                path: path.to_path_buf(),
+            })
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -161,6 +178,31 @@ mod tests {
         assert!(ArchiveFormat::SevenZip.is_implemented());
         ArchiveFormat::Zip.ensure_implemented().unwrap();
         ArchiveFormat::SevenZip.ensure_implemented().unwrap();
+    }
+
+    #[test]
+    fn a_7z_bundle_is_rejected_by_name_before_any_extraction_is_attempted() {
+        let error = ArchiveFormat::ensure_reopenable(Path::new("bundle.7z")).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("7z"), "{message}");
+        assert!(message.contains("one-directional"), "{message}");
+        assert!(
+            message.contains("verify") && message.contains("handoff"),
+            "the message should name what actually cannot read it back: {message}"
+        );
+    }
+
+    #[test]
+    fn a_zip_bundle_passes_the_reopen_check() {
+        ArchiveFormat::ensure_reopenable(Path::new("bundle.zip")).unwrap();
+    }
+
+    #[test]
+    fn an_unrecognised_extension_is_not_rejected_here() {
+        // The caller's own ZIP-reading attempt is still the right way to find out
+        // whether an extensionless or oddly-named file is actually a bundle.
+        ArchiveFormat::ensure_reopenable(Path::new("bundle")).unwrap();
+        ArchiveFormat::ensure_reopenable(Path::new("bundle.bin")).unwrap();
     }
 
     /// The two lists in `codepack-core` must agree with this type, or the UI would

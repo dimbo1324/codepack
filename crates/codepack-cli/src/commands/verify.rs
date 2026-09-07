@@ -209,6 +209,8 @@ fn open(bundle: &Path) -> Result<Opened> {
     }
 
     if bundle.is_file() {
+        codepack_archive::ArchiveFormat::ensure_reopenable(bundle)
+            .map_err(|error| CliError::message(error.to_string()))?;
         let directory = temp_dir()?;
         codepack_archive::extract_zip_safely(bundle, directory.path())
             .map_err(|error| CliError::message(error.to_string()))?;

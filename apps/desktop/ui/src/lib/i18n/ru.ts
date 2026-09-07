@@ -381,7 +381,7 @@ export const ru: Record<TranslationKey, string> = {
   "archive.format.rar": "RAR",
   "archive.format.hint.zip": "По умолчанию. Открывается везде, без дополнительных программ.",
   "archive.format.hint.sevenZip":
-    "Архив меньше, собирается чуть дольше. Для открытия нужен 7-Zip или похожая программа.",
+    "Архив меньше, собирается чуть дольше. Работает только в одну сторону: приложение не может заново открыть 7z-бандл, чтобы показать дашборд, обзор или отчёты — так можно только с ZIP.",
   "archive.format.rar.unavailable":
     "RAR пока недоступен — он в планах на будущие версии. Выберите ZIP или 7-Zip.",
   "sterile.detail.formattedBy": "{detail}",

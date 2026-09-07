@@ -295,6 +295,12 @@ fn extract_validated_bundle(
         )));
     }
 
+    // 7z bundles cannot be read back at all (audit 2026-09-07, Q-2) — checked before
+    // the destination directory is even created, so a user who chose 7z for a smaller
+    // archive gets a message naming exactly why the dashboard/overview/onboarding
+    // screen they just clicked will not open, not a raw ZIP-parse failure.
+    codepack_archive::ArchiveFormat::ensure_reopenable(path).map_err(CommandError::new)?;
+
     let destination = extraction_dir_for(paths, path)?;
     // `extract_zip_safely` validates every entry against path traversal before writing
     // and now also bounds what the archive may expand into.

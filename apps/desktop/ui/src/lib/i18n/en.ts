@@ -374,7 +374,7 @@ export const en = {
   "archive.format.rar": "RAR",
   "archive.format.hint.zip": "The default. Opens anywhere without extra software.",
   "archive.format.hint.sevenZip":
-    "Smaller archives, a little slower to build. Needs 7-Zip or a similar tool to open.",
+    "Smaller archives, a little slower to build. One-directional: this app cannot reopen a 7z bundle to show its dashboard, overview, or reports — only ZIP can be opened back up.",
   "archive.format.rar.unavailable":
     "RAR is not available yet — it is planned for a future release. Choose ZIP or 7-Zip.",
   "sterile.detail.formattedBy": "{detail}",
