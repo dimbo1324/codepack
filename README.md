@@ -17,6 +17,7 @@ Everything runs **locally**. Nothing is uploaded, ever.
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [What gets excluded](#what-gets-excluded)
 - [Archive formats](#archive-formats)
 - [Sterile copy](#sterile-copy)
 - [Hand a bundle to a local agent](#hand-a-bundle-to-a-local-agent)
@@ -186,6 +187,36 @@ scan result can be trusted when it cannot.
 **`--json`** works on every command. It carries a schema version, goes only to stdout, and
 leaves progress and errors on stderr, so `codepack export --json | jq` does not break on
 the first log line.
+
+## What gets excluded
+
+A base list of about 18 directory names — `node_modules`, `dist`, `build`, `.git`,
+`venv`, `coverage`, and similarly common build/dependency artifacts — is always ignored,
+ported verbatim from the previous version. `explain <path>` names the rule that excluded
+any given file, and `preview` lists what an export would include before it writes
+anything.
+
+**That list matches case-insensitively on every platform, including Linux** (audit
+2026-09-07, L-9). On Windows and macOS this is simply correct — their file systems treat
+`Build` and `build` as the same name. On Linux, where the file system is case-sensitive,
+it means a project with a case-sensitive `Env/`, `Build/`, or `Dist/` directory that holds
+real source rather than a dependency or an artifact loses it from every export, reported
+as "excluded: build artifact" — a plausible-sounding reason that does not invite a second
+look. This is a deliberate, owner-decided trade-off (`docs/__arch__/open-questions.md`,
+Q47): keeping matching uniform across the three platforms a team might work from beats an
+exact-on-Linux rule that would make the same project behave differently depending on who
+exported it.
+
+**There is currently no way to override this for a same-named directory.**
+`.exportignore`'s `!`-negation and `.codepack.toml`'s `always_include_dirs` both rescue a
+file or a directory only from a *custom* exclusion rule — base-list and detected-stack
+pruning happens first, in the directory walk itself, before either mechanism is consulted
+at all (matching legacy's own `should_ignore_dir(...) or is_symlink` ordering). If a
+project genuinely needs a directory whose name collides with the base list, the only
+present workaround is renaming it. Extending `always_include_dirs` to reach past base-list
+pruning is a real design change to a deliberately-ordered, tested precedence rule, not a
+one-line fix — see Q47 for why it stays a recorded question rather than something this
+pass changed unasked.
 
 ## Archive formats
 
