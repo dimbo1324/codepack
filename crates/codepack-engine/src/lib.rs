@@ -48,7 +48,7 @@ pub use analytics::{AnalyticsOutcome, run_analytics};
 pub use copy::copy_project;
 pub use error::{EngineError, Result};
 pub use git_report::write_git_report;
-pub use log_sink::{LogLine, LogSink};
+pub use log_sink::{LogLine, LogSink, install_panic_hook};
 pub use manifest::write_manifest_and_index;
 pub use orchestrator::{ExportOutcome, run_export};
 pub use paths::{build_export_paths, build_export_paths_for_format, sanitize_name};

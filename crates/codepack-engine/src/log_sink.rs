@@ -241,6 +241,57 @@ impl SinkState {
     }
 }
 
+/// Installs a panic hook that writes the panic's message and location to
+/// `log_dir/codepack-panics.log` before running the previous hook (Rust's own default,
+/// unless something upstream already replaced it — either way, stderr still gets the
+/// panic exactly as it would have without this).
+///
+/// Audit 2026-09-07, G-1's minimum ask for step 3 ("what went wrong"): `[profile.
+/// release] strip = "symbols"` means a release panic already carries no useful stack,
+/// and on Windows `windows_subsystem = "windows"` hides the console the message would
+/// otherwise have appeared on — a crash in a release build was, before this, completely
+/// silent. This does not restore the stack trace (that needs `split-debuginfo` and a
+/// symbol-publishing channel, a bigger piece of work the audit records as needing S-6
+/// first); it only makes sure the fact of a panic, its message, and its source location
+/// survive the process that produced them.
+///
+/// Deliberately its own small append, not a full [`LogSink`]: a panic can happen before
+/// any `LogSink` exists, during one's own construction, or with this process's memory
+/// or locks in a state a `Mutex`-guarded, rotating writer should not be trusted to
+/// negotiate. One flat file, opened fresh and appended to in a handful of lines, is the
+/// form most likely to still work at the moment it is needed.
+pub fn install_panic_hook(log_dir: &Path) {
+    let log_dir = log_dir.to_path_buf();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let now = UtcDateTime::now();
+        let location = info
+            .location()
+            .map(|location| location.to_string())
+            .unwrap_or_else(|| "unknown location".to_string());
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<&str>()
+            .map(|value| (*value).to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "(panic payload was not a string)".to_string());
+        let line = format!(
+            "{} PANIC {}\n",
+            now.format_iso8601_utc(),
+            LogLine::of(format!("{message} at {location}")).as_str()
+        );
+        if fs::create_dir_all(&log_dir).is_ok()
+            && let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_dir.join("codepack-panics.log"))
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+        previous(info);
+    }));
+}
+
 fn day_file_path(dir: &Path, (year, month, day): (i64, u32, u32), part: u32) -> PathBuf {
     if part == 0 {
         dir.join(format!("codepack-{year:04}-{month:02}-{day:02}.log"))
@@ -523,5 +574,37 @@ mod tests {
     fn set_mtime(path: &Path, time: std::time::SystemTime) {
         let file = OpenOptions::new().write(true).open(path).unwrap();
         file.set_modified(time).unwrap();
+    }
+
+    // --- The panic hook (audit 2026-09-07, G-1 step 3) ---------------------------------
+
+    /// `set_hook`/`take_hook` fully replace the active hook rather than nesting it, so
+    /// `install_panic_hook`'s own hook has to stay the one installed when the panic
+    /// fires — it chains to whatever ran before *it*, which prints the default dump to
+    /// stderr for this deliberately triggered panic. That is expected test output, not
+    /// a failure. The hook is left in place afterwards: it does nothing but log and then
+    /// defer to the previous hook, so every later panic in this binary — including a
+    /// real test failure — still behaves exactly as it would have.
+    #[test]
+    fn a_panic_is_written_to_the_panic_log_with_its_message_and_location() {
+        let dir = tempfile::tempdir().unwrap();
+        install_panic_hook(dir.path());
+
+        let result = std::panic::catch_unwind(|| {
+            panic!("planted panic for the log test, API_KEY=sk-live-0123456789abcdef0123456789");
+        });
+        assert!(result.is_err());
+
+        let contents = fs::read_to_string(dir.path().join("codepack-panics.log")).unwrap();
+        assert!(contents.contains("PANIC"));
+        assert!(contents.contains("planted panic for the log test"));
+        assert!(
+            contents.contains("log_sink.rs"),
+            "the panic's own source location should be recorded: {contents}"
+        );
+        // The redaction contract applies here too — a secret in a panic message is
+        // exactly the class of leak invariant I3 forbids.
+        assert!(!contents.contains("sk-live-0123456789abcdef0123456789"));
+        assert!(contents.contains("<REDACTED>"));
     }
 }

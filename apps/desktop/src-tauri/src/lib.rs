@@ -52,6 +52,15 @@ use state::AppState;
 /// Split out of `main` so the binary is a one-liner and this stays testable as a
 /// library — the command functions are unit-tested directly, without a webview.
 pub fn run() {
+    // Before anything else: `strip = "symbols"` in release builds and
+    // `windows_subsystem = "windows"` hiding the console on Windows mean a release panic
+    // is otherwise completely silent (audit 2026-09-07, G-1). Best-effort, matching
+    // `commands::open_log_sink` — a missing home directory must not stop the app from
+    // starting, only leave this one diagnostic path unavailable.
+    if let Ok(app_paths) = codepack_core::AppPaths::resolve() {
+        codepack_engine::install_panic_hook(app_paths.log_dir());
+    }
+
     tauri::Builder::default()
         // Registered first, as the plugin requires: it has to claim the single-instance
         // lock before anything else in this process starts allocating windows or tray

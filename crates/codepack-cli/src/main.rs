@@ -26,6 +26,14 @@ use crate::cli::{Cli, Command};
 use crate::output::Format;
 
 fn main() -> std::process::ExitCode {
+    // Before anything else: a release panic here has nowhere else to go once the
+    // process exits (audit 2026-09-07, G-1). Best-effort, matching
+    // `commands::open_log_sink` — a missing home directory must not stop the command
+    // from running, only leave this one diagnostic path unavailable.
+    if let Ok(app_paths) = codepack_core::AppPaths::resolve() {
+        codepack_engine::install_panic_hook(app_paths.log_dir());
+    }
+
     // Argument errors exit with code 2. Handled explicitly rather than letting `clap`
     // call `exit` for us: the code is part of this binary's published contract
     // (`docs/__arch__/ROADMAP.md` §3), so it should be visible here and not depend on a default in a
