@@ -73,17 +73,23 @@ conflict gets escalated, not guessed past silently.
       README documentation, a desktop settings toggle for verbosity
 - [x] S-8 closed by the same mechanism (redaction moves into the send path — the `log`
       closure in `run_export`, the one place every step's narration funnels through)
-- [ ] D-1 `setup.exe` + `SETUP.txt` duplicate in repo root, gate step guarding staleness,
-      `.gitattributes`, `.exportignore`
+- [x] D-1 mechanism: `xtask::installer`, gate step guarding staleness, `.gitattributes`,
+      `.exportignore`, README, Q44 — the real `setup.exe`/`SETUP.txt` themselves are a
+      separate commit at the very end (D-2 step 7: a binary must not share a diff with
+      code, and any commit before the last one would make it stale again immediately)
 - [ ] G-2 gate run report: per-section timing, JUnit XML, `$GITHUB_STEP_SUMMARY`
 
 ## Step 5 — decisions resolved via safe interim default + recorded open question
 
-- [ ] Q-2 7z format declared one-directional in help text/README/UI (Q44)
+- [ ] Q-2 7z format declared one-directional in help text/README/UI (Q44 went to D-1
+      instead, recorded when D-1 actually landed in Step 4 — this item takes the next
+      free number when it is written)
 - [ ] L-4 schema change (backslash → forward slash separator) recorded as Q45, not implemented this pass
 - [ ] L-9 case-insensitive directory matching on Linux documented as-is (Q46)
 - [ ] S-6 GitHub Releases + build provenance attestation (no paid cert this pass) (Q47)
-- [ ] D-1 git-history-growth caveat recorded alongside the decision (Q48)
+- [x] D-1 git-history-growth caveat — folded into Q44 itself rather than a separate
+      entry, since the audit's own text asks for the decision and the caveat recorded
+      together in one place
 - [ ] Q-5 legacy archive checked for the Russian header string; decision recorded
 
 ## Step 6 — security and supply chain
