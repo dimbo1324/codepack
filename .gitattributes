@@ -5,3 +5,7 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+
+# The root-level installer duplicate (audit 2026-09-07, D-1): a binary, not text — git
+# must not try to diff or normalize line endings inside it.
+setup.exe binary

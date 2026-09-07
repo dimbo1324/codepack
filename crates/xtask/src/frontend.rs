@@ -114,7 +114,12 @@ pub(crate) fn package(root: &Path) -> Result<(), String> {
         &["exec", "tauri", "build"],
     )?;
 
-    report_bundles(&root.join("target/release/bundle"))
+    let bundle_root = root.join("target/release/bundle");
+    report_bundles(&bundle_root)?;
+    // Audit 2026-09-07, D-1: the owner's own request, a permanently-named duplicate of
+    // the Windows installer at the repository root. After `report_bundles`, which is
+    // where the artifacts this copies from are confirmed to exist.
+    crate::installer::publish(root, &bundle_root)
 }
 
 /// Lists what the bundler actually produced, and checksums each format's directory.

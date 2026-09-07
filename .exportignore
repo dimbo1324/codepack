@@ -1,0 +1,9 @@
+# .exportignore — per-project export rules (see README.md).
+#
+# codepack exports itself, including in the CI acceptance step, so a rule that only
+# matters for this repository's own export lives here rather than in a shared default.
+
+# The root-level installer duplicate (audit 2026-09-07, D-1): a binary that has nothing
+# to do with the source, and would otherwise add 10-20 MB to every self-export for no
+# benefit.
+setup.exe

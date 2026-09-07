@@ -10,6 +10,7 @@ mod frontend;
 mod golden;
 mod hooks;
 mod ignored_advisories;
+mod installer;
 mod network_isolation;
 mod packaging_assets;
 mod report_redaction;
@@ -273,6 +274,10 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
     // too late to notice.
     println!("\n=== network isolation ===");
     network_isolation::check(root)?;
+    // File I/O and one hash, no build — cheap enough for the quick gate too (audit
+    // 2026-09-07, D-1). A no-op until `setup.exe`/`SETUP.txt` are actually committed.
+    println!("\n=== installer artifact ===");
+    installer::check_gate(root)?;
     Ok(())
 }
 

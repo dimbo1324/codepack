@@ -61,15 +61,31 @@ a manifest describing all of it.
 
 **Current release: 2.0.0** (2026-09-06). See [CHANGELOG.md](CHANGELOG.md).
 
-Build the installer from the repository:
+**Windows.** Download [setup.exe](setup.exe) — the version and checksum currently
+published under that name are in [SETUP.txt](SETUP.txt) — and run it. It installs for
+the current user; no administrator rights needed.
+
+Verify the file before running it (PowerShell), and compare against `SETUP.txt`:
+
+```powershell
+Get-FileHash .\setup.exe -Algorithm SHA256
+```
+
+It is unsigned: SmartScreen will warn about an unknown publisher. Signing is planned for
+stage S14. `setup.exe` at repository root is a duplicate of the same NSIS installer
+`cargo xtask package` produces below, kept under a permanent name so it can be found and
+downloaded from GitHub directly (audit 2026-09-07, D-1; the decision and its trade-off
+are recorded as Q44 in `docs/__arch__/open-questions.md`).
+
+**Linux**, and **building from source on any platform**:
 
 ```bash
 cargo xtask package
 ```
 
-On Windows this produces an NSIS `.exe`; on Linux, `.deb`, `.rpm` and an `.AppImage`.
-Each lands under its own `target/release/bundle/<format>/`, with a `SHA256SUMS.txt`
-beside it. Verify the download before running it:
+On Windows this produces the same NSIS `.exe` published above; on Linux, `.deb`, `.rpm`
+and an `.AppImage`. Each lands under its own `target/release/bundle/<format>/`, with a
+`SHA256SUMS.txt` beside it. Verify the download before running it:
 
 ```bash
 sha256sum -c SHA256SUMS.txt
