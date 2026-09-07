@@ -105,6 +105,35 @@ failing gate annotates the section that failed, and the `tests` section annotate
 failing test by name (`--no-fail-fast`, so one round names them all). Read them from the
 run's check-runs, and do not remove them to tidy the output.
 
+## The gate's own report (`target/gate-logs/`)
+
+`cargo xtask gate` (audit 2026-09-07, G-2) runs every section and reports all of them
+together rather than stopping at the first failure — a version bump the installer-artifact
+check would have caught two sections earlier no longer hides behind whichever check
+happened to run first. `xtask::gate_report` writes one timestamped directory per run:
+
+```text
+target/gate-logs/<YYYY-MM-DDTHH-MM-SSZ>/
+    00-summary.txt          every section, its status, and its own timing
+    01-format.log           combined stdout/stderr, one file per command-backed section
+    02-format-ai-api.log
+    03-clippy.log
+    04-tests.log
+    04-tests.junit.xml      machine-readable, for a CI interface that reads JUnit
+    05-deny.log
+target/gate-logs/latest/    a plain copy of the run above (not a symlink — creating one
+                            needs a Windows privilege most accounts do not hold)
+```
+
+Only the sections that are a single external command get a `.log` file; a section built
+from several pnpm calls or an in-process check (`frontend`, `dev scripts`, `agents sync`,
+`report redaction`, `network isolation`, `installer artifact`) is timed and recorded
+pass/fail in the summary, with its own console output unchanged from before this existed
+— see `xtask::gate_report`'s own module doc for why. The last 20 runs are kept, oldest
+deleted first. Under CI, the same summary is appended to `$GITHUB_STEP_SUMMARY`
+automatically, and `target/gate-logs/latest/` uploads as a build artifact when the gate
+step fails (`.github/workflows/ci.yml`).
+
 ## Platform notes
 
 Target: **Windows 10/11, macOS and Linux**, as of the owner decision 2026-09-06, which

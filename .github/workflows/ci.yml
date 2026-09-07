@@ -99,6 +99,18 @@ jobs:
       - name: cargo xtask gate
         run: cargo xtask gate
 
+      # Audit 2026-09-07, G-2: the gate's own $GITHUB_STEP_SUMMARY write already makes
+      # the per-section summary visible on this run's page without a log or admin
+      # rights; this uploads the full per-section logs and JUnit XML alongside it for
+      # whichever section actually failed. `if: failure()` only -- a green run has
+      # nothing here worth the storage.
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: gate-logs-${{ matrix.os }}
+          path: target/gate-logs/latest/
+          if-no-files-found: warn
+
       # Stage S10's own acceptance criterion, whole again: with the matrix restored
       # (owner decision 2026-09-06) this proves headless export on all three platforms,
       # which is what S10 asked for. The test suite exercises the binary too, but this

@@ -7,6 +7,7 @@
 
 mod ai_api;
 mod frontend;
+mod gate_report;
 mod golden;
 mod hooks;
 mod ignored_advisories;
@@ -20,6 +21,9 @@ mod sync_agents;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
+use std::time::Instant;
+
+use gate_report::GateReport;
 
 const USAGE: &str = "\
 codepack task runner
@@ -76,29 +80,40 @@ fn run(root: &Path, program: &str, args: &[&str]) -> bool {
 /// binary, so a red run names one crate's failures and hides the rest — and each CI round
 /// then reveals exactly one crate's worth. When a round costs a push and a wait, the list
 /// has to be complete the first time.
-fn run_tests(root: &Path) -> Result<(), String> {
+fn run_tests(root: &Path, report: &mut GateReport) -> Result<(), String> {
     println!("\n=== tests ===");
     println!("$ cargo test --workspace --no-fail-fast");
 
+    let started = Instant::now();
     let output = Command::new("cargo")
         .args(["test", "--workspace", "--no-fail-fast"])
         .current_dir(root)
         .output()
         .map_err(|error| format!("failed to launch `cargo`: {error}"))?;
+    let elapsed = started.elapsed();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     print!("{stdout}");
     eprint!("{stderr}");
 
-    if output.status.success() {
+    let ok = output.status.success();
+    let combined = format!("{stdout}{stderr}");
+    let names = if ok {
+        Vec::new()
+    } else {
+        failed_test_names(&stdout)
+    };
+    report.record_tests(&combined, ok, elapsed, names.clone())?;
+
+    if ok {
         return Ok(());
     }
 
     if std::env::var_os("CI").is_some() {
         let details = failure_details(&stdout);
-        for name in failed_test_names(&stdout) {
-            match details.get(&name) {
+        for name in &names {
+            match details.get(name) {
                 Some(reason) if !reason.is_empty() => {
                     println!(
                         "::error title=failing test::{name}%0A{}",
@@ -211,14 +226,39 @@ fn step(root: &Path, label: &str, program: &str, args: &[&str]) -> Result<(), St
     }
 }
 
+/// Runs the full ten (or, `--quick`, six) gate sections, **not** stopping at the first
+/// failure (audit 2026-09-07, G-2) — a version bump the gate's own installer check would
+/// have caught two sections ago used to hide behind whichever check happened to run
+/// first; running every section and reporting all of them lets one gate invocation say
+/// everything that is wrong, not just the earliest thing. [`GateReport`] carries the
+/// durable side of this: a summary, per-section timing, and a JUnit XML for `tests`,
+/// written under `target/gate-logs/` — see that module's own doc for what is captured
+/// in full versus only timed.
 fn gate(root: &Path, quick: bool) -> Result<(), String> {
-    step(root, "format", "cargo", &["fmt", "--all", "--check"])?;
+    let mut report = GateReport::start(root)?;
+    let mut failed_labels: Vec<String> = Vec::new();
+
+    macro_rules! run_step {
+        ($label:expr, $program:expr, $args:expr) => {
+            if let Err(label) = report.run_step($label, $program, $args) {
+                failed_labels.push(label);
+            }
+        };
+    }
+    macro_rules! timed_section {
+        ($label:expr, $body:expr) => {
+            if report.timed_section($label, $body).is_err() {
+                failed_labels.push($label.to_string());
+            }
+        };
+    }
+
+    run_step!("format", "cargo", &["fmt", "--all", "--check"]);
     // `--all` covers workspace members; `codepack-ai-api` is excluded, so it needs its
     // own invocation. Formatting compiles nothing, so this costs none of what the
     // exclusion bought — and without it the one crate nobody builds routinely would be
     // the one crate whose formatting nobody checks.
-    step(
-        root,
+    run_step!(
         "format (ai-api)",
         "cargo",
         &[
@@ -227,10 +267,9 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
             "crates/codepack-ai-api/Cargo.toml",
             "--",
             "--check",
-        ],
-    )?;
-    step(
-        root,
+        ]
+    );
+    run_step!(
         "clippy",
         "cargo",
         &[
@@ -240,45 +279,49 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
             "--",
             "-D",
             "warnings",
-        ],
-    )?;
-    if !quick {
-        run_tests(root)?;
+        ]
+    );
+    if !quick && let Err(label) = run_tests(root, &mut report) {
+        failed_labels.push(label);
     }
-    step(root, "deny", "cargo", &["deny", "check"])?;
+    run_step!("deny", "cargo", &["deny", "check"]);
     if !quick {
         // Reporting only: an ignore entry that has stopped matching is housekeeping,
         // and turning a dependency update into a red gate would teach people to delete
         // the check rather than the entry. Out of the quick gate because it runs
         // `cargo deny` a second time.
-        println!("\n=== ignored advisories ===");
-        ignored_advisories::check(root)?;
+        timed_section!("ignored advisories", || ignored_advisories::check(root));
     }
-    println!("\n=== frontend ===");
-    if frontend::require_or_skip(root)? {
-        frontend::gate_checks(root)?;
-    }
+    timed_section!("frontend", || {
+        if frontend::require_or_skip(root)? {
+            frontend::gate_checks(root)
+        } else {
+            Ok(())
+        }
+    });
     if !quick {
-        println!("\n=== dev scripts ===");
-        scripts::gate_checks(root)?;
+        timed_section!("dev scripts", || scripts::gate_checks(root));
     }
-    println!("\n=== agents sync ===");
-    sync_agents::run(root, true).map_err(|error| format!("sync-agents: {error}"))?;
+    timed_section!("agents sync", || sync_agents::run(root, true)
+        .map_err(|error| format!("sync-agents: {error}")));
     // Source-only, so it runs in the quick gate too: a report that starts reading raw
     // file content looks like any other line of code, and the cost of missing one is a
     // credential in a bundle somebody hands out.
-    println!("\n=== report redaction ===");
-    report_redaction::check(root)?;
+    timed_section!("report redaction", || report_redaction::check(root));
     // Cheap and manifest-only, so it runs in the quick gate too: a crate that gains a
     // network client changes no behaviour until the day it makes a request, which is far
     // too late to notice.
-    println!("\n=== network isolation ===");
-    network_isolation::check(root)?;
+    timed_section!("network isolation", || network_isolation::check(root));
     // File I/O and one hash, no build — cheap enough for the quick gate too (audit
     // 2026-09-07, D-1). A no-op until `setup.exe`/`SETUP.txt` are actually committed.
-    println!("\n=== installer artifact ===");
-    installer::check_gate(root)?;
-    Ok(())
+    timed_section!("installer artifact", || installer::check_gate(root));
+
+    report.finish(failed_labels.is_empty());
+    if failed_labels.is_empty() {
+        Ok(())
+    } else {
+        Err(failed_labels.join(", "))
+    }
 }
 
 fn doctor(root: &Path) {
