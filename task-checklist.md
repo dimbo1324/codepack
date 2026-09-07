@@ -62,7 +62,7 @@ conflict gets escalated, not guessed past silently.
 - [x] L-2 watcher subscribes only to non-ignored directories; ENOSPC reported with guidance
       (thread-shutdown correctness reasoned through carefully, not exercised by a live Tauri app — see final report)
 - [x] L-3/L-4 non-UTF-8 / backslash-named files excluded with a clear reason instead of silently breaking the baseline; open question recorded for the larger schema change (Q45)
-- [ ] L-6 `$XDG_STATE_HOME` respected for the log directory
+- [x] L-6 `$XDG_STATE_HOME` respected for the log directory; the `logs`-subdirectory form question recorded as Q49 (BLUEPRINT §D.4 already fixes the current form)
 - [ ] L-8 Linux font names added to the stacks
 - [ ] L-7 WebKitGTK DMABUF workaround documented in README
 

@@ -51,6 +51,7 @@ fn layout(
     home_dir: &Path,
     config_dir: &Path,
     data_local_dir: &Path,
+    state_dir: &Path,
 ) -> (PathBuf, PathBuf, PathBuf) {
     let settings_dir = config_dir.join(APP_NAME);
     let (data_dir, log_dir) = match os {
@@ -62,10 +63,14 @@ fn layout(
             settings_dir.clone(),
             home_dir.join("Library").join("Logs").join(APP_NAME),
         ),
-        Os::Linux => (
-            data_local_dir.join(APP_NAME),
-            home_dir.join(".local").join("state").join(APP_NAME),
-        ),
+        // No `logs` subdirectory here, unlike the other two platforms: BLUEPRINT §D.4
+        // fixes this exact form (`~/.local/state/codepack`), and changing it to match
+        // Windows/macOS is an open question (Q49, audit 2026-09-07 L-6) for the owner,
+        // not something to infer from the other two platforms' shape. `$XDG_STATE_HOME`
+        // is read from the environment either way — that half is an unambiguous bug fix
+        // independent of the form question, the same way `$XDG_DATA_HOME` already is
+        // above.
+        Os::Linux => (data_local_dir.join(APP_NAME), state_dir.join(APP_NAME)),
     };
     (settings_dir, data_dir, log_dir)
 }
@@ -83,9 +88,33 @@ pub(crate) fn home_dir_from_env() -> Option<PathBuf> {
     }
 }
 
-fn resolve_base_dirs() -> Result<(PathBuf, PathBuf, PathBuf)> {
+/// The value half of [`xdg_dir`], taking the environment's answer as a parameter
+/// instead of reading it — which is what makes this testable at all without an
+/// `std::env::set_var` call: that function is `unsafe fn` on this toolchain (a genuine
+/// multi-threaded soundness hazard, POSIX `setenv` racing a concurrent `getenv`), and
+/// this workspace forbids `unsafe` outright.
+///
+/// `value` being empty is treated the same as `None` — the specification requires it,
+/// and it is what a shell that exports the variable without setting it produces.
+fn xdg_dir_from(value: Option<&std::ffi::OsStr>, default: PathBuf) -> PathBuf {
+    match value {
+        Some(value) if !value.is_empty() => PathBuf::from(value),
+        _ => default,
+    }
+}
+
+/// Reads one `$XDG_*_HOME`-shaped variable, falling back to `default`. Shared by
+/// `XDG_DATA_HOME` and `XDG_STATE_HOME` (audit 2026-09-07, L-6: the log directory read
+/// `XDG_DATA_HOME`'s sibling `XDG_STATE_HOME` from nowhere and hardcoded its default
+/// instead, the one piece of this function the data directory had already gotten
+/// right).
+fn xdg_dir(var: &str, default: PathBuf) -> PathBuf {
+    xdg_dir_from(std::env::var_os(var).as_deref(), default)
+}
+
+fn resolve_base_dirs() -> Result<(PathBuf, PathBuf, PathBuf, PathBuf)> {
     let home_dir = home_dir_from_env().ok_or(CoreError::NoAppDirectories)?;
-    let (config_dir, data_local_dir) = match current_os() {
+    let (config_dir, data_local_dir, state_dir) = match current_os() {
         Os::Windows => {
             let roaming = std::env::var_os("APPDATA")
                 .map(PathBuf::from)
@@ -93,28 +122,24 @@ fn resolve_base_dirs() -> Result<(PathBuf, PathBuf, PathBuf)> {
             let local = std::env::var_os("LOCALAPPDATA")
                 .map(PathBuf::from)
                 .ok_or(CoreError::NoAppDirectories)?;
-            (roaming, local)
+            // Unused by `layout` on this platform (logs live under `local` instead);
+            // carried anyway so every platform returns the same shape.
+            let state = local.clone();
+            (roaming, local, state)
         }
         Os::Mac => {
             // One directory for both; `layout` records why.
             let support = home_dir.join("Library").join("Application Support");
-            (support.clone(), support)
+            (support.clone(), support.clone(), support)
         }
         Os::Linux => {
-            let config = std::env::var_os("XDG_CONFIG_HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home_dir.join(".config"));
-            // `$XDG_DATA_HOME`, defaulting as the specification says. An empty value is
-            // treated as unset, which is what the specification requires and what a
-            // shell that exports the variable without setting it produces.
-            let data = std::env::var_os("XDG_DATA_HOME")
-                .map(PathBuf::from)
-                .filter(|value| !value.as_os_str().is_empty())
-                .unwrap_or_else(|| home_dir.join(".local").join("share"));
-            (config, data)
+            let config = xdg_dir("XDG_CONFIG_HOME", home_dir.join(".config"));
+            let data = xdg_dir("XDG_DATA_HOME", home_dir.join(".local").join("share"));
+            let state = xdg_dir("XDG_STATE_HOME", home_dir.join(".local").join("state"));
+            (config, data, state)
         }
     };
-    Ok((home_dir, config_dir, data_local_dir))
+    Ok((home_dir, config_dir, data_local_dir, state_dir))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,9 +152,14 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn resolve() -> Result<Self> {
-        let (home_dir, config_dir, data_local_dir) = resolve_base_dirs()?;
-        let (settings_dir, data_dir, log_dir) =
-            layout(current_os(), &home_dir, &config_dir, &data_local_dir);
+        let (home_dir, config_dir, data_local_dir, state_dir) = resolve_base_dirs()?;
+        let (settings_dir, data_dir, log_dir) = layout(
+            current_os(),
+            &home_dir,
+            &config_dir,
+            &data_local_dir,
+            &state_dir,
+        );
         Ok(Self {
             home_dir,
             settings_dir,
@@ -142,8 +172,14 @@ impl AppPaths {
         let home_dir = root.join("home");
         let config_dir = root.join("config");
         let data_local_dir = root.join("data_local");
-        let (settings_dir, data_dir, log_dir) =
-            layout(current_os(), &home_dir, &config_dir, &data_local_dir);
+        let state_dir = root.join("state");
+        let (settings_dir, data_dir, log_dir) = layout(
+            current_os(),
+            &home_dir,
+            &config_dir,
+            &data_local_dir,
+            &state_dir,
+        );
         Self {
             home_dir,
             settings_dir,
@@ -612,6 +648,7 @@ mod tests {
             Path::new("C:/Users/dev"),
             Path::new("C:/Users/dev/AppData/Roaming"),
             Path::new("C:/Users/dev/AppData/Local"),
+            Path::new("C:/Users/dev/AppData/Local"),
         );
         assert_eq!(
             settings_dir,
@@ -633,6 +670,7 @@ mod tests {
             Path::new("/Users/dev"),
             Path::new("/Users/dev/Library/Application Support"),
             Path::new("/Users/dev/Library/Application Support"),
+            Path::new("/Users/dev/Library/Application Support"),
         );
         assert_eq!(
             settings_dir,
@@ -652,11 +690,41 @@ mod tests {
             Path::new("/home/dev"),
             Path::new("/home/dev/.config"),
             Path::new("/home/dev/.local/share"),
+            Path::new("/home/dev/.local/state"),
         );
         assert_eq!(settings_dir, Path::new("/home/dev/.config/codepack"));
         assert_eq!(data_dir, Path::new("/home/dev/.local/share/codepack"));
         assert_ne!(data_dir, settings_dir);
         assert_eq!(log_dir, Path::new("/home/dev/.local/state/codepack"));
+    }
+
+    // --- $XDG_STATE_HOME (audit 2026-09-07, L-6) ---------------------------------------
+
+    #[test]
+    fn xdg_state_home_overrides_the_default_when_set() {
+        let value = xdg_dir_from(
+            Some(std::ffi::OsStr::new("/mnt/state")),
+            PathBuf::from("/home/dev/.local/state"),
+        );
+        assert_eq!(value, Path::new("/mnt/state"));
+    }
+
+    #[test]
+    fn an_unset_xdg_state_home_falls_back_to_the_specifications_default() {
+        let value = xdg_dir_from(None, PathBuf::from("/home/dev/.local/state"));
+        assert_eq!(value, Path::new("/home/dev/.local/state"));
+    }
+
+    /// A shell that `export`s a variable without ever assigning it produces an empty
+    /// value, not an absent one — the specification treats the two the same, and so
+    /// must this.
+    #[test]
+    fn an_empty_xdg_state_home_is_treated_as_unset() {
+        let value = xdg_dir_from(
+            Some(std::ffi::OsStr::new("")),
+            PathBuf::from("/home/dev/.local/state"),
+        );
+        assert_eq!(value, Path::new("/home/dev/.local/state"));
     }
 
     /// A `for_root` layout with the Linux split forced, so the migration can be tested
