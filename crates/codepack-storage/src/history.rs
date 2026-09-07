@@ -8,6 +8,8 @@
 //! Read-only by construction: no statement here writes, so nothing in this module can
 //! disturb a snapshot baseline (invariant I6).
 
+use std::path::Path;
+
 use rusqlite::{Connection, params};
 
 use crate::error::Result;
@@ -86,6 +88,49 @@ pub fn list_export_runs(
         records.push(record?);
     }
     Ok(records)
+}
+
+/// True when some export run's recorded `result_path` canonicalizes to `target`.
+///
+/// The question a caller validating a webview-supplied path actually asks — "did some
+/// run of this installation produce exactly this file or directory" — needs neither the
+/// full row nor the whole table: a `result_path` is only ever comparable after
+/// canonicalizing it (`.` segments, a different case on Windows, a short 8.3 spelling all
+/// resolve to the same target), and canonicalizing is a filesystem call SQL cannot do, so
+/// candidates are narrowed here by file name before any of them touch the filesystem.
+///
+/// A `LIKE` pattern's `%`/`_` are wildcards, not literals, so a target file name that
+/// happens to contain one only ever widens the candidate set — never narrows past a real
+/// match — which is why the pattern below is not escaped: escaping could only turn a
+/// true positive into a false negative, and an unescaped wildcard can only cost an extra,
+/// harmless `canonicalize()` call that the equality check right after it then rejects.
+///
+/// This replaces a caller that used to fetch history with `list_export_runs(conn, None,
+/// 0)` and search the result: `LIMIT 0` is SQLite for "zero rows", so that call always
+/// returned an empty list and the check rejected every path unconditionally — including
+/// ones this installation had just produced (audit 2026-09-07, S-2). Bounding by name in
+/// SQL rather than "fetch everything, `usize::MAX` as the limit" also means a history of
+/// many thousands of runs costs one indexed-enough `LIKE` scan and a handful of
+/// `canonicalize()` calls, not a full table load followed by canonicalizing every row.
+pub fn export_run_result_path_matches(conn: &Connection, target: &Path) -> Result<bool> {
+    let Some(file_name) = target.file_name().and_then(|name| name.to_str()) else {
+        return Ok(false);
+    };
+    let pattern = format!("%{file_name}");
+
+    let mut statement =
+        conn.prepare("SELECT result_path FROM export_run WHERE result_path LIKE ?1")?;
+    let mut rows = statement.query(params![pattern])?;
+    while let Some(row) = rows.next()? {
+        let recorded: Option<String> = row.get(0)?;
+        if let Some(recorded) = recorded
+            && let Ok(canonical) = Path::new(&recorded).canonicalize()
+            && canonical == target
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -202,5 +247,91 @@ mod tests {
     fn an_empty_database_lists_nothing_rather_than_erroring() {
         let (_dir, conn) = temp_db();
         assert!(list_export_runs(&conn, None, 10).unwrap().is_empty());
+    }
+
+    // --- export_run_result_path_matches (audit 2026-09-07, S-2/T-1) -------------------
+    //
+    // The acceptance branch that had no test at all before this pass: every existing
+    // test on the path-validation feature exercised rejection, and a function that always
+    // returns "no" passes every one of them. These are the tests that would have caught
+    // `LIMIT 0` immediately.
+
+    fn write_result_path(dir: &tempfile::TempDir, name: &str) -> std::path::PathBuf {
+        let path = dir.path().join(name);
+        std::fs::write(&path, b"a real export artifact").unwrap();
+        path.canonicalize().unwrap()
+    }
+
+    /// The exact case the defect broke: a run this installation actually produced.
+    #[test]
+    fn a_path_a_recorded_run_produced_is_matched() {
+        let (dir, mut conn) = temp_db();
+        let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
+        let bundle = write_result_path(&dir, "bundle.zip");
+
+        let mut recorded = run(project, 10);
+        recorded.result_path = Some(bundle.display().to_string());
+        record_export_run(&mut conn, recorded, &[], &[], &[], None).unwrap();
+
+        assert!(export_run_result_path_matches(&conn, &bundle).unwrap());
+    }
+
+    /// The paired rejection case: a path no run ever recorded is not matched, even when
+    /// a run with a similarly named result exists in the same history.
+    #[test]
+    fn a_path_no_run_produced_is_not_matched() {
+        let (dir, mut conn) = temp_db();
+        let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
+        let recorded_bundle = write_result_path(&dir, "bundle.zip");
+        let mut recorded = run(project, 10);
+        recorded.result_path = Some(recorded_bundle.display().to_string());
+        record_export_run(&mut conn, recorded, &[], &[], &[], None).unwrap();
+
+        let stranger = dir.path().join("stranger.zip");
+        std::fs::write(&stranger, b"not a real export").unwrap();
+        let stranger = stranger.canonicalize().unwrap();
+
+        assert!(!export_run_result_path_matches(&conn, &stranger).unwrap());
+    }
+
+    /// An empty history is a clean "no", not an error — the state before any export has
+    /// ever run.
+    #[test]
+    fn an_empty_history_matches_nothing() {
+        let (dir, conn) = temp_db();
+        let anything = write_result_path(&dir, "whatever.zip");
+        assert!(!export_run_result_path_matches(&conn, &anything).unwrap());
+    }
+
+    /// A run with no `result_path` at all (cancelled before archiving) must not be a
+    /// false match for anything — the `LIKE` pattern excludes `NULL` on its own, and this
+    /// is the test that would notice if a future rewrite stopped doing that.
+    #[test]
+    fn a_run_with_no_result_path_matches_nothing() {
+        let (dir, mut conn) = temp_db();
+        let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
+        let mut recorded = run(project, 10);
+        recorded.result_path = None;
+        record_export_run(&mut conn, recorded, &[], &[], &[], None).unwrap();
+
+        let anything = write_result_path(&dir, "whatever.zip");
+        assert!(!export_run_result_path_matches(&conn, &anything).unwrap());
+    }
+
+    /// Case and `.`-segment differences are exactly what canonicalization exists to
+    /// absorb — the same claim the function's own doc comment makes about `.`, case on
+    /// Windows, and 8.3 names all resolving to the same target.
+    #[test]
+    fn a_differently_spelled_path_to_the_same_file_still_matches() {
+        let (dir, mut conn) = temp_db();
+        let project = find_or_create_project(&conn, "/tmp/a", "a", None).unwrap();
+        let bundle = write_result_path(&dir, "bundle.zip");
+
+        let mut recorded = run(project, 10);
+        recorded.result_path = Some(bundle.display().to_string());
+        record_export_run(&mut conn, recorded, &[], &[], &[], None).unwrap();
+
+        let respelled = dir.path().join(".").join("bundle.zip");
+        assert!(export_run_result_path_matches(&conn, &respelled.canonicalize().unwrap()).unwrap());
     }
 }
