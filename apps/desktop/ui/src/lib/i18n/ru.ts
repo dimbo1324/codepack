@@ -115,6 +115,9 @@ export const ru: Record<TranslationKey, string> = {
   "settings.uiZoom": "Масштаб интерфейса",
   "settings.uiZoom.hint": "Применяется сразу ко всему окну.",
   "settings.uiZoom.reset": "Вернуть 100%",
+  "settings.logVerbose": "Подробный журнал работы",
+  "settings.logVerbose.hint":
+    "Сохраняет в файлах журнала (в каталоге логов codepack) строки уровня DEBUG, а не только предупреждения и ошибки.",
   "settings.save": "Сохранить как настройки по умолчанию",
   "settings.save.hint": "Новые проекты будут начинаться с этих настроек.",
   "settings.saved": "Сохранено как настройки по умолчанию.",

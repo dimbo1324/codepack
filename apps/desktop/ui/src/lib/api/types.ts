@@ -48,6 +48,11 @@ export interface Config {
   redaction_labels: boolean;
   strict_token_checksums: boolean;
   artifact_language: string;
+  /** Keeps DEBUG-level activity-log lines, not just warnings and errors. */
+  log_verbose: boolean;
+  log_max_file_mb: number;
+  log_retention_days: number;
+  log_total_cap_mb: number;
 }
 
 /** A coding agent on this machine that a bundle can be handed to (stage S13). */

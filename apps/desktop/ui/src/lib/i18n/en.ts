@@ -113,6 +113,9 @@ export const en = {
   "settings.uiZoom": "Interface scale",
   "settings.uiZoom.hint": "Applies immediately to the whole window.",
   "settings.uiZoom.reset": "Reset to 100%",
+  "settings.logVerbose": "Verbose activity log",
+  "settings.logVerbose.hint":
+    "Keeps DEBUG-level lines in the log files under codepack's log directory, not just warnings and errors.",
   "settings.save": "Save as my defaults",
   "settings.save.hint": "New projects will start from these settings.",
   "settings.saved": "Saved as your defaults.",

@@ -379,6 +379,13 @@
             </button>
           </div>
         </Field>
+
+        <Switch
+          label={t("settings.logVerbose")}
+          hint={t("settings.logVerbose.hint")}
+          checked={config.log_verbose}
+          onchange={(checked) => (config.log_verbose = checked)}
+        />
       </div>
       <div class="card__header footer">
         <span class="text-muted text-sm">{t("settings.save.hint")}</span>
