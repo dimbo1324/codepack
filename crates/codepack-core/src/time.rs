@@ -112,6 +112,16 @@ impl UtcDateTime {
         format!("{y:04}{mo:02}{d:02}_{h:02}{mi:02}{s:02}")
     }
 
+    /// `YYYY-MM-DDTHH:MM:SSZ` — RFC 3339/ISO 8601, the form `.ai/universal/
+    /// 09-time-and-timestamps.md` asks every stored or logged instant to carry (a
+    /// literal zone marker, not a bare local-looking time), and the one that sorts
+    /// correctly as plain text — which a log file, read with `grep`/`sort` rather than
+    /// a tool, depends on (audit 2026-09-07, G-1).
+    pub fn format_iso8601_utc(&self) -> String {
+        let (y, mo, d, h, mi, s) = self.parts();
+        format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
+    }
+
     fn parts(&self) -> (i64, u32, u32, u32, u32, u32) {
         (
             self.year,
@@ -221,6 +231,7 @@ mod tests {
         assert_eq!(dt.format_human(), "2024-01-01 12:34:56");
         assert_eq!(dt.format_human_utc(), "2024-01-01 12:34:56 UTC");
         assert_eq!(dt.format_compact(), "20240101_123456");
+        assert_eq!(dt.format_iso8601_utc(), "2024-01-01T12:34:56Z");
     }
 
     #[test]
@@ -233,6 +244,7 @@ mod tests {
             dt.format_human(),
             dt.format_human_utc(),
             dt.format_compact(),
+            dt.format_iso8601_utc(),
         ] {
             assert!(
                 rendered.contains("12:34:56") || rendered.contains("123456"),

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Mutex;
 
-use codepack_core::CancellationToken;
 use codepack_core::config::Config;
+use codepack_core::{CancellationToken, LogLevel};
 use codepack_engine::{build_export_paths, copy_project, run_export_plan};
 
 #[test]
@@ -31,7 +31,7 @@ fn all_mode_plans_and_copies_every_file() {
         &paths.source_root,
         &paths.project_dir,
         &cancel,
-        &|_| {},
+        &|_, _| {},
     )
     .unwrap();
 
@@ -63,7 +63,7 @@ fn safe_mode_excludes_an_env_file_and_counts_it_as_a_safety_skip() {
         &paths.source_root,
         &paths.project_dir,
         &cancel,
-        &|_| {},
+        &|_, _| {},
     )
     .unwrap();
 
@@ -97,7 +97,7 @@ fn file_override_rescues_an_exportignore_excluded_file_all_the_way_through_to_th
         &paths.source_root,
         &paths.project_dir,
         &cancel,
-        &|_| {},
+        &|_, _| {},
     )
     .unwrap();
 
@@ -125,7 +125,7 @@ fn cancellation_mid_copy_yields_an_honestly_partial_result_not_a_fabricated_comp
 
     let cancel_for_log = cancel.clone();
     let processed = Mutex::new(0u32);
-    let log = move |_: &str| {
+    let log = move |_: LogLevel, _: &str| {
         let mut count = processed.lock().unwrap();
         *count += 1;
         if *count == 7 {

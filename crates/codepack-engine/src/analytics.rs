@@ -270,10 +270,12 @@ mod tests {
     use crate::copy::copy_project;
     use crate::paths::build_export_paths;
     use crate::plan::run_export_plan;
+    use codepack_core::LogLevel;
     use std::collections::HashMap;
     use std::fs;
 
     fn no_log(_: &str) {}
+    fn no_level_log(_: LogLevel, _: &str) {}
 
     fn staged_paths(source: &std::path::Path, output: &std::path::Path) -> ExportPaths {
         let paths = build_export_paths(source, output);
@@ -287,7 +289,7 @@ mod tests {
             source,
             &paths.project_dir,
             &cancel,
-            &no_log,
+            &no_level_log,
         )
         .unwrap();
         fs::create_dir_all(&paths.insights_dir).unwrap();

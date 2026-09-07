@@ -154,6 +154,28 @@ pub struct Config {
     ///
     /// `en` by default, which is what every report has always been.
     pub artifact_language: String,
+    /// Per-file narration ("copied: …", the same lines the run's own progress log
+    /// already carries) is `DEBUG`-level and off by default — at the default level a
+    /// run's log is on the order of a hundred lines, not one per file. Turning this on
+    /// is the settings-panel equivalent of the `CODEPACK_LOG=debug` environment
+    /// variable (audit 2026-09-07, G-1); the environment variable wins if both are set,
+    /// since it is the more deliberate, per-invocation choice.
+    pub log_verbose: bool,
+    /// A log file past this size is closed and continued as `.1`, `.2`, … rather than
+    /// growing without bound within one day's file (audit 2026-09-07, G-1). A `Config`
+    /// field rather than a constant because it is exactly the kind of value that
+    /// legitimately differs between users, and a support conversation should not have
+    /// to start with "please go recompile this".
+    pub log_max_file_mb: u32,
+    /// Log files older than this are deleted at startup. `0` means "keep none at all" —
+    /// a user who does not want a log on disk must be able to switch it off completely,
+    /// not merely shrink it (audit 2026-09-07, G-1).
+    pub log_retention_days: u32,
+    /// Across every kept log file, the total size past which the oldest are deleted
+    /// first — independent of `log_retention_days`, since a burst of very large runs
+    /// within the retention window could otherwise still grow unbounded (audit
+    /// 2026-09-07, G-1).
+    pub log_total_cap_mb: u32,
 }
 
 impl Default for Config {
@@ -195,6 +217,10 @@ impl Default for Config {
             redaction_labels: false,
             strict_token_checksums: false,
             artifact_language: DEFAULT_ARTIFACT_LANGUAGE.to_string(),
+            log_verbose: false,
+            log_max_file_mb: 50,
+            log_retention_days: 14,
+            log_total_cap_mb: 200,
         }
     }
 }

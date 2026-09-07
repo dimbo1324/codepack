@@ -144,12 +144,18 @@ pub fn run_export(
     }
 
     let started_at = unix_timestamp_now();
-    let log = |message: &str| {
+    // Level-aware since audit 2026-09-07 (G-1): a future file log (or any other
+    // consumer that wants to filter by severity) needs the caller's own judgment of how
+    // serious each line is, not one flat level for everything this closure ever sends.
+    let log = |level: LogLevel, message: &str| {
         let _ = progress.send(ProgressEvent::Log(LogEvent {
-            level: LogLevel::Info,
+            level,
             message: message.to_string(),
         }));
     };
+    // Most calls below are informational; naming this once keeps them from repeating
+    // `LogLevel::Info` at every one of the majority of call sites that want it.
+    let log_info = |message: &str| log(LogLevel::Info, message);
 
     // The bundle's file name carries the container's extension, so a 7z export does not
     // arrive called `.zip`. Every other path (staging, split-set directory) is unchanged.
@@ -188,7 +194,7 @@ pub fn run_export(
     // the step 1 (and step 6) call sites below — found reachable in practice, not
     // merely hypothetical, during this pass's own cancellation-battery testing.
     let (plan_outcome, copy_stats) = if cancel.is_cancelled() {
-        log("export cancelled before step 1 began; steps 1-2 skipped");
+        log_info("export cancelled before step 1 began; steps 1-2 skipped");
         std::fs::create_dir_all(&paths.insights_dir).map_err(|source| {
             crate::error::EngineError::Io {
                 path: paths.insights_dir.clone(),
@@ -217,13 +223,15 @@ pub fn run_export(
         ) {
             Ok(outcome) => outcome,
             Err(err) if crate::error::is_cancellation_error(&err) => {
-                log("export cancelled during step 1's own planning work; step 1 treated as empty");
+                log_info(
+                    "export cancelled during step 1's own planning work; step 1 treated as empty",
+                );
                 cancelled_before_planning_outcome(&paths, config)
             }
             Err(err) => return Err(err),
         };
         if plan_outcome.dropped_by_budget > 0 {
-            log(&format!(
+            log_info(&format!(
                 "token budget of {} dropped {} file(s) from the export",
                 config.token_budget, plan_outcome.dropped_by_budget
             ));
@@ -265,7 +273,7 @@ pub fn run_export(
             &paths.project_dir,
             &paths.structure_report,
             &extra_ignored_set,
-            &log,
+            &log_info,
             cancel,
         )?;
         send_step_finished(progress, "3/8: structure");
@@ -279,7 +287,7 @@ pub fn run_export(
             &paths.git_report,
             config.include_git_patch,
             redactor.as_ref(),
-            &log,
+            &log_info,
             cancel,
         )?;
         send_step_finished(progress, "4/8: git");
@@ -293,7 +301,7 @@ pub fn run_export(
             config.effective_max_text_file_bytes(),
             redactor.as_ref(),
             config.developer_context.trim(),
-            &log,
+            &log_info,
             cancel,
         )?;
         text_stats = outcome.stats;
@@ -312,11 +320,13 @@ pub fn run_export(
             config,
             &plan_outcome.diff_selection,
             cancel,
-            &log,
+            &log_info,
         ) {
             Ok(outcome) => analytics_outcome = Some(outcome),
             Err(err) if crate::error::is_cancellation_error(&err) => {
-                log("export cancelled during step 6's own analytics work; step 6 treated as empty");
+                log_info(
+                    "export cancelled during step 6's own analytics work; step 6 treated as empty",
+                );
             }
             Err(err) => return Err(err),
         }
@@ -352,9 +362,10 @@ pub fn run_export(
             cancelled,
             Some(predicted),
         ) {
-            log(&format!(
-                "failed to refresh manifest/index during archiving: {err}"
-            ));
+            log(
+                LogLevel::Warn,
+                &format!("failed to refresh manifest/index during archiving: {err}"),
+            );
         }
 
         if let Some(outcome) = analytics_outcome.as_ref() {
@@ -372,12 +383,13 @@ pub fn run_export(
             let dashboard_path = paths.insights_dir.join("REPORT_DASHBOARD.html");
             if let Err(err) = (codepack_reports::reports::dashboard::JOB.run)(&ctx, &dashboard_path)
             {
-                log(&format!(
-                    "failed to refresh dashboard during archiving: {err}"
-                ));
+                log(
+                    LogLevel::Warn,
+                    &format!("failed to refresh dashboard during archiving: {err}"),
+                );
             }
         } else {
-            log(
+            log_info(
                 "skipping dashboard refresh during archiving: analytics never ran (export was \
                  cancelled before step 6)",
             );
@@ -540,8 +552,8 @@ pub fn run_export(
     if config.history_keep_last_n > 0 {
         match cleanup_old_runs(conn, project_id, config.history_keep_last_n as usize) {
             Ok(0) => {}
-            Ok(removed) => log(&format!("history retention removed {removed} old run(s)")),
-            Err(err) => log(&format!("history retention failed: {err}")),
+            Ok(removed) => log_info(&format!("history retention removed {removed} old run(s)")),
+            Err(err) => log(LogLevel::Warn, &format!("history retention failed: {err}")),
         }
     }
 

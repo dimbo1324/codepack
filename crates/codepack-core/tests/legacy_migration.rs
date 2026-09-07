@@ -149,6 +149,10 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         // a `#[serde(default)]`, and its default is today's behaviour, so an old settings
         // file loads unchanged and every existing artifact keeps the value it had.
         "disclose_absolute_paths",
+        // Added 2026-09-07/08 (audit G-1). Same reasoning: a new field with a
+        // `#[serde(default)]` — `false`, i.e. today's behaviour of no log file existing
+        // to be verbose about.
+        "log_verbose",
     ];
     let number_fields = [
         "schema_version",
@@ -161,6 +165,13 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         // defaults (50 runs kept, no token budget).
         "history_keep_last_n",
         "token_budget",
+        // Added 2026-09-07/08 (audit G-1): the log file's rotation and retention
+        // policy. Same `#[serde(default)]` reasoning as every entry above — an old
+        // settings file loads unchanged and takes the defaults (50 MiB per file, 14
+        // days kept, 200 MiB total).
+        "log_max_file_mb",
+        "log_retention_days",
+        "log_total_cap_mb",
     ];
     let array_fields = [
         "extra_ignored_dirs",

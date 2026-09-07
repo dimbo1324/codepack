@@ -37,7 +37,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use codepack_core::{CancellationToken, CopyStats};
+use codepack_core::{CancellationToken, CopyStats, LogLevel};
 use codepack_scanner::ExportPlan;
 use codepack_security::should_skip_file_for_safety;
 
@@ -87,6 +87,13 @@ fn preserve_mode(_source: &fs::File, _destination: &Path) -> std::io::Result<()>
 /// skipped, or errored) — mirroring legacy's per-file `log: Callable[[str], None]`
 /// progress narration. A future orchestrator adapts a real progress-channel sender
 /// into this callback shape, the same way it will for every other pipeline step.
+///
+/// The level each call passes matters (audit 2026-09-07, G-1): a per-file "copied: …"
+/// line is `Debug` — at fifty thousand files that is the single largest source of
+/// volume the eventual log file has, and it is off by default — while a skip carries
+/// its own reason at `Warn` and an actual failure is `Error`. Before this, every line
+/// here was the same severity; now the level is what a log file (or any other consumer
+/// that decides what to keep) can filter on.
 pub fn copy_project(
     export_plan: &ExportPlan,
     include_relative_paths: Option<&HashSet<String>>,
@@ -94,7 +101,7 @@ pub fn copy_project(
     source_root: &Path,
     project_dir: &Path,
     cancel: &CancellationToken,
-    log: &dyn Fn(&str),
+    log: &dyn Fn(LogLevel, &str),
 ) -> Result<CopyStats> {
     fs::create_dir_all(project_dir).map_err(|source| EngineError::Io {
         path: project_dir.to_path_buf(),
@@ -136,10 +143,10 @@ pub fn copy_project(
             && !selected.contains(&planned.relative_path)
         {
             stats.files_skipped_by_diff += 1;
-            log(&format!(
-                "skipped (not in diff selection): {}",
-                planned.relative_path
-            ));
+            log(
+                LogLevel::Debug,
+                &format!("skipped (not in diff selection): {}", planned.relative_path),
+            );
             continue;
         }
 
@@ -148,10 +155,13 @@ pub fn copy_project(
         if decision.skip {
             stats.files_skipped += 1;
             stats.files_skipped_by_safety += 1;
-            log(&format!(
-                "skipped by safety mode: {} ({})",
-                planned.relative_path, decision.reason
-            ));
+            log(
+                LogLevel::Warn,
+                &format!(
+                    "skipped by safety mode: {} ({})",
+                    planned.relative_path, decision.reason
+                ),
+            );
             continue;
         }
 
@@ -160,10 +170,13 @@ pub fn copy_project(
 
         let Some(parent) = dest_path.parent() else {
             stats.errors += 1;
-            log(&format!(
-                "cannot determine parent directory for {}",
-                planned.relative_path
-            ));
+            log(
+                LogLevel::Error,
+                &format!(
+                    "cannot determine parent directory for {}",
+                    planned.relative_path
+                ),
+            );
             continue;
         };
 
@@ -175,10 +188,10 @@ pub fn copy_project(
                 }
                 Err(source) => {
                     stats.errors += 1;
-                    log(&format!(
-                        "cannot create directory {}: {source}",
-                        parent.display()
-                    ));
+                    log(
+                        LogLevel::Error,
+                        &format!("cannot create directory {}: {source}", parent.display()),
+                    );
                     continue;
                 }
             }
@@ -187,11 +200,17 @@ pub fn copy_project(
         match copy_regular_file(&source_path, &dest_path) {
             Ok(()) => {
                 stats.files_copied += 1;
-                log(&format!("copied: {}", planned.relative_path));
+                log(
+                    LogLevel::Debug,
+                    &format!("copied: {}", planned.relative_path),
+                );
             }
             Err(source) => {
                 stats.errors += 1;
-                log(&format!("cannot copy {}: {source}", planned.relative_path));
+                log(
+                    LogLevel::Error,
+                    &format!("cannot copy {}: {source}", planned.relative_path),
+                );
             }
         }
     }
@@ -264,7 +283,7 @@ mod tests {
     use codepack_scanner::{ExportIgnoreRules, ScanOptions, build_export_plan};
     use std::sync::Mutex;
 
-    fn no_log(_: &str) {}
+    fn no_log(_: LogLevel, _: &str) {}
 
     fn plan_for(source_root: &Path) -> ExportPlan {
         let options = ScanOptions::default();
@@ -421,7 +440,7 @@ mod tests {
         // `cancel.is_cancelled()` check stop the copy.
         let cancel_for_log = cancel.clone();
         let processed = Mutex::new(0u32);
-        let log = move |_: &str| {
+        let log = move |_: LogLevel, _: &str| {
             let mut count = processed.lock().unwrap();
             *count += 1;
             if *count == 5 {
