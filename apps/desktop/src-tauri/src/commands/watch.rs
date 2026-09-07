@@ -5,24 +5,41 @@
 //! update the clipboard. Re-running a full export automatically would write archives
 //! nobody asked for, which is the opposite of a tool built around deliberate handoff.
 //!
-//! Only the project root is watched, and only for content changes. Ignored directories
-//! are filtered here rather than at the OS level because `notify` has no portable way to
-//! exclude a subtree, and `node_modules` churning during an install would otherwise
-//! drown the channel.
+//! Ignored directories are never subscribed to in the first place (audit 2026-09-07,
+//! L-2), not merely filtered out of what gets reported. `notify` on Linux implements
+//! recursive watching through inotify, which has no concept of recursion at all — the
+//! library walks the tree itself and spends one watch descriptor per directory. A
+//! recursive subscription on the project root would burn one on `node_modules`,
+//! `target`, `.git` and every other directory the scanner already knows to skip, and
+//! `/proc/sys/fs/inotify/max_user_watches` is a small, shared, per-user budget (8192 on
+//! several distributions' defaults) that every other tool on the machine — an IDE,
+//! systemd, a language server — draws from too. So this walks the tree itself, exactly
+//! as [`codepack_scanner::walk_project`] does, and subscribes each surviving directory
+//! non-recursively; a directory created later is picked up from its parent's `Create`
+//! event and subscribed the same way, if it passes the same filter.
+//!
+//! Running out of descriptors anyway is reported, not swallowed: `notify::ErrorKind::
+//! MaxFilesWatch` is `ENOSPC` from inotify specifically, which is not a transient
+//! "a directory disappeared mid-walk" the way most watch errors are — it means part of
+//! the tree will never be watched, silently, while the UI's indicator still shows the
+//! watch as running.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use codepack_core::CancellationToken;
 use codepack_core::config::Config;
+use codepack_scanner::IgnoredDirMatcher;
 use notify::{Event, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::dto::WatchChangedEvent;
+use crate::dto::{WatchChangedEvent, WatchDegradedEvent};
 use crate::error::{CommandError, CommandResult};
 use crate::state::AppState;
 
 pub const CHANGED_EVENT: &str = "watch:changed";
+pub const DEGRADED_EVENT: &str = "watch:degraded";
 
 /// How long the changes must go quiet before the UI is told.
 ///
@@ -168,9 +185,16 @@ fn lock(mutex: &Mutex<Pending>) -> std::sync::MutexGuard<'_, Pending> {
 struct ActiveWatch {
     coalescer: Coalescer,
     aggregator: Option<std::thread::JoinHandle<()>>,
-    /// Dropping this stops the file-system notifications. Declared after the coalescer so
-    /// nothing new arrives while the thread is being wound down.
-    _watcher: Box<dyn std::any::Any + Send>,
+    /// This side is never cloned into the file-system callback (see
+    /// [`SubscriberCommand`]'s doc comment for why that distinction matters): dropping
+    /// it is not what ends [`spawn_subscriber`]'s thread, sending [`SubscriberCommand::
+    /// Stop`] through it is.
+    commands: Option<std::sync::mpsc::Sender<SubscriberCommand>>,
+    /// Owns the actual `notify` watcher. Ending this thread (by sending `Stop` through
+    /// `commands` above) is what stops file-system notifications, the same property
+    /// `_watcher`'s `Drop` used to give when the watcher was stored directly — see
+    /// [`spawn_subscriber`] for why it is not stored directly any more.
+    subscriber_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Drop for ActiveWatch {
@@ -181,10 +205,111 @@ impl Drop for ActiveWatch {
             // window is gone is how a shutdown turns into a hang.
             let _ = handle.join();
         }
+        // A closed channel would also end the subscriber thread's `for` loop, but this
+        // side is never the last sender: the file-system callback's own clone lives
+        // inside the watcher, which lives inside that same thread, so this side being
+        // dropped would never actually bring the sender count to zero — an explicit
+        // `Stop` is what ends the loop deterministically instead.
+        if let Some(commands) = self.commands.take() {
+            let _ = commands.send(SubscriberCommand::Stop);
+        }
+        if let Some(handle) = self.subscriber_thread.take() {
+            let _ = handle.join();
+        }
     }
 }
 
+/// A request to [`spawn_subscriber`]'s thread, sent either from [`start_watch`] itself
+/// (the initial tree) or from the file-system callback (a directory a `Create` event
+/// revealed).
+///
+/// Not a bare `PathBuf` with the channel's own closing as the stop signal: the
+/// callback's own clone of the sender lives *inside* the watcher, which lives inside the
+/// very thread that would be waiting for every sender to be dropped — a stop condition
+/// that thread can only satisfy by first dropping the watcher, which is the one thing
+/// still keeping that clone alive. `Stop` breaks that cycle by ending the loop on an
+/// explicit message rather than on a sender count this design can never actually bring
+/// to zero from the inside.
+enum SubscriberCommand {
+    Watch(PathBuf),
+    Stop,
+}
+
+/// Owns the `notify` watcher exclusively and performs every `.watch()` call — the
+/// initial tree's remaining directories, then whatever [`start_watch`]'s callback sends
+/// as `Create` events reveal new ones — so the callback itself never needs a handle back
+/// to the watcher it belongs to.
+///
+/// That "back to itself" shape was the alternative design, and it was rejected on
+/// purpose: `notify::recommended_watcher` takes ownership of the callback before
+/// returning the watcher, so making the callback able to call `.watch()` on that same
+/// watcher needs either `Arc::new_cyclic` (and `notify::recommended_watcher` is
+/// fallible, which does not fit that constructor's signature) or an `Arc<Mutex<Option<
+/// Watcher>>>` the callback and the watcher's owner both hold strong references to —
+/// which is a genuine reference cycle: the watcher owns the callback, and the callback
+/// would hold a strong `Arc` back to a cell that owns the watcher. `Arc` cycles are not
+/// collected in Rust; every watch session started and stopped over a long-running
+/// desktop process would leak one. A channel has no such cycle: the callback holds only
+/// a `Sender`, this thread holds the watcher and the matching `Receiver`, and dropping
+/// the `Sender` (in `ActiveWatch::drop`) ends the thread and its watcher cleanly.
+fn spawn_subscriber(
+    mut watcher: notify::RecommendedWatcher,
+    initial: Vec<PathBuf>,
+    commands: std::sync::mpsc::Receiver<SubscriberCommand>,
+    app: AppHandle,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let mut degraded_reported = false;
+        let initial = initial.into_iter().map(SubscriberCommand::Watch);
+        for command in initial.chain(commands) {
+            let path = match command {
+                SubscriberCommand::Watch(path) => path,
+                // Ends the loop deterministically — see `SubscriberCommand`'s doc
+                // comment for why the channel closing on its own is not this thread's
+                // stop signal.
+                SubscriberCommand::Stop => break,
+            };
+            if degraded_reported {
+                // The kernel-wide limit was already hit once; every further `.watch()`
+                // call fails the identical way until something elsewhere frees
+                // descriptors. Trying anyway would spend a syscall per discovered
+                // directory for the rest of the session to learn the same fact again.
+                continue;
+            }
+            if let Err(error) = watcher.watch(&path, RecursiveMode::NonRecursive)
+                && matches!(error.kind, notify::ErrorKind::MaxFilesWatch)
+            {
+                degraded_reported = true;
+                let _ = app.emit(
+                    DEGRADED_EVENT,
+                    WatchDegradedEvent {
+                        directory: Some(path.display().to_string()),
+                    },
+                );
+            }
+            // Any other error (the directory disappeared between being discovered and
+            // being subscribed to, a permission change) is a transient race on that one
+            // directory, not a reason to stop watching everything else.
+        }
+        // Drops `watcher` — and with it the callback and the sender clone the callback
+        // held — which is what actually ends the file-system subscription.
+        drop(watcher);
+    })
+}
+
 /// Starts watching `project_root`. Replaces any previous watch.
+///
+/// Subscribes non-recursively to `root` and every surviving subdirectory
+/// [`codepack_scanner::watched_directories`] finds (audit 2026-09-07, L-2) — never to
+/// `node_modules`, `target`, `.git` and the rest of what the scanner already prunes, so
+/// this does not spend the OS's small, shared inotify budget on directories nobody
+/// wants watched. Only `root` itself is subscribed to synchronously, so a genuine
+/// failure there (the directory vanished, permission denied) still surfaces as this
+/// command's own error exactly as before; every other directory — the rest of the
+/// initial tree, and any created afterward — is subscribed to from a background thread
+/// (see [`spawn_subscriber`]), and running out of watch descriptors partway through is
+/// reported as a `watch:degraded` event rather than silently leaving part of the
+/// project unwatched.
 #[tauri::command]
 pub fn start_watch(
     app: AppHandle,
@@ -193,12 +318,23 @@ pub fn start_watch(
     config: Config,
 ) -> CommandResult<()> {
     let root = super::resolve_project_root(&project_root)?;
+    let matcher = ignored_dir_matcher(&root, &config);
 
-    let ignored = ignored_directory_names(&root, &config);
+    let mut directories =
+        codepack_scanner::watched_directories(&root, &matcher, &CancellationToken::new())
+            .map_err(CommandError::new)?;
+    // `watched_directories` always returns `root` first; watched synchronously below,
+    // it must not also be sent down the channel `spawn_subscriber` drains.
+    if !directories.is_empty() {
+        directories.remove(0);
+    }
+
     let watch_root = root.clone();
+    let coalescer_app = app.clone();
+    let callback_app = app.clone();
 
     let (coalescer, aggregator) = Coalescer::start(move |changed_paths, truncated| {
-        let _ = app.emit(
+        let _ = coalescer_app.emit(
             CHANGED_EVENT,
             WatchChangedEvent {
                 changed_paths,
@@ -210,15 +346,47 @@ pub fn start_watch(
     let sink = Coalescer {
         state: Arc::clone(&coalescer.state),
     };
+    let (commands_tx, commands_rx) = std::sync::mpsc::channel::<SubscriberCommand>();
+    // `ActiveWatch`'s own handle, kept apart from the clone the callback below moves
+    // in: see `SubscriberCommand`'s doc comment for why this side must never be the
+    // sender the subscriber thread's loop is implicitly waiting to see dropped.
+    let active_watch_commands = commands_tx.clone();
+    let callback_matcher = matcher.clone();
+    let mut stream_error_reported = false;
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
-        let Ok(event) = result else {
-            // A watch error (a directory disappearing mid-walk, a permission change) is
-            // not worth interrupting the user over: the watch keeps running, and the
-            // next real change still reports.
-            return;
+        let event = match result {
+            Ok(event) => event,
+            Err(error) => {
+                if matches!(error.kind, notify::ErrorKind::MaxFilesWatch) && !stream_error_reported
+                {
+                    stream_error_reported = true;
+                    let _ =
+                        callback_app.emit(DEGRADED_EVENT, WatchDegradedEvent { directory: None });
+                }
+                // Any other error (a directory disappearing mid-walk, a permission
+                // change) is not worth interrupting the user over: the watch keeps
+                // running, and the next real change still reports.
+                return;
+            }
         };
         if !event.kind.is_create() && !event.kind.is_modify() && !event.kind.is_remove() {
             return;
+        }
+
+        if event.kind.is_create() {
+            for path in &event.paths {
+                let Ok(relative) = path.strip_prefix(&watch_root) else {
+                    continue;
+                };
+                if path.is_dir() && !callback_matcher.is_ignored(relative) {
+                    // The subscriber thread, not this callback, actually calls
+                    // `.watch()` — see `spawn_subscriber`'s doc comment for why a
+                    // callback holding a handle back to its own watcher is a reference
+                    // cycle this design avoids on purpose. A closed receiver (the watch
+                    // was already stopped) makes this a no-op, which is correct.
+                    let _ = commands_tx.send(SubscriberCommand::Watch(path.clone()));
+                }
+            }
         }
 
         // Recorded, not emitted. Deciding when to speak is the aggregator's job, and a
@@ -227,20 +395,23 @@ pub fn start_watch(
             event
                 .paths
                 .iter()
-                .filter(|path| !is_ignored(path, &watch_root, &ignored))
+                .filter(|path| is_reportable(path, &watch_root, &callback_matcher))
                 .map(|path| path.display().to_string()),
         );
     })
     .map_err(CommandError::new)?;
 
     watcher
-        .watch(&root, RecursiveMode::Recursive)
+        .watch(&root, RecursiveMode::NonRecursive)
         .map_err(CommandError::new)?;
+
+    let subscriber_thread = spawn_subscriber(watcher, directories, commands_rx, app);
 
     state.watch.replace(Box::new(ActiveWatch {
         coalescer,
         aggregator: Some(aggregator),
-        _watcher: Box::new(watcher),
+        commands: Some(active_watch_commands),
+        subscriber_thread: Some(subscriber_thread),
     }));
     Ok(())
 }
@@ -252,40 +423,34 @@ pub fn stop_watch(state: State<'_, AppState>) -> CommandResult<()> {
     Ok(())
 }
 
-/// The directory names a change inside is not worth reporting.
-///
-/// The same set the scanner prunes with, so the watch agrees with the export about what
-/// counts as part of the project.
-fn ignored_directory_names(root: &Path, config: &Config) -> Vec<String> {
-    let mut names: Vec<String> = codepack_scanner::IGNORED_DIR_NAMES
-        .iter()
-        .map(|name| name.to_lowercase())
-        .collect();
-    names.extend(
-        config
-            .extra_ignored_dirs
-            .iter()
-            .map(|name| name.to_lowercase()),
-    );
-    names.extend(
-        codepack_scanner::merged_extra_ignored_dirs(&codepack_scanner::detect_stacks(root))
-            .into_iter()
-            .map(|name| name.to_lowercase()),
-    );
-    names
+/// The same directory-name rules the scanner prunes with, so the watch agrees with the
+/// export about what counts as part of the project — and, since audit 2026-09-07 L-2,
+/// so [`codepack_scanner::watched_directories`] and the callback in [`start_watch`]
+/// answer "is this directory worth watching" identically. `IgnoredDirMatcher` already
+/// includes `codepack_scanner::IGNORED_DIR_NAMES` internally; only the config- and
+/// stack-detected extras need to be supplied here.
+fn ignored_dir_matcher(root: &Path, config: &Config) -> IgnoredDirMatcher {
+    let mut extra: Vec<String> = config.extra_ignored_dirs.clone();
+    extra.extend(codepack_scanner::merged_extra_ignored_dirs(
+        &codepack_scanner::detect_stacks(root),
+    ));
+    IgnoredDirMatcher::new(extra)
 }
 
-/// True when any path segment below `root` is an ignored directory name.
-fn is_ignored(path: &Path, root: &Path, ignored: &[String]) -> bool {
+/// True when a changed path is worth telling the UI about.
+///
+/// With subscriptions now non-recursive and scoped to surviving directories only (audit
+/// 2026-09-07, L-2), `notify` structurally cannot report an event for a path nested
+/// inside an ignored directory — nothing was ever watching in there. What remains to
+/// filter here is narrower: an event for the ignored directory's *own* creation (a
+/// `node_modules` a fresh `npm install` just created is real, but not something a user
+/// asked to be told about), and a path `notify` reports outside the watched tree
+/// entirely, which some platforms do for the root itself.
+fn is_reportable(path: &Path, root: &Path, matcher: &IgnoredDirMatcher) -> bool {
     let Ok(relative) = path.strip_prefix(root) else {
-        // Outside the watched tree: `notify` can report the root itself on some
-        // platforms, and that is never an interesting change.
-        return true;
+        return false;
     };
-    relative.components().any(|component| {
-        let name = component.as_os_str().to_string_lossy().to_lowercase();
-        ignored.iter().any(|ignored_name| ignored_name == &name)
-    })
+    !matcher.is_ignored(relative)
 }
 
 #[cfg(test)]
@@ -421,61 +586,73 @@ mod tests {
         assert!(aggregator.join().is_ok());
     }
 
-    #[test]
-    fn a_change_inside_an_ignored_directory_is_not_reported() {
-        // A dependency install churns thousands of files; reporting them would make the
-        // signal useless.
-        let root = Path::new("/project");
-        let ignored = vec!["node_modules".to_string(), "target".to_string()];
+    // With subscriptions non-recursive and scoped to survivor directories (audit
+    // 2026-09-07, L-2), `notify` cannot structurally deliver an event for a path nested
+    // inside an ignored directory — nothing was ever watching there. What `is_reportable`
+    // still has to filter is narrower: an ignored directory's *own* creation event
+    // (reported at the level of its already-watched parent), and a path outside the
+    // watched tree entirely.
 
-        assert!(is_ignored(
-            Path::new("/project/node_modules/react/index.js"),
+    #[test]
+    fn an_ignored_directorys_own_creation_is_not_reported() {
+        // A dependency install churns thousands of files inside it; reporting even its
+        // own creation would be the first line of a flood.
+        let root = Path::new("/project");
+        let matcher = IgnoredDirMatcher::new(["target".to_string()]);
+
+        assert!(!is_reportable(
+            Path::new("/project/node_modules"),
             root,
-            &ignored
+            &matcher
         ));
-        assert!(is_ignored(
-            Path::new("/project/target/debug/app"),
-            root,
-            &ignored
-        ));
+        assert!(!is_reportable(Path::new("/project/target"), root, &matcher));
     }
 
     #[test]
     fn a_change_to_a_real_source_file_is_reported() {
         let root = Path::new("/project");
-        let ignored = vec!["node_modules".to_string()];
-        assert!(!is_ignored(
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        assert!(is_reportable(
             Path::new("/project/src/main.rs"),
             root,
-            &ignored
+            &matcher
         ));
-        assert!(!is_ignored(Path::new("/project/README.md"), root, &ignored));
+        assert!(is_reportable(
+            Path::new("/project/README.md"),
+            root,
+            &matcher
+        ));
     }
 
     #[test]
     fn matching_is_case_insensitive_because_two_of_the_three_platforms_are() {
         let root = Path::new("/project");
-        let ignored = vec!["node_modules".to_string()];
-        assert!(is_ignored(
-            Path::new("/project/Node_Modules/pkg/index.js"),
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        assert!(!is_reportable(
+            Path::new("/project/Node_Modules"),
             root,
-            &ignored
+            &matcher
         ));
     }
 
     #[test]
-    fn a_path_outside_the_watched_tree_is_ignored_rather_than_reported() {
+    fn a_path_outside_the_watched_tree_is_not_reported() {
         let root = Path::new("/project");
-        assert!(is_ignored(Path::new("/elsewhere/file.rs"), root, &[]));
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        assert!(!is_reportable(
+            Path::new("/elsewhere/file.rs"),
+            root,
+            &matcher
+        ));
     }
 
     #[test]
-    fn the_ignore_set_includes_the_scanners_own_defaults() {
+    fn the_matcher_includes_the_scanners_own_defaults() {
         // The watch must agree with the export about what counts as project content.
         let dir = tempfile::tempdir().unwrap();
-        let names = ignored_directory_names(dir.path(), &Config::default());
-        assert!(names.iter().any(|name| name == "node_modules"));
-        assert!(names.iter().any(|name| name == ".git"));
+        let matcher = ignored_dir_matcher(dir.path(), &Config::default());
+        assert!(matcher.is_ignored(Path::new("node_modules")));
+        assert!(matcher.is_ignored(Path::new(".git")));
     }
 
     #[test]
@@ -485,8 +662,8 @@ mod tests {
             extra_ignored_dirs: vec!["Vendor".to_string()],
             ..Config::default()
         };
-        let names = ignored_directory_names(dir.path(), &config);
-        assert!(names.iter().any(|name| name == "vendor"));
+        let matcher = ignored_dir_matcher(dir.path(), &config);
+        assert!(matcher.is_ignored(Path::new("vendor")));
     }
 
     #[test]
@@ -495,10 +672,10 @@ mod tests {
         // detector is what adds it.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
-        let names = ignored_directory_names(dir.path(), &Config::default());
+        let matcher = ignored_dir_matcher(dir.path(), &Config::default());
         assert!(
-            names.iter().any(|name| name == "target"),
-            "stack-detected directories are missing: {names:?}"
+            matcher.is_ignored(Path::new("target")),
+            "stack-detected directories are not ignored"
         );
     }
 }

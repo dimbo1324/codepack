@@ -199,6 +199,19 @@ pub struct WatchChangedEvent {
     pub truncated: bool,
 }
 
+/// A `watch:degraded` event (audit 2026-09-07, L-2): the OS ran out of watch
+/// descriptors partway through subscribing, so part of the project is not being
+/// watched — silently, from the user's side, since the indicator still shows the watch
+/// as on. Emitted at most once per watch session: the situation does not change once it
+/// happens (the kernel-wide limit was already hit), so repeating it would only be noise.
+#[derive(Debug, Clone, Serialize)]
+pub struct WatchDegradedEvent {
+    /// The directory whose subscription failed, if the failure happened while adding
+    /// one discovered after startup — `None` for a limit hit during the initial scan,
+    /// where no single directory is more "the" cause than the others.
+    pub directory: Option<String>,
+}
+
 // --- History ----------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]

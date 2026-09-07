@@ -358,6 +358,8 @@ export const ru: Record<TranslationKey, string> = {
   "watch.copied": "Сводка изменений скопирована в буфер обмена.",
   "watch.copyFailed": "Не удалось скопировать сводку изменений в буфер обмена.",
   "watch.failed": "Не удалось включить режим слежения",
+  "watch.degraded":
+    "Не хватило watch-дескрипторов ядра — часть проекта не наблюдается. В Linux увеличьте лимит: sudo sysctl fs.inotify.max_user_watches=524288 (запишите в /etc/sysctl.d/99-inotify.conf, чтобы пережить перезагрузку).",
 
   "sterile.title": "Стерильная копия",
   "sterile.lede":

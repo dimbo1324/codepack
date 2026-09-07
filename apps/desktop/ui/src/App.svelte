@@ -7,6 +7,7 @@
     onExportFinished,
     onExportProgress,
     onWatchChanged,
+    onWatchDegraded,
     onWindowDragDrop,
     setUiZoom,
   } from "$lib/api/client";
@@ -109,6 +110,19 @@
               );
             });
           }
+        }),
+      );
+      unlisteners.push(
+        await onWatchDegraded((event) => {
+          // Audit 2026-09-07, L-2: the OS ran out of watch descriptors partway through
+          // subscribing. The watch keeps running for whatever it did manage to
+          // subscribe to, but part of the project is silently unwatched — worth an
+          // explicit, persistent-feeling warning rather than the info-level toast a
+          // normal change gets, since a `success`/`info` toast tone here would say the
+          // opposite of what happened.
+          pushToast("warning", "watch.degraded", {
+            detail: event.directory ?? undefined,
+          });
         }),
       );
       unlisteners.push(

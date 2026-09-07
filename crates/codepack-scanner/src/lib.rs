@@ -40,4 +40,6 @@ pub use plan::{
     write_export_plan_files,
 };
 pub use stack::{StackInfo, detect_stacks, merged_extra_ignored_dirs, primary_stack};
-pub use walk::{IgnoredDirMatcher, SkippedDir, WalkOutcome, WalkedFile, walk_project};
+pub use walk::{
+    IgnoredDirMatcher, SkippedDir, WalkOutcome, WalkedFile, walk_project, watched_directories,
+};

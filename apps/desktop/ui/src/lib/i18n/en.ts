@@ -351,6 +351,8 @@ export const en = {
   "watch.copied": "Change summary copied to the clipboard.",
   "watch.copyFailed": "Could not copy the change summary to the clipboard.",
   "watch.failed": "Watch mode could not start",
+  "watch.degraded":
+    "Ran out of the operating system's file-watch limit — part of this project is not being watched. On Linux, raise it with: sudo sysctl fs.inotify.max_user_watches=524288 (add it to /etc/sysctl.d/99-inotify.conf to survive a reboot).",
 
   "sterile.title": "Sterile copy",
   "sterile.lede":

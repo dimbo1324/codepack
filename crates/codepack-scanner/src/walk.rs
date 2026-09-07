@@ -253,6 +253,61 @@ fn relative_path_of(path: &Path, root: &Path) -> PathBuf {
     path.strip_prefix(root).unwrap_or(path).to_path_buf()
 }
 
+/// Every directory an export of `root` would actually descend into: `root` itself and
+/// each surviving subdirectory, pruned exactly as [`walk_project`] prunes them (never a
+/// symlink — invariant I7 — and never one `ignored_dirs` matches), but collecting
+/// directories instead of files and with no per-project `extra_dir_filter` hook, no
+/// parallel stat pass, and no `SkippedDir` bookkeeping — none of which the one caller
+/// this exists for (the desktop watcher, audit 2026-09-07 L-2) needs.
+///
+/// The watcher subscribes to each of these non-recursively rather than the project root
+/// recursively: `notify` on Linux implements recursion through inotify, which has no
+/// concept of recursion at all — the library walks the tree itself and burns one watch
+/// descriptor per directory, including every one of `node_modules`, `target`, `.git`
+/// and `.venv` that this function is precisely for not visiting. A single dependency
+/// tree can be the difference between dozens of descriptors and the tens of thousands
+/// that exhaust a user's entire inotify budget for every process on the machine, not
+/// only this one.
+pub fn watched_directories(
+    root: &Path,
+    ignored_dirs: &IgnoredDirMatcher,
+    cancel: &CancellationToken,
+) -> Result<Vec<PathBuf>> {
+    let mut directories = vec![root.to_path_buf()];
+
+    let walker = WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            if !entry.file_type().is_dir() {
+                return true;
+            }
+            let rel = relative_path_of(entry.path(), root);
+            !entry.path_is_symlink() && !ignored_dirs.is_ignored(&rel)
+        });
+
+    for entry_result in walker {
+        if cancel.is_cancelled() {
+            return Err(ScannerError::Cancelled);
+        }
+        let entry = entry_result.map_err(|source| ScannerError::Walk {
+            path: source
+                .path()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| root.to_path_buf()),
+            source,
+        })?;
+        if entry.depth() > 0 && entry.file_type().is_dir() {
+            directories.push(entry.path().to_path_buf());
+        }
+    }
+
+    Ok(directories)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,5 +491,78 @@ mod tests {
     #[cfg(not(any(unix, windows)))]
     fn create_dir_symlink(_target: &Path, _link: &Path) -> bool {
         false
+    }
+
+    // --- watched_directories (audit 2026-09-07, L-2) -----------------------------------
+    //
+    // Platform-neutral on purpose, per the audit's own framing: exhausting the real
+    // inotify limit cannot be tested in CI (changing `sysctl` there is not available),
+    // but the *plan* — which directories a subscription would be built from — can be,
+    // because it never touches the kernel at all.
+
+    #[test]
+    fn root_is_always_included_even_with_nothing_else_to_walk() {
+        let dir = tempfile::tempdir().unwrap();
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        let directories = watched_directories(dir.path(), &matcher, &cancel_never()).unwrap();
+        assert_eq!(directories, vec![dir.path().to_path_buf()]);
+    }
+
+    #[test]
+    fn a_survivor_subdirectory_is_included() {
+        let dir = tempfile::tempdir().unwrap();
+        std_fs::create_dir_all(dir.path().join("src/lib")).unwrap();
+
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        let directories = watched_directories(dir.path(), &matcher, &cancel_never()).unwrap();
+
+        assert!(directories.contains(&dir.path().join("src")));
+        assert!(directories.contains(&dir.path().join("src/lib")));
+    }
+
+    /// The exact case audit 2026-09-07 (L-2) exists to fix: a subscription built the old
+    /// way would have spent a watch descriptor on every one of these, which is what
+    /// exhausts a typical distribution's default inotify budget on one Rust project's
+    /// `target` directory alone.
+    #[test]
+    fn an_ignored_directory_and_everything_under_it_is_excluded() {
+        let dir = tempfile::tempdir().unwrap();
+        std_fs::create_dir_all(dir.path().join("node_modules/left-pad")).unwrap();
+        std_fs::create_dir_all(dir.path().join("target/debug/deps")).unwrap();
+        std_fs::create_dir_all(dir.path().join("src")).unwrap();
+
+        let matcher = IgnoredDirMatcher::new(["target".to_string()]);
+        let directories = watched_directories(dir.path(), &matcher, &cancel_never()).unwrap();
+
+        assert!(directories.contains(&dir.path().join("src")));
+        assert!(!directories.iter().any(|path| {
+            path.components()
+                .any(|component| component.as_os_str() == "node_modules")
+        }));
+        assert!(!directories.iter().any(|path| {
+            path.components()
+                .any(|component| component.as_os_str() == "target")
+        }));
+    }
+
+    #[test]
+    fn a_symlinked_directory_is_never_walked_into_invariant_i7() {
+        let dir = tempfile::tempdir().unwrap();
+        std_fs::create_dir_all(dir.path().join("real/inside")).unwrap();
+        let link = dir.path().join("link");
+        if !create_dir_symlink(&dir.path().join("real"), &link) {
+            eprintln!(
+                "skipping symlink assertion: this environment cannot create directory \
+                 symlinks (no Developer Mode / admin privilege on Windows)"
+            );
+            return;
+        }
+
+        let matcher = IgnoredDirMatcher::new(std::iter::empty());
+        let directories = watched_directories(dir.path(), &matcher, &cancel_never()).unwrap();
+
+        assert!(directories.contains(&dir.path().join("real")));
+        assert!(directories.contains(&dir.path().join("real/inside")));
+        assert!(!directories.contains(&link.join("inside")));
     }
 }

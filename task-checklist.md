@@ -59,7 +59,8 @@ conflict gets escalated, not guessed past silently.
 - [x] C-4/L-13/T-9 CI job: install built package in ubuntu/debian/fedora containers, run headless export
       (GUI-under-Xvfb step is `continue-on-error`: exploratory for L-5/L-7, unverified by a live run — see final report)
 - [x] L-1/L-10 CLI + shell completions + man page bundled into deb/rpm
-- [ ] L-2 watcher subscribes only to non-ignored directories; ENOSPC reported with guidance
+- [x] L-2 watcher subscribes only to non-ignored directories; ENOSPC reported with guidance
+      (thread-shutdown correctness reasoned through carefully, not exercised by a live Tauri app — see final report)
 - [ ] L-3/L-4 non-UTF-8 / backslash-named files excluded with a clear reason instead of silently breaking the baseline; open question recorded for the larger schema change
 - [ ] L-6 `$XDG_STATE_HOME` respected for the log directory
 - [ ] L-8 Linux font names added to the stacks

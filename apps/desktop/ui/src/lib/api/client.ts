@@ -248,6 +248,20 @@ export function onWatchChanged(handler: (event: WatchChangedEvent) => void): Pro
   return listen<WatchChangedEvent>("watch:changed", (event) => handler(event.payload));
 }
 
+/** The OS ran out of watch descriptors partway through subscribing (audit 2026-09-07,
+ * L-2): part of the project is not being watched, silently, unless this is shown. Fired
+ * at most once per watch session. */
+export interface WatchDegradedEvent {
+  /** The directory whose subscription failed, when the failure happened adding one
+   * discovered after startup. `null` for a limit hit during the initial scan, where no
+   * single directory is more "the" cause than the others. */
+  directory: string | null;
+}
+
+export function onWatchDegraded(handler: (event: WatchDegradedEvent) => void): Promise<UnlistenFn> {
+  return listen<WatchDegradedEvent>("watch:degraded", (event) => handler(event.payload));
+}
+
 // --- Sterile copy ----------------------------------------------------------------
 
 /** Starts a "Sterile copy" run on a background thread and returns immediately with a
