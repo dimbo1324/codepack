@@ -126,6 +126,7 @@ mod tests {
                 sensitive_files: 0,
                 potential_secrets: 1,
                 risky_code: 1,
+                partial_scans: 0,
                 total_findings: 2,
             },
             findings: vec![

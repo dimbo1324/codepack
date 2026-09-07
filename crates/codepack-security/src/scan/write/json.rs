@@ -55,6 +55,7 @@ mod tests {
                 sensitive_files: 1,
                 potential_secrets: 0,
                 risky_code: 0,
+                partial_scans: 0,
                 total_findings: 1,
             },
             findings: vec![Finding {

@@ -204,6 +204,7 @@ mod tests {
                 sensitive_files: 99,
                 potential_secrets: 99,
                 risky_code: 99,
+                partial_scans: 99,
                 total_findings: 99,
             },
             findings: vec![sensitive, secret.clone(), risky],

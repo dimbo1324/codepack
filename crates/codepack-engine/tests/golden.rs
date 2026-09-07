@@ -31,6 +31,31 @@ use support::{read_zip_entry, zip_entry_names};
 /// written contract: if they ever drift apart, these tests fail, which is the signal.
 const VOLATILE_KEYS: &[&str] = &["generated_at", "source_root", "copied_root", "bundle_name"];
 
+/// Present only in our own output, never in legacy's — unlike [`VOLATILE_KEYS`], not
+/// mirrored in `generate_reference.py`, because legacy's own output can never produce
+/// this key at all: `codepack-security`'s scanner gained a hard read-size ceiling
+/// (audit 2026-09-07, P-2/Q-3) legacy never had, so `ScanSummary::partial_scans` has no
+/// legacy counterpart to compare against. None of the three golden fixtures is
+/// remotely close to that ceiling, so this always reads `0` here — a fact about the
+/// fixtures' size, not about the field being untested (`codepack-security`'s own tests
+/// cover the ceiling directly).
+const NOVEL_KEYS_NO_LEGACY_EQUIVALENT: &[&str] = &["partial_scans"];
+
+fn strip_keys(value: &Value, keys: &[&str]) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .filter(|(key, _)| !keys.contains(&key.as_str()))
+                .map(|(key, item)| (key.clone(), strip_keys(item, keys)))
+                .collect(),
+        ),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|item| strip_keys(item, keys)).collect())
+        }
+        other => other.clone(),
+    }
+}
+
 const MANIFEST_COMPARED_KEYS: &[&str] = &[
     "project_name",
     "cancelled",
@@ -52,16 +77,7 @@ fn golden_root() -> PathBuf {
 }
 
 fn strip_volatile(value: &Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .filter(|(key, _)| !VOLATILE_KEYS.contains(&key.as_str()))
-                .map(|(key, item)| (key.clone(), strip_volatile(item)))
-                .collect(),
-        ),
-        Value::Array(items) => Value::Array(items.iter().map(strip_volatile).collect()),
-        other => other.clone(),
-    }
+    strip_keys(value, VOLATILE_KEYS)
 }
 
 fn subset(value: &Value, keys: &[&str]) -> Value {
@@ -279,7 +295,10 @@ fn run_one_fixture(fixture_name: &str) {
         ),
         ("PROJECT_PROFILE.json", "PROJECT_PROFILE.json"),
     ] {
-        let ours = strip_volatile(&read_zip_json(zip, entry));
+        let ours = strip_keys(
+            &strip_volatile(&read_zip_json(zip, entry)),
+            NOVEL_KEYS_NO_LEGACY_EQUIVALENT,
+        );
         let reference = read_json(&reference_dir.join(artifact));
         reports.extend(compare(artifact, &ours, &reference));
     }

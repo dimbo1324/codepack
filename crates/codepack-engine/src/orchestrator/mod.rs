@@ -488,7 +488,7 @@ pub fn run_export(
                 .findings
                 .iter()
                 .map(|finding| NewFinding {
-                    kind: finding_kind_label(finding.kind).to_string(),
+                    kind: finding.kind.label().to_string(),
                     severity: finding.severity.clone(),
                     confidence: finding.confidence.clone(),
                     rule_id: finding.rule.clone(),
@@ -561,5 +561,5 @@ pub fn run_export(
 mod cancelled;
 mod staging;
 
-use cancelled::{cancelled_before_planning_outcome, finding_kind_label};
+use cancelled::cancelled_before_planning_outcome;
 use staging::StagingCleanupGuard;

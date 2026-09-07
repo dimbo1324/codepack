@@ -156,6 +156,7 @@ export const en = {
   "security.kind.sensitive_file": "Sensitive file",
   "security.kind.potential_secret": "Possible secret",
   "security.kind.risky_code": "Risky code",
+  "security.kind.partial_scan": "Partially scanned",
   "security.confidence": "confidence: {value}",
 
   "severity.critical": "critical",

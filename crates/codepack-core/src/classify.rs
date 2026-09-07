@@ -287,6 +287,20 @@ fn is_text_filename_without_extension(name: &str) -> bool {
 /// Legacy's `_BINARY_SAMPLE_BYTES`: only the first 8192 bytes of a file are sniffed.
 pub const BINARY_SAMPLE_BYTES: usize = 8192;
 
+/// The largest a text-classified file is ever read into memory whole, whatever a
+/// caller's own configurable ceiling says (audit 2026-09-07, P-2/Q-3).
+///
+/// `Config::text_file_size_limit_enabled` defaults to `false`, and the `scan` command
+/// (both CLI and desktop) forces it off unconditionally, on purpose: it answers "does
+/// this project contain a secret", not "would this fit in an export". Past this size a
+/// single file costs more memory than any dump entry or scan result is worth, and it is
+/// far more likely to be a database dump, a log, or a build artifact than something a
+/// reader — or the secret scanner — needed the whole of. One value shared by every
+/// caller that reads a whole text file (`codepack-engine`'s text dump,
+/// `codepack-security`'s scanner), so the two never drift the way they had before this
+/// pass: the dump step already enforced its own copy, and the scanner enforced none.
+pub const ABSOLUTE_MAX_TEXT_FILE_READ_BYTES: u64 = 256 * 1024 * 1024;
+
 /// Extension/filename-only classification — never reads file content.
 ///
 /// Order matters and is load-bearing (ported verbatim from

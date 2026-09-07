@@ -10,6 +10,6 @@
 //! The names stay re-exported so existing `codepack_security::` imports keep working.
 
 pub use codepack_core::classify::{
-    BINARY_EXTENSIONS, BINARY_SAMPLE_BYTES, TEXT_EXTENSIONS, TEXT_FILENAMES_WITHOUT_EXTENSION,
-    looks_binary, should_consider_text_file,
+    ABSOLUTE_MAX_TEXT_FILE_READ_BYTES, BINARY_EXTENSIONS, BINARY_SAMPLE_BYTES, TEXT_EXTENSIONS,
+    TEXT_FILENAMES_WITHOUT_EXTENSION, looks_binary, should_consider_text_file,
 };

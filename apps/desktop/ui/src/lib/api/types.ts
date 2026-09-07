@@ -130,7 +130,7 @@ export interface PreviewReport {
   tree: TreeNode;
 }
 
-export type FindingKind = "sensitive_file" | "potential_secret" | "risky_code";
+export type FindingKind = "sensitive_file" | "potential_secret" | "risky_code" | "partial_scan";
 
 export interface Finding {
   kind: FindingKind;

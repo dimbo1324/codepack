@@ -1,12 +1,10 @@
 //! The synthetic outcome for a run cancelled before pipeline step 1 began.
 //!
-//! Split out of `orchestrator.rs` on 2026-07-27 (finding 6, audit). Kept together
-//! with `finding_kind_label` because both are pure value construction with no
-//! pipeline logic of their own.
+//! Split out of `orchestrator.rs` on 2026-07-27 (finding 6, audit): pure value
+//! construction with no pipeline logic of its own.
 
 use codepack_core::ExportPaths;
 use codepack_core::config::Config;
-use codepack_security::FindingKind;
 
 use crate::ignored_dirs::ignored_dir_names_for;
 use crate::plan::PlanOutcome;
@@ -66,13 +64,5 @@ pub(super) fn cancelled_before_planning_outcome(
         ignored_dir_names,
         include_relative_paths: None,
         dropped_by_budget: 0,
-    }
-}
-
-pub(super) fn finding_kind_label(kind: FindingKind) -> &'static str {
-    match kind {
-        FindingKind::SensitiveFile => "sensitive_file",
-        FindingKind::PotentialSecret => "potential_secret",
-        FindingKind::RiskyCode => "risky_code",
     }
 }

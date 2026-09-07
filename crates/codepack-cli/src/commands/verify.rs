@@ -98,6 +98,9 @@ pub(crate) struct Summary {
     pub sensitive_files: usize,
     pub potential_secrets: usize,
     pub risky_code: usize,
+    /// Files scanned only up to `ABSOLUTE_MAX_TEXT_FILE_READ_BYTES`, not in full (audit
+    /// 2026-09-07, P-2/Q-3).
+    pub partial_scans: usize,
     pub total_findings: usize,
     pub critical: usize,
 }
@@ -314,7 +317,7 @@ fn assemble(
     let count_of = |kind: FindingKind| content.iter().filter(|f| f.kind == kind).count();
 
     let report = |finding: &codepack_security::Finding| ReportedFinding {
-        kind: kind_label(finding.kind),
+        kind: finding.kind.label(),
         severity: finding.severity.clone(),
         confidence: finding.confidence.clone(),
         file: finding.file.clone(),
@@ -333,6 +336,7 @@ fn assemble(
             sensitive_files: count_of(FindingKind::SensitiveFile),
             potential_secrets: count_of(FindingKind::PotentialSecret),
             risky_code: count_of(FindingKind::RiskyCode),
+            partial_scans: count_of(FindingKind::PartialScan),
             total_findings: content.len(),
             critical,
         },
@@ -343,14 +347,6 @@ fn assemble(
             .allowlist_path
             .as_ref()
             .map(|path| path.display().to_string()),
-    }
-}
-
-fn kind_label(kind: FindingKind) -> &'static str {
-    match kind {
-        FindingKind::SensitiveFile => "sensitive_file",
-        FindingKind::PotentialSecret => "potential_secret",
-        FindingKind::RiskyCode => "risky_code",
     }
 }
 

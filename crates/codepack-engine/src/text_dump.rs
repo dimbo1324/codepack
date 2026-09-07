@@ -209,11 +209,13 @@ fn count_redaction_markers(text: &str) -> u32 {
 /// The largest file this step will read whole, whatever the configuration says.
 ///
 /// `Config::text_file_size_limit_enabled` is `false` by default, so the user-facing limit
-/// is usually absent altogether. This one is not a preference: past this size a single
-/// file costs more memory than any dump entry is worth, and the file is far more likely
-/// to be a database or a build artifact that slipped past the text filters than something
-/// a reader wants quoted.
-const ABSOLUTE_MAX_TEXT_FILE_BYTES: u64 = 256 * 1024 * 1024;
+/// is usually absent altogether. Shared with `codepack-security`'s scanner
+/// (`codepack_core::classify::ABSOLUTE_MAX_TEXT_FILE_READ_BYTES`) rather than declared
+/// again here — audit 2026-09-07, P-2/Q-3 found this step's own copy and the scanner's
+/// missing ceiling had already drifted apart once; one definition is the only way that
+/// cannot happen again.
+const ABSOLUTE_MAX_TEXT_FILE_BYTES: u64 =
+    codepack_core::classify::ABSOLUTE_MAX_TEXT_FILE_READ_BYTES;
 
 /// Appends to the dump, naming the file in any error.
 ///

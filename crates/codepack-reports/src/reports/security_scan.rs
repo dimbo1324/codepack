@@ -74,6 +74,7 @@ mod tests {
                 sensitive_files: 1,
                 potential_secrets: 1,
                 risky_code: 0,
+                partial_scans: 0,
                 total_findings: 2,
             },
             findings: vec![

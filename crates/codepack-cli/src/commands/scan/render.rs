@@ -23,6 +23,7 @@ pub(super) fn write_sarif(report: &ScanReport, path: &std::path::Path) -> Result
             kind: match finding.kind {
                 "sensitive_file" => FindingKind::SensitiveFile,
                 "risky_code" => FindingKind::RiskyCode,
+                "partial_scan" => FindingKind::PartialScan,
                 _ => FindingKind::PotentialSecret,
             },
             severity: finding.severity.clone(),
@@ -39,6 +40,7 @@ pub(super) fn write_sarif(report: &ScanReport, path: &std::path::Path) -> Result
             sensitive_files: report.summary.sensitive_files,
             potential_secrets: report.summary.potential_secrets,
             risky_code: report.summary.risky_code,
+            partial_scans: report.summary.partial_scans,
             total_findings: report.summary.total_findings,
         },
         findings,

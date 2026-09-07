@@ -19,6 +19,7 @@ use codepack_core::time::now_human_utc;
 const MAX_SENSITIVE_FILES_SHOWN: usize = 300;
 const MAX_SECRET_LINES_SHOWN: usize = 500;
 const MAX_RISKY_LINES_SHOWN: usize = 500;
+const MAX_PARTIAL_SCAN_FILES_SHOWN: usize = 300;
 
 fn write_section<'a>(
     out: &mut String,
@@ -109,6 +110,27 @@ pub(crate) fn render_txt(result: &ScanResult) -> String {
         },
     );
 
+    // Audit 2026-09-07, P-2/Q-3: files past the hard read ceiling, scanned only up to
+    // it — surfaced as its own section rather than folded into "Risky code patterns" or
+    // silently dropped, since what it reports (a scan that may have missed something)
+    // is a different claim than either.
+    write_section(
+        &mut out,
+        "Partially scanned files",
+        result
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::PartialScan),
+        MAX_PARTIAL_SCAN_FILES_SHOWN,
+        |out, finding| {
+            let _ = writeln!(
+                out,
+                "[{}] {}: {}",
+                finding.severity, finding.file, finding.message
+            );
+        },
+    );
+
     out.push_str("\n--- Recommended actions before sharing ---\n");
     out.push_str("- Keep Safe Export mode enabled for external AI/code-review handoffs.\n");
     out.push_str("- Review all critical/high findings before sharing the archive.\n");
@@ -141,7 +163,7 @@ mod tests {
             findings: Vec::new(),
         };
         let rendered = render_txt(&result);
-        assert_eq!(rendered.matches("None detected.").count(), 3);
+        assert_eq!(rendered.matches("None detected.").count(), 4);
     }
 
     #[test]
@@ -151,6 +173,7 @@ mod tests {
                 sensitive_files: 0,
                 potential_secrets: 1,
                 risky_code: 0,
+                partial_scans: 0,
                 total_findings: 1,
             },
             findings: vec![Finding {
@@ -185,11 +208,41 @@ mod tests {
                 sensitive_files: 305,
                 potential_secrets: 0,
                 risky_code: 0,
+                partial_scans: 0,
                 total_findings: 305,
             },
             findings,
         };
         let rendered = render_txt(&result);
         assert!(rendered.contains("... and 5 more"));
+    }
+
+    /// The section audit 2026-09-07 (P-2/Q-3) added: a file scanned only up to the
+    /// ceiling gets its own line, distinct from a risky-code or sensitive-file finding.
+    #[test]
+    fn partial_scan_finding_reports_bytes_scanned() {
+        let result = ScanResult {
+            summary: ScanSummary {
+                sensitive_files: 0,
+                potential_secrets: 0,
+                risky_code: 0,
+                partial_scans: 1,
+                total_findings: 1,
+            },
+            findings: vec![Finding {
+                kind: FindingKind::PartialScan,
+                severity: "medium".to_string(),
+                confidence: "high".to_string(),
+                file: ".\\huge.log".to_string(),
+                line: None,
+                rule: "partial_scan_size_ceiling".to_string(),
+                message: "File is 500000000 bytes; only the first 268435456 were scanned \
+                          for secrets. A secret past that point would not be detected."
+                    .to_string(),
+            }],
+        };
+        let rendered = render_txt(&result);
+        assert!(rendered.contains("--- Partially scanned files ---"));
+        assert!(rendered.contains("[medium] .\\huge.log: File is 500000000 bytes"));
     }
 }

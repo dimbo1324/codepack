@@ -81,6 +81,10 @@ pub(crate) struct Summary {
     pub sensitive_files: usize,
     pub potential_secrets: usize,
     pub risky_code: usize,
+    /// Files scanned only up to `ABSOLUTE_MAX_TEXT_FILE_READ_BYTES`, not in full (audit
+    /// 2026-09-07, P-2/Q-3) — a secret past that point in one of these would not have
+    /// been found.
+    pub partial_scans: usize,
     pub total_findings: usize,
     /// Findings at `critical` severity. Broken out because a consumer should not have
     /// to recount it, and because it stayed the meaning of exit code 3 when `--fail-on`
@@ -152,6 +156,7 @@ pub(super) fn assemble(
             sensitive_files: count_of(FindingKind::SensitiveFile),
             potential_secrets: count_of(FindingKind::PotentialSecret),
             risky_code: count_of(FindingKind::RiskyCode),
+            partial_scans: count_of(FindingKind::PartialScan),
             total_findings: findings.len(),
             critical,
             gating,
@@ -161,7 +166,7 @@ pub(super) fn assemble(
             .map(|finding| {
                 let origin = origins.get(&(finding.file.clone(), finding.line));
                 ReportedFinding {
-                    kind: kind_label(finding.kind),
+                    kind: finding.kind.label(),
                     severity: finding.severity.clone(),
                     confidence: finding.confidence.clone(),
                     file: finding.file.clone(),
@@ -184,13 +189,5 @@ pub(super) fn assemble(
             .map(|baseline| baseline.suppressed.clone())
             .unwrap_or_default(),
         baseline: baseline.map(|baseline| baseline.path.display().to_string()),
-    }
-}
-
-pub(super) fn kind_label(kind: FindingKind) -> &'static str {
-    match kind {
-        FindingKind::SensitiveFile => "sensitive_file",
-        FindingKind::PotentialSecret => "potential_secret",
-        FindingKind::RiskyCode => "risky_code",
     }
 }

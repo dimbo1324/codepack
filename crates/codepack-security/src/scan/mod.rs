@@ -22,7 +22,9 @@ mod types;
 
 pub use types::{Finding, FindingKind, ScanOptions, ScanResult, ScanSummary, result_from_findings};
 
-use records::{FileRecord, FileScanRecords, RiskyRecord, SecretRecord, scan_one_file};
+use records::{
+    FileRecord, FileScanRecords, PartialScanRecord, RiskyRecord, SecretRecord, scan_one_file,
+};
 
 /// Scans a caller-supplied list of files (relative to `root`) for sensitive filenames,
 /// secret-like lines (keyword cascade + provider signatures + entropy), and risky code
@@ -84,12 +86,20 @@ pub fn scan_project_with_options(
     let mut files: Vec<FileRecord> = Vec::new();
     let mut secrets: Vec<SecretRecord> = Vec::new();
     let mut risky: Vec<RiskyRecord> = Vec::new();
+    let mut partial_scans: Vec<PartialScanRecord> = Vec::new();
     for record in per_file {
         let record = record?;
         files.extend(record.files);
         secrets.extend(record.secrets);
         risky.extend(record.risky);
+        partial_scans.extend(record.partial_scans);
     }
+
+    // `_cached`: computes each key once rather than on every comparison — the other
+    // sorts below still take the `.to_lowercase()`-per-comparison shape this one avoids,
+    // a pre-existing pattern Step 7 (P-9/Q-9/Q-11) revisits deliberately rather than as
+    // a side effect of this change.
+    partial_scans.sort_by_cached_key(|record| record.display.to_lowercase());
 
     files.sort_by(|a, b| {
         confidence_rank(a.severity)
@@ -109,7 +119,8 @@ pub fn scan_project_with_options(
             .then_with(|| a.line_number.cmp(&b.line_number))
     });
 
-    let mut findings = Vec::with_capacity(files.len() + secrets.len() + risky.len());
+    let mut findings =
+        Vec::with_capacity(files.len() + secrets.len() + risky.len() + partial_scans.len());
     for file in &files {
         findings.push(Finding {
             kind: FindingKind::SensitiveFile,
@@ -143,11 +154,31 @@ pub fn scan_project_with_options(
             message: hit.explanation.clone(),
         });
     }
+    // "medium", not "critical"/"high" like a confirmed secret: this is a gap in scan
+    // coverage, not a finding of one. It still belongs in `findings` (and so under
+    // `--fail-on medium`) rather than only a log line, because the whole point is that a
+    // secret could be sitting past the ceiling undetected (audit 2026-09-07, P-2/Q-3).
+    for partial in &partial_scans {
+        findings.push(Finding {
+            kind: FindingKind::PartialScan,
+            severity: "medium".to_string(),
+            confidence: "high".to_string(),
+            file: partial.display.clone(),
+            line: None,
+            rule: "partial_scan_size_ceiling".to_string(),
+            message: format!(
+                "File is {} bytes; only the first {} were scanned for secrets. A secret \
+                 past that point would not be detected.",
+                partial.total_bytes, partial.bytes_scanned
+            ),
+        });
+    }
 
     let summary = ScanSummary {
         sensitive_files: files.len(),
         potential_secrets: secrets.len(),
         risky_code: risky.len(),
+        partial_scans: partial_scans.len(),
         total_findings: findings.len(),
     };
 

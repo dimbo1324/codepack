@@ -158,6 +158,7 @@ export const ru: Record<TranslationKey, string> = {
   "security.kind.sensitive_file": "Чувствительный файл",
   "security.kind.potential_secret": "Возможный секрет",
   "security.kind.risky_code": "Опасный код",
+  "security.kind.partial_scan": "Просканировано частично",
   "security.confidence": "уверенность: {value}",
 
   "severity.critical": "критическая",

@@ -155,12 +155,7 @@ pub fn scan_project(project_root: String, config: Config) -> CommandResult<ScanR
             .findings
             .into_iter()
             .map(|finding| Finding {
-                kind: match finding.kind {
-                    codepack_security::FindingKind::SensitiveFile => "sensitive_file",
-                    codepack_security::FindingKind::PotentialSecret => "potential_secret",
-                    codepack_security::FindingKind::RiskyCode => "risky_code",
-                }
-                .to_string(),
+                kind: finding.kind.label().to_string(),
                 severity: finding.severity,
                 confidence: finding.confidence,
                 file: finding.file,

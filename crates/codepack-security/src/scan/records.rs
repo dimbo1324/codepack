@@ -6,6 +6,7 @@
 //! half touches neither.
 
 use std::fs;
+use std::io::Read as _;
 use std::path::Path;
 
 use crate::cache;
@@ -40,6 +41,15 @@ pub(super) struct RiskyRecord {
     pub(super) explanation: String,
 }
 
+/// A file past `ABSOLUTE_MAX_TEXT_FILE_READ_BYTES` that was scanned only up to that
+/// ceiling (audit 2026-09-07, P-2/Q-3) — a fact about the file's size, decided from
+/// metadata before any content is read, the same way [`FileRecord`] is.
+pub(super) struct PartialScanRecord {
+    pub(super) display: String,
+    pub(super) bytes_scanned: u64,
+    pub(super) total_bytes: u64,
+}
+
 /// Everything one file contributes, kept together so the parallel pass can hand back a
 /// single value per file and the caller can flatten the results in input order.
 #[derive(Default)]
@@ -47,6 +57,7 @@ pub(super) struct FileScanRecords {
     pub(super) files: Vec<FileRecord>,
     pub(super) secrets: Vec<SecretRecord>,
     pub(super) risky: Vec<RiskyRecord>,
+    pub(super) partial_scans: Vec<PartialScanRecord>,
 }
 
 /// The body of what used to be `scan_project`'s per-file loop iteration, unchanged in
@@ -81,14 +92,36 @@ pub(super) fn scan_one_file(
     {
         return Ok(records);
     }
-    let raw = fs::read(&absolute).map_err(|source| SecurityError::Read {
-        path: absolute.clone(),
-        source,
-    })?;
+
+    let display = paths::rel_display(relative);
+
+    // A ceiling no configuration can switch off (audit 2026-09-07, P-2/Q-3).
+    // `max_bytes_per_file` above is off by default, and the `scan` command forces it
+    // off unconditionally — correctly, since it answers "does this project contain a
+    // secret", not "would this fit in an export" — so without this, a multi-gigabyte
+    // database dump or log file was read whole, decoded, and held in memory several
+    // times over on every one of `par_iter`'s worker threads at once. Unlike
+    // `codepack-engine`'s text dump (which simply skips a file past this size, correctly,
+    // since a dump exists to be read by a person), skipping here would mean not looking
+    // for a secret in exactly the file most likely to be full of them — a database dump
+    // is close to the last place a scanner should give up. Bounding the read instead
+    // means the ceiling degrades the scan's completeness on this one file, never its
+    // memory use.
+    let bytes_scanned = metadata
+        .len()
+        .min(classify::ABSOLUTE_MAX_TEXT_FILE_READ_BYTES);
+    if metadata.len() > classify::ABSOLUTE_MAX_TEXT_FILE_READ_BYTES {
+        records.partial_scans.push(PartialScanRecord {
+            display: display.clone(),
+            bytes_scanned,
+            total_bytes: metadata.len(),
+        });
+    }
+
+    let raw = read_bounded(&absolute, bytes_scanned)?;
     if classify::looks_binary(&raw) {
         return Ok(records);
     }
-    let display = paths::rel_display(relative);
 
     // A labelling run cannot reuse a cached message. `<REDACTED:s1>` is numbered per
     // run, in the order that run happens to meet its secrets, so a message stored by an
@@ -116,6 +149,28 @@ pub(super) fn scan_one_file(
     }
 
     Ok(records)
+}
+
+/// Reads at most `limit` bytes of `path`, rather than the whole file.
+///
+/// A plain `fs::read` past `ABSOLUTE_MAX_TEXT_FILE_READ_BYTES` is exactly the unbounded
+/// memory use audit 2026-09-07 (P-2/Q-3) found: reading the first `limit` bytes instead
+/// bounds a single file's cost regardless of how large it actually is, at the cost of
+/// scanning only its prefix — the tradeoff [`PartialScanRecord`] exists to make visible
+/// rather than silent.
+fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>> {
+    let file = fs::File::open(path).map_err(|source| SecurityError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let mut buffer = Vec::with_capacity(limit as usize);
+    file.take(limit)
+        .read_to_end(&mut buffer)
+        .map_err(|source| SecurityError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    Ok(buffer)
 }
 
 /// Bytes to text, with legacy's documented encoding-scope gap: legacy tries six
@@ -212,10 +267,12 @@ fn restore_cached(records: &mut FileScanRecords, display: &str, cached: Vec<cach
                 rule: entry.rule,
                 explanation: entry.message,
             }),
-            // A content cache never holds one, and a stored entry claiming otherwise is
-            // from a build whose recipe differed; ignoring it is safer than trusting a
-            // path-derived verdict from another file.
-            FindingKind::SensitiveFile => {}
+            // Neither is ever cached: a content cache never holds a sensitive-filename
+            // verdict (that is a fact about the path, not the bytes), and a partial-scan
+            // record is decided from metadata before the cache is even consulted (see
+            // `scan_one_file`) — either arm here means a stored entry from a build whose
+            // recipe differed, and ignoring it is safer than trusting a foreign verdict.
+            FindingKind::SensitiveFile | FindingKind::PartialScan => {}
         }
     }
 }

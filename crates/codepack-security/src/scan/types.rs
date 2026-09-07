@@ -12,6 +12,28 @@ pub enum FindingKind {
     SensitiveFile,
     PotentialSecret,
     RiskyCode,
+    /// A file past `codepack_core::classify::ABSOLUTE_MAX_TEXT_FILE_READ_BYTES` was
+    /// scanned only up to that ceiling, not in full (audit 2026-09-07, P-2/Q-3). Legacy
+    /// never produced this kind — it has no golden-reference equivalent — because legacy
+    /// had no ceiling at all and simply read the whole file.
+    PartialScan,
+}
+
+impl FindingKind {
+    /// The stable machine-readable name used wherever a finding's kind is rendered as a
+    /// string rather than serialized directly — `codepack-cli`'s `scan`/`verify` reports
+    /// and `codepack-engine`'s cancelled-run summary. One definition rather than three
+    /// (audit 2026-09-07, Q-lint): all three had drifted into identical copies of this
+    /// exact match, which is also the way a new variant like [`FindingKind::PartialScan`]
+    /// could have reached two of them and not the third.
+    pub fn label(self) -> &'static str {
+        match self {
+            FindingKind::SensitiveFile => "sensitive_file",
+            FindingKind::PotentialSecret => "potential_secret",
+            FindingKind::RiskyCode => "risky_code",
+            FindingKind::PartialScan => "partial_scan",
+        }
+    }
 }
 
 /// Mirrors legacy's flat finding dict exactly: `type`, `severity`, `confidence`,
@@ -35,6 +57,11 @@ pub struct ScanSummary {
     pub sensitive_files: usize,
     pub potential_secrets: usize,
     pub risky_code: usize,
+    /// Files scanned only up to `ABSOLUTE_MAX_TEXT_FILE_READ_BYTES`, not in full (audit
+    /// 2026-09-07, P-2/Q-3). Additive field: a consumer built against the pre-2026-09-07
+    /// shape simply never sees it, the same way it would silently ignore a hand-added
+    /// key today — nothing existing changes name, type, or meaning.
+    pub partial_scans: usize,
     pub total_findings: usize,
 }
 
@@ -56,6 +83,7 @@ pub fn result_from_findings(findings: Vec<Finding>) -> ScanResult {
             FindingKind::SensitiveFile => summary.sensitive_files += 1,
             FindingKind::PotentialSecret => summary.potential_secrets += 1,
             FindingKind::RiskyCode => summary.risky_code += 1,
+            FindingKind::PartialScan => summary.partial_scans += 1,
         }
     }
     summary.total_findings = findings.len();
