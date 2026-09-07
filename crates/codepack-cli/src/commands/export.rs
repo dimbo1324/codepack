@@ -94,6 +94,13 @@ pub(crate) fn build_with_cancel(
     let mut conn = commands::open_history_db()?;
     let (progress, events) = codepack_core::progress_channel();
 
+    // The application's own activity log (audit 2026-09-07, G-1): the same narration
+    // this thread already prints to stderr, kept after the terminal scrolls past it or
+    // the process exits. `None` when the log directory could not be opened — logging
+    // must never be why an export fails.
+    let log_sink = commands::open_log_sink(&context.config);
+    let run_id = commands::log_run_id();
+
     // Progress goes to stderr so `--json` stdout stays a single parseable document —
     // and, for the MCP server, so the JSON-RPC stream stays parseable at all. The
     // receiver runs on its own thread because the export fills the channel as it goes;
@@ -101,6 +108,9 @@ pub(crate) fn build_with_cancel(
     // nothing until it finished.
     let printer = std::thread::spawn(move || {
         for event in events {
+            if let Some(sink) = &log_sink {
+                sink.record(&run_id, &event);
+            }
             if let ProgressEvent::Log(log) = event {
                 if !quiet {
                     output::note(format!("  {}", log.message));

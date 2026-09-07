@@ -60,8 +60,19 @@ pub fn start_export(
     let (sender, receiver) = progress_channel();
     let forward_app = app.clone();
     let forward_run_id = run_id.clone();
+    // The application's own activity log (audit 2026-09-07, G-1): the same narration
+    // the webview already shows, kept after the window closes or the run scrolls out
+    // of view. `None` when the log directory could not be opened — logging must never
+    // be why an export fails. Reuses this run's own `run_id` (already what
+    // distinguishes two concurrent exports, P-6, in `AppState`) rather than inventing
+    // a second identifier.
+    let log_sink = super::open_log_sink(&config);
+    let log_run_id = run_id.clone();
     std::thread::spawn(move || {
         for event in receiver {
+            if let Some(sink) = &log_sink {
+                sink.record(&log_run_id, &event);
+            }
             let payload = match event {
                 ProgressEvent::Log(log) => ExportProgressEvent {
                     run_id: forward_run_id.clone(),

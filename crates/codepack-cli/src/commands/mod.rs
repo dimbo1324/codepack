@@ -125,6 +125,40 @@ pub(crate) fn open_history_db() -> Result<codepack_storage::Connection> {
     Ok(codepack_storage::open(&db_file)?)
 }
 
+/// Opens today's activity log (audit 2026-09-07, G-1), or gives up quietly.
+///
+/// `None` on any failure — a missing home directory, a read-only log directory — rather
+/// than an error: the pipeline this narrates must run whether or not its own diary can
+/// be written, the same reasoning `LogSink` itself applies to an individual write that
+/// fails.
+///
+/// `$CODEPACK_LOG=debug` overrides `config.log_verbose`, being the more deliberate,
+/// per-invocation choice; anything else in the variable (including unset) defers to the
+/// setting.
+pub(crate) fn open_log_sink(config: &Config) -> Option<codepack_engine::LogSink> {
+    let app_paths = AppPaths::resolve().ok()?;
+    let sink = codepack_engine::LogSink::open(
+        app_paths.log_dir(),
+        config.log_max_file_mb,
+        config.log_retention_days,
+        config.log_total_cap_mb,
+    )
+    .ok()?;
+    let verbose = match std::env::var("CODEPACK_LOG") {
+        Ok(value) => value.eq_ignore_ascii_case("debug"),
+        Err(_) => config.log_verbose,
+    };
+    sink.set_verbose(verbose);
+    Some(sink)
+}
+
+/// A `run=` tag for the activity log — not the database `export_run.id` (unknown until
+/// the run is recorded, which is too late for live narration), just something that
+/// tells two concurrent `codepack` processes (P-6) apart in one shared log file.
+pub(crate) fn log_run_id() -> String {
+    format!("r-{:x}", std::process::id())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

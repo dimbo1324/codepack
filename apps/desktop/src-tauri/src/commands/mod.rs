@@ -168,6 +168,34 @@ pub fn open_database() -> CommandResult<codepack_storage::Connection> {
     open_database_at(&paths)
 }
 
+/// Opens today's activity log (audit 2026-09-07, G-1), or gives up quietly.
+///
+/// `None` on any failure — a missing home directory, a read-only log directory —
+/// rather than an error: an export must run whether or not its own diary can be
+/// written, the same reasoning `LogSink` itself applies to a single write that fails.
+///
+/// `$CODEPACK_LOG=debug` overrides `config.log_verbose`, being the more deliberate,
+/// per-invocation choice; anything else in the variable (including unset) defers to the
+/// setting — the same rule the CLI applies for the same reason.
+pub(crate) fn open_log_sink(
+    config: &codepack_core::config::Config,
+) -> Option<codepack_engine::LogSink> {
+    let paths = codepack_core::AppPaths::resolve().ok()?;
+    let sink = codepack_engine::LogSink::open(
+        paths.log_dir(),
+        config.log_max_file_mb,
+        config.log_retention_days,
+        config.log_total_cap_mb,
+    )
+    .ok()?;
+    let verbose = match std::env::var("CODEPACK_LOG") {
+        Ok(value) => value.eq_ignore_ascii_case("debug"),
+        Err(_) => config.log_verbose,
+    };
+    sink.set_verbose(verbose);
+    Some(sink)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
