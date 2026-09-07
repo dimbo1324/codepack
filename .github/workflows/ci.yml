@@ -215,23 +215,39 @@ jobs:
           echo "== contents =="
           dpkg-deb --contents "$deb"
 
+          # Read each stream once into a variable and match against that, rather than
+          # piping into `grep -q`: `-q` exits on the first match, closing its end of the
+          # pipe, and dpkg-deb (tar underneath) can get SIGPIPE/EPIPE on its next write
+          # and return non-zero — which `pipefail` then reports as *this check* failing,
+          # even though the dependency or entry it was looking for is right there (audit
+          # 2026-09-07, C-1, run #109). `case` also has no need for `grep`'s regex
+          # escaping, the way the icon check below already avoids it for `128x128` being
+          # a prefix of `128x128@2x`.
           fail=0
+          depends="$(dpkg-deb --field "$deb" Depends)"
+          contents="$(dpkg-deb --contents "$deb")"
           for dependency in libwebkit2gtk-4.1-0 libgtk-3-0 xdg-utils; do
-            if ! dpkg-deb --field "$deb" Depends | grep -q "$dependency"; then
-              echo "::error title=deb::Depends is missing $dependency" >&2
-              fail=1
-            fi
+            case "$depends" in
+              *"$dependency"*) ;;
+              *)
+                echo "::error title=deb::Depends is missing $dependency" >&2
+                fail=1
+                ;;
+            esac
           done
-          if ! dpkg-deb --contents "$deb" | grep -q 'applications/.*\.desktop'; then
-            echo "::error title=deb::no desktop entry in the package" >&2
-            fail=1
-          fi
+          case "$contents" in
+            *applications/*.desktop*) ;;
+            *)
+              echo "::error title=deb::no desktop entry in the package" >&2
+              fail=1
+              ;;
+          esac
           # `128x128@2x.png` installs into a `128x128@2x` directory, not `256x256`:
           # hicolor names a scaled directory after its base size, and Tauri follows that.
           # So the sizes asserted here are the ones with a plainly named source file.
           # Membership in a space-separated list rather than a regex, because `128x128`
           # is a prefix of `128x128@2x` and a careless pattern would accept the wrong one.
-          icons=$(dpkg-deb --contents "$deb" | grep -o 'icons/hicolor/[^/]*' | sort -u | xargs)
+          icons=$(printf '%s\n' "$contents" | grep -o 'icons/hicolor/[^/]*' | sort -u | xargs)
           for size in 128x128 512x512; do
             case " $icons " in
               *" icons/hicolor/$size "*) ;;

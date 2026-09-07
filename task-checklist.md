@@ -51,8 +51,8 @@ conflict gets escalated, not guessed past silently.
 
 - [x] P-1 sanitize formatter: write stdin on its own thread, add timeout, honor cancellation
 - [x] P-2/Q-3 shared file-read-size ceiling in codepack-core; scan reports partial-scan instead of silent skip
-- [ ] C-1 fix `.deb` inspection step in CI: read full output before matching, no `grep -q` under `pipefail`
-- [ ] L-5 tray build failure downgraded to a warning, does not abort startup
+- [x] C-1 fix `.deb` inspection step in CI: read full output before matching, no `grep -q` under `pipefail`
+- [x] L-5 tray build failure downgraded to a warning, does not abort startup
 
 ## Step 3 — Linux brought to a working state
 

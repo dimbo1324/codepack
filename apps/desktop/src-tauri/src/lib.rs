@@ -63,7 +63,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .setup(|app| {
-            install_tray(app.handle())?;
+            // The tray is a convenience, not a condition of running (audit 2026-09-07,
+            // L-5): on Windows it is always available, but on Linux it is a
+            // StatusNotifierItem over D-Bus (`libayatana-appindicator3`), and there is
+            // no host to register it with at all on plain GNOME, in a headless
+            // container, or over `ssh -X`. Propagating a build failure here with `?`
+            // used to abort `setup` entirely — a decorative feature turned into a hard
+            // launch dependency, with no window, no message, and nothing to diagnose it
+            // by. `eprintln!` rather than a real log sink: until G-1 gives this crate
+            // somewhere to write, stderr is what "not yet dropped on the floor" means.
+            if let Err(error) = install_tray(app.handle()) {
+                eprintln!("codepack: tray icon was not created: {error}");
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -133,6 +144,18 @@ fn raise_existing_window(app: &tauri::AppHandle) {
 /// settings happened to be saved — a one-click way to write a bundle without seeing the
 /// preview, from a product whose entire purpose is looking before you share. Showing the
 /// window is the honest version of that shortcut.
+///
+/// Building this can fail — see the `eprintln!` around its call in `run` (audit
+/// 2026-09-07, L-5) — and that has one consequence worth stating rather than
+/// rediscovering later: **do not** make the tray the only way to bring the window back
+/// (a "minimize to tray" `CloseRequested` handler that hides instead of closing). On a
+/// platform where the tray failed to build, that would make a minimized window
+/// permanently unreachable, with no menu item and no dock icon to recover it from.
+/// Today there is no trap: closing the window destroys it outright
+/// (`WindowEvent::Destroyed` below still runs `cancel_all`), tray or no tray. If
+/// "minimize to tray" is ever added, it needs its own fallback for exactly the hosts
+/// this function already treats as normal — a headless container, GNOME without the
+/// AppIndicator extension, `ssh -X`.
 fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show codepack", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
