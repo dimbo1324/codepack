@@ -1,4 +1,47 @@
 use super::*;
+use codepack_core::AppPaths;
+use codepack_storage::NewExportRun;
+
+/// A fresh, isolated `AppPaths` under a tempdir, so these tests never touch whoever runs
+/// `cargo test`'s real settings directory or history database (audit 2026-09-07,
+/// S-7/T-2). Every command in this module now validates its `result_path` against the
+/// history database (audit S-1), so a test calling one of them needs a database of its
+/// own to record the bundle in — not the developer's real one.
+fn isolated_paths(root: &std::path::Path) -> AppPaths {
+    AppPaths::for_root(root)
+}
+
+/// Records one export run whose `result_path` is `bundle_path`, so
+/// `ValidatedResultPath::resolve` — which every command in this module now goes through
+/// — accepts it.
+fn record_a_run_with_result_path(paths: &AppPaths, bundle_path: &std::path::Path) {
+    let mut connection = crate::commands::open_database_at(paths).unwrap();
+    let project =
+        codepack_storage::find_or_create_project(&connection, "/tmp/project", "project", None)
+            .unwrap();
+    codepack_storage::record_export_run(
+        &mut connection,
+        NewExportRun {
+            project_id: project,
+            started_at: 10,
+            finished_at: Some(11),
+            profile: Some("full".to_string()),
+            safe_mode: Some("safe".to_string()),
+            diff_mode: Some("all".to_string()),
+            files_copied: Some(1),
+            bytes_total: Some(10),
+            tokens_est: Some(1),
+            redacted_count: None,
+            cancelled: false,
+            result_path: Some(bundle_path.display().to_string()),
+        },
+        &[],
+        &[],
+        &[],
+        None,
+    )
+    .unwrap();
+}
 
 /// A bundle directory as it looks once extracted: profile at the root, dashboard
 /// under the reports tree.
@@ -21,10 +64,13 @@ fn extracted_bundle(dir: &std::path::Path) {
 
 #[test]
 fn a_profile_is_read_from_an_already_extracted_bundle_directory() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     extracted_bundle(dir.path());
+    record_a_run_with_result_path(&paths, dir.path());
 
-    let summary = read_project_profile(dir.path().display().to_string()).unwrap();
+    let summary = read_project_profile_at(&paths, &dir.path().display().to_string()).unwrap();
     assert_eq!(summary.project_type, "fullstack");
     assert_eq!(summary.detected_stack, vec!["Rust", "TypeScript"]);
     assert_eq!(summary.risk_level, "medium");
@@ -37,19 +83,26 @@ fn a_profile_is_read_from_an_already_extracted_bundle_directory() {
 #[test]
 fn a_bundle_that_nests_everything_under_the_project_name_is_still_searched() {
     // An export with `include_project_in_zip` puts the reports one level down.
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     let nested = dir.path().join("demo_export");
     std::fs::create_dir_all(&nested).unwrap();
     extracted_bundle(&nested);
+    record_a_run_with_result_path(&paths, dir.path());
 
-    let summary = read_project_profile(dir.path().display().to_string()).unwrap();
+    let summary = read_project_profile_at(&paths, &dir.path().display().to_string()).unwrap();
     assert_eq!(summary.project_type, "fullstack");
 }
 
 #[test]
 fn a_bundle_with_no_profile_explains_itself_rather_than_failing_opaquely() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
-    let error = read_project_profile(dir.path().display().to_string()).unwrap_err();
+    record_a_run_with_result_path(&paths, dir.path());
+
+    let error = read_project_profile_at(&paths, &dir.path().display().to_string()).unwrap_err();
     assert!(
         error.message.contains("PROJECT_PROFILE.json"),
         "unhelpful message: {}",
@@ -60,10 +113,13 @@ fn a_bundle_with_no_profile_explains_itself_rather_than_failing_opaquely() {
 #[test]
 fn a_profile_missing_optional_fields_still_reads_rather_than_erroring() {
     // A bundle from an older version, or one whose analytics step was cut short.
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
+    record_a_run_with_result_path(&paths, dir.path());
 
-    let summary = read_project_profile(dir.path().display().to_string()).unwrap();
+    let summary = read_project_profile_at(&paths, &dir.path().display().to_string()).unwrap();
     assert_eq!(summary.project_type, "");
     assert!(summary.detected_stack.is_empty());
     assert_eq!(summary.files, 0);
@@ -71,13 +127,42 @@ fn a_profile_missing_optional_fields_still_reads_rather_than_erroring() {
 
 #[test]
 fn a_result_path_that_no_longer_exists_says_so() {
-    // Archives get moved and deleted; history still remembers them.
+    // Archives get moved and deleted; history still remembers them. Deliberately *not*
+    // recorded here: a path history never heard of and a path history heard of but that
+    // vanished are two different messages, and this test is about neither of them — see
+    // `a_path_no_run_produced_is_refused` for the first. What this covers is the
+    // `canonicalize()` failure inside `ValidatedResultPath::resolve` itself, which is the
+    // same failure whether or not the path was ever recorded.
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("gone.zip");
-    let error = read_project_profile(missing.display().to_string()).unwrap_err();
+    let error = read_project_profile_at(&paths, &missing.display().to_string()).unwrap_err();
     assert!(
         error.message.contains("no longer where it was recorded"),
         "unhelpful message: {}",
+        error.message
+    );
+}
+
+/// The validation audit 2026-09-07 (S-1) found missing from this command entirely: a
+/// directory nobody exported must not be read as if it were a bundle, however well
+/// formed its contents look.
+#[test]
+fn a_bundle_directory_no_run_produced_is_refused() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
+    let dir = tempfile::tempdir().unwrap();
+    extracted_bundle(dir.path());
+    // Deliberately not recorded.
+
+    let error = read_project_profile_at(&paths, &dir.path().display().to_string())
+        .expect_err("an unrecorded bundle directory must not be read");
+    assert!(
+        error
+            .message
+            .contains("not an export this installation produced"),
+        "{}",
         error.message
     );
 }
@@ -86,6 +171,8 @@ fn a_result_path_that_no_longer_exists_says_so() {
 fn a_real_archive_is_extracted_and_read_from_the_inside() {
     // The case the loose-file version of this command could never handle: the
     // pipeline deletes staging, so the profile exists only inside the ZIP.
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let source = tempfile::tempdir().unwrap();
     extracted_bundle(source.path());
 
@@ -106,8 +193,9 @@ fn a_real_archive_is_extracted_and_read_from_the_inside() {
         std::io::Write::write_all(&mut writer, &bytes).unwrap();
     }
     writer.finish().unwrap();
+    record_a_run_with_result_path(&paths, &archive_path);
 
-    let summary = read_project_profile(archive_path.display().to_string()).unwrap();
+    let summary = read_project_profile_at(&paths, &archive_path.display().to_string()).unwrap();
     assert_eq!(summary.project_type, "fullstack");
     assert_eq!(summary.files, 42);
 
@@ -130,12 +218,57 @@ fn the_dashboard_is_found_under_the_reports_tree() {
 
 #[test]
 fn a_bundle_with_no_dashboard_is_reported_rather_than_opened() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
-    let error = open_dashboard(dir.path().display().to_string()).unwrap_err();
+    record_a_run_with_result_path(&paths, dir.path());
+
+    let error = open_bundle_report(
+        &paths,
+        &dir.path().display().to_string(),
+        &[
+            "reports/insights/REPORT_DASHBOARD.html",
+            "REPORT_DASHBOARD.html",
+        ],
+        "this export contains no REPORT_DASHBOARD.html; the run may have been cancelled \
+         before its reports were written",
+    )
+    .unwrap_err();
     assert!(
         error.message.contains("REPORT_DASHBOARD.html"),
         "unhelpful message: {}",
+        error.message
+    );
+}
+
+/// The validation audit 2026-09-07 (S-1) found missing from every report-opening command:
+/// none of the four checked that `result_path` was ever an export this installation
+/// produced before extracting and handing a file inside it to the OS opener.
+#[test]
+fn opening_a_report_from_an_unrecorded_bundle_is_refused() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
+    let dir = tempfile::tempdir().unwrap();
+    extracted_bundle(dir.path());
+    // Deliberately not recorded.
+
+    let error = open_bundle_report(
+        &paths,
+        &dir.path().display().to_string(),
+        &[
+            "reports/insights/REPORT_DASHBOARD.html",
+            "REPORT_DASHBOARD.html",
+        ],
+        "this export contains no REPORT_DASHBOARD.html; the run may have been cancelled \
+         before its reports were written",
+    )
+    .expect_err("an unrecorded bundle must not be opened");
+    assert!(
+        error
+            .message
+            .contains("not an export this installation produced"),
+        "{}",
         error.message
     );
 }
@@ -146,9 +279,23 @@ fn a_bundle_with_no_dashboard_is_reported_rather_than_opened() {
 /// hand-written functions would not have had).
 #[test]
 fn a_bundle_with_no_overview_is_reported_rather_than_opened() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
-    let error = open_project_overview(dir.path().display().to_string()).unwrap_err();
+    record_a_run_with_result_path(&paths, dir.path());
+
+    let error = open_bundle_report(
+        &paths,
+        &dir.path().display().to_string(),
+        &[
+            "reports/insights/PROJECT_OVERVIEW.html",
+            "PROJECT_OVERVIEW.html",
+        ],
+        "this export contains no PROJECT_OVERVIEW.html; the run may have been cancelled \
+         before its reports were written",
+    )
+    .unwrap_err();
     assert!(
         error.message.contains("PROJECT_OVERVIEW.html"),
         "unhelpful message: {}",
@@ -158,9 +305,23 @@ fn a_bundle_with_no_overview_is_reported_rather_than_opened() {
 
 #[test]
 fn a_bundle_with_no_onboarding_guide_is_reported_rather_than_opened() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
-    let error = open_onboarding_guide(dir.path().display().to_string()).unwrap_err();
+    record_a_run_with_result_path(&paths, dir.path());
+
+    let error = open_bundle_report(
+        &paths,
+        &dir.path().display().to_string(),
+        &[
+            "reports/insights/ONBOARDING_GUIDE.md",
+            "ONBOARDING_GUIDE.md",
+        ],
+        "this export contains no ONBOARDING_GUIDE.md; the run may have been cancelled \
+         before its reports were written",
+    )
+    .unwrap_err();
     assert!(
         error.message.contains("ONBOARDING_GUIDE.md"),
         "unhelpful message: {}",
@@ -170,9 +331,23 @@ fn a_bundle_with_no_onboarding_guide_is_reported_rather_than_opened() {
 
 #[test]
 fn a_bundle_with_no_review_checklist_is_reported_rather_than_opened() {
+    let history_root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(history_root.path());
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("PROJECT_PROFILE.json"), "{}").unwrap();
-    let error = open_review_checklist(dir.path().display().to_string()).unwrap_err();
+    record_a_run_with_result_path(&paths, dir.path());
+
+    let error = open_bundle_report(
+        &paths,
+        &dir.path().display().to_string(),
+        &[
+            "reports/insights/REVIEW_CHECKLIST.md",
+            "REVIEW_CHECKLIST.md",
+        ],
+        "this export contains no REVIEW_CHECKLIST.md; the run may have been cancelled \
+         before its reports were written",
+    )
+    .unwrap_err();
     assert!(
         error.message.contains("REVIEW_CHECKLIST.md"),
         "unhelpful message: {}",

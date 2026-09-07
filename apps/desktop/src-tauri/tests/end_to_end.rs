@@ -79,7 +79,15 @@ fn the_whole_wizard_flow_produces_a_bundle_and_records_it() {
     let source = fixture_project();
     let output = tempfile::tempdir().unwrap();
     let db_dir = tempfile::tempdir().unwrap();
-    let mut connection = temp_database(db_dir.path());
+
+    // An isolated `AppPaths`, not just a bare connection: step 6 below reads the bundle
+    // back through the public command, which validates the result path against a run
+    // history (audit 2026-09-07, S-1) — a check that has to see the same database this
+    // export records into, or every path looks unrecognised.
+    let paths = codepack_core::AppPaths::for_root(db_dir.path());
+    let db_file = codepack_core::migrated_db_file(&paths);
+    std::fs::create_dir_all(db_file.parent().unwrap()).unwrap();
+    let mut connection = codepack_storage::open(&db_file).unwrap();
 
     // 1. Project step: open the folder the picker returned.
     let context = project::open_project(source.path().display().to_string()).unwrap();
@@ -158,7 +166,7 @@ fn the_whole_wizard_flow_produces_a_bundle_and_records_it() {
     );
 
     // 6. Analytics step reads back what the export wrote.
-    let summary = export::read_project_profile(result_path.clone()).unwrap();
+    let summary = export::read_project_profile_at(&paths, result_path).unwrap();
     assert!(summary.files > 0, "{summary:?}");
 
     // 7. History step: the run is recorded, and reported as successful.

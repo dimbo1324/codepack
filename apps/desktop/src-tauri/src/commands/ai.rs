@@ -42,7 +42,27 @@ pub fn prepare_handoff(
     agent_id: String,
     question: String,
 ) -> CommandResult<HandoffResult> {
-    let agent = handoff::agent(&agent_id).ok_or_else(|| {
+    let paths = codepack_core::AppPaths::resolve()?;
+    prepare_handoff_at(&paths, &result_path, &agent_id, &question)
+}
+
+/// [`prepare_handoff`] against an explicit [`codepack_core::AppPaths`].
+///
+/// This is the command S-2 (audit 2026-09-07) broke outright: the bundle-path check it
+/// goes through queried history with `LIMIT 0`, which SQLite defines as "zero rows", so
+/// the check rejected *every* path unconditionally — including one this very
+/// installation had just produced. Every test on this command before that pass exercised
+/// only rejection (an unknown agent, a path never recorded, a path that no longer
+/// exists), which a check that rejects everything passes identically to a correct one.
+/// `prepare_handoff_answers_for_a_run_this_installation_actually_produced` below is the
+/// test that would have caught it: it is the one case none of the others were.
+fn prepare_handoff_at(
+    paths: &codepack_core::AppPaths,
+    result_path: &str,
+    agent_id: &str,
+    question: &str,
+) -> CommandResult<HandoffResult> {
+    let agent = handoff::agent(agent_id).ok_or_else(|| {
         let known: Vec<&str> = handoff::AGENTS.iter().map(|entry| entry.id).collect();
         CommandError::new(format!(
             "unknown agent {agent_id:?}. Available: {}",
@@ -50,8 +70,8 @@ pub fn prepare_handoff(
         ))
     })?;
 
-    let bundle_dir = crate::commands::export::extracted_bundle_dir(&result_path)?;
-    let prepared = handoff::prepare(&bundle_dir, agent, &question).map_err(CommandError::new)?;
+    let bundle_dir = crate::commands::export::extracted_bundle_dir_at(paths, result_path)?;
+    let prepared = handoff::prepare(&bundle_dir, agent, question).map_err(CommandError::new)?;
 
     Ok(HandoffResult {
         path: prepared.path.display().to_string(),
@@ -141,6 +161,61 @@ mod tests {
         assert!(
             format!("{error:?}").contains("not an export this installation produced"),
             "{error:?}"
+        );
+    }
+
+    /// The end-to-end case every test above was missing (audit 2026-09-07, S-1/S-2/T-1):
+    /// a run this installation genuinely produced must be *accepted*, not just correctly
+    /// rejected when it is not one. Isolated `AppPaths` and a temporary history database
+    /// (audit S-7/T-2), so this never touches whoever runs `cargo test`'s real profile.
+    #[test]
+    fn prepare_handoff_answers_for_a_run_this_installation_actually_produced() {
+        let history_root = tempfile::tempdir().unwrap();
+        let paths = codepack_core::AppPaths::for_root(history_root.path());
+
+        let bundle = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(bundle.path().join("AI_CONTEXT")).unwrap();
+
+        let mut connection = crate::commands::open_database_at(&paths).unwrap();
+        let project =
+            codepack_storage::find_or_create_project(&connection, "/tmp/project", "project", None)
+                .unwrap();
+        codepack_storage::record_export_run(
+            &mut connection,
+            codepack_storage::NewExportRun {
+                project_id: project,
+                started_at: 10,
+                finished_at: Some(11),
+                profile: Some("full".to_string()),
+                safe_mode: Some("safe".to_string()),
+                diff_mode: Some("all".to_string()),
+                files_copied: Some(1),
+                bytes_total: Some(10),
+                tokens_est: Some(1),
+                redacted_count: None,
+                cancelled: false,
+                result_path: Some(bundle.path().display().to_string()),
+            },
+            &[],
+            &[],
+            &[],
+            None,
+        )
+        .unwrap();
+
+        let result = prepare_handoff_at(
+            &paths,
+            &bundle.path().display().to_string(),
+            "claude-code",
+            "review the auth flow",
+        )
+        .expect("a run this installation produced must be accepted");
+
+        assert_eq!(result.command, "claude");
+        assert!(
+            std::fs::read_to_string(&result.path)
+                .unwrap()
+                .contains("review the auth flow")
         );
     }
 }

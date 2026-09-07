@@ -71,6 +71,20 @@ pub fn apply_preset(config: Config, preset_name: String) -> CommandResult<Config
 #[tauri::command]
 pub fn apply_profile(config: Config, profile_name: String) -> CommandResult<Config> {
     let paths = AppPaths::resolve()?;
+    apply_profile_at(&paths, config, profile_name)
+}
+
+/// [`apply_profile`] against an explicit [`AppPaths`], so a test can point it at a
+/// temporary `user_profiles_file()` instead of whoever runs `cargo test`'s real
+/// `~/.project_exporter_profiles.json` (audit 2026-09-07, S-7/T-2) — this function had no
+/// test exercising it at all before this pass, which is a quieter version of the same
+/// risk: the first test written against it would otherwise have read a real file nobody
+/// meant it to touch.
+fn apply_profile_at(
+    paths: &AppPaths,
+    config: Config,
+    profile_name: String,
+) -> CommandResult<Config> {
     let user_profiles = profiles::load(&paths.user_profiles_file())
         .map(|loaded| loaded.file)
         .unwrap_or_default();
@@ -291,6 +305,36 @@ mod tests {
                 "preset `{}` is offered but cannot be applied",
                 preset.name
             );
+        }
+    }
+
+    /// `apply_profile` had no test at all before audit 2026-09-07 (S-7/T-2) — the first
+    /// one written against it would otherwise have read whoever runs `cargo test`'s real
+    /// `~/.project_exporter_profiles.json`. An isolated `AppPaths` under a tempdir with
+    /// no such file at all is the simplest case: a built-in profile name must still
+    /// resolve.
+    #[test]
+    fn a_builtin_profile_name_is_accepted_with_no_user_profiles_file_present() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::for_root(root.path());
+        let builtin = config::EXPORT_PROFILES[0];
+
+        let updated = apply_profile_at(&paths, Config::default(), builtin.to_string()).unwrap();
+        assert_eq!(updated.export_profile, builtin);
+    }
+
+    /// An unknown profile is rejected rather than silently widening the export to
+    /// `full`, the same rule the CLI's own `--profile` flag documents.
+    #[test]
+    fn an_unknown_profile_name_is_rejected_and_names_the_real_ones() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = AppPaths::for_root(root.path());
+
+        let error =
+            apply_profile_at(&paths, Config::default(), "not-a-profile".to_string()).unwrap_err();
+        assert!(error.message.contains("not-a-profile"));
+        for name in config::EXPORT_PROFILES {
+            assert!(error.message.contains(name), "{}", error.message);
         }
     }
 }

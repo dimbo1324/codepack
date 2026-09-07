@@ -22,7 +22,7 @@ use crate::dto::{ExportFinishedEvent, ExportProgressEvent, ExportReport};
 use crate::error::{CommandError, CommandResult};
 use crate::state::AppState;
 
-use super::{open_database, resolve_project_root};
+use super::{ValidatedResultPath, open_database, resolve_project_root};
 
 #[cfg(test)]
 mod tests;
@@ -231,29 +231,43 @@ pub fn cancel_export(state: State<'_, AppState>, run_id: String) -> CommandResul
 /// one, so the dashboard's relative links to the other reports keep resolving after this
 /// call returns and the user can browse them. Extracting again over an existing
 /// directory is harmless and keeps the copy current.
-pub(crate) fn extracted_bundle_dir(result_path: &str) -> CommandResult<std::path::PathBuf> {
-    // The single gate for five of the six commands that used to take this path on trust.
-    // Validated against the export history first: a path is acceptable exactly when a run
-    // of this installation produced it.
-    let path = super::resolve_export_result(result_path)?;
-    extract_validated_bundle(&path, result_path)
+///
+/// Takes `paths` explicitly rather than resolving one internally. See
+/// [`ValidatedResultPath::resolve`] for why: it is what lets `commands::ai`'s tests prove
+/// `prepare_handoff` actually accepts a run this installation produced, rather than only
+/// proving (as every test on it did before audit 2026-09-07, S-1/S-2/T-1) that it rejects
+/// one that was never recorded. The one production caller, `commands::ai::prepare_handoff`,
+/// resolves the real `AppPaths` itself and passes it straight through.
+pub(crate) fn extracted_bundle_dir_at(
+    paths: &codepack_core::AppPaths,
+    result_path: &str,
+) -> CommandResult<std::path::PathBuf> {
+    let validated = ValidatedResultPath::resolve(paths, result_path)?;
+    extract_validated_bundle(paths, &validated)
 }
 
 /// The extraction itself, once the path is known to be an export this installation
 /// produced.
 ///
 /// Separated from the check so the two can be read — and tested — apart: this function
-/// decides *how* a bundle is opened, and its caller decides *whether* it may be. Nothing
-/// but [`extracted_bundle_dir`] should call it.
+/// decides *how* a bundle is opened, and its caller decides *whether* it may be. Audit
+/// 2026-09-07, S-1: this used to take a bare `&Path`, and five of the six commands that
+/// open a bundle called it directly on an unvalidated path from the webview — `[bundle,
+/// result_path]` looked exactly like the checked call this doc comment already claimed
+/// was the only one, and the compiler had no way to tell the two apart. Taking a
+/// [`ValidatedResultPath`] instead means there is no longer a `&Path` lying around that
+/// this function *could* be called with by mistake: the only way to have one is to have
+/// already called [`super::resolve_export_result`]/[`ValidatedResultPath::resolve`].
 fn extract_validated_bundle(
-    path: &std::path::Path,
-    result_path: &str,
+    paths: &codepack_core::AppPaths,
+    validated: &ValidatedResultPath,
 ) -> CommandResult<std::path::PathBuf> {
+    let path = validated.as_path();
     // A split export hands back the archive-set *directory*; a single-ZIP export hands
     // back the file.
     if path.is_dir() {
         if path.join("ARCHIVE_SET_MANIFEST.json").is_file() {
-            let destination = extraction_dir_for(path)?;
+            let destination = extraction_dir_for(paths, path)?;
             codepack_archive::restore_archive_set(path, &destination).map_err(CommandError::new)?;
             return Ok(destination);
         }
@@ -262,12 +276,15 @@ fn extract_validated_bundle(
     }
 
     if !path.is_file() {
+        // Validation canonicalized this path a moment ago; getting here means the file
+        // vanished in the window since, not that the path was ever wrong.
         return Err(CommandError::new(format!(
-            "the export result is no longer where it was recorded: {result_path}"
+            "the export result is no longer where it was recorded: {}",
+            path.display()
         )));
     }
 
-    let destination = extraction_dir_for(path)?;
+    let destination = extraction_dir_for(paths, path)?;
     // `extract_zip_safely` validates every entry against path traversal before writing
     // and now also bounds what the archive may expand into.
     codepack_archive::extract_zip_safely(path, &destination).map_err(CommandError::new)?;
@@ -281,10 +298,12 @@ fn extract_validated_bundle(
 /// the user never opens that folder by hand, and the archive may sit anywhere. The name
 /// is a hash of the archive's path, so two bundles never collide and re-opening the same
 /// one reuses its directory.
-fn extraction_dir_for(archive: &std::path::Path) -> CommandResult<std::path::PathBuf> {
+fn extraction_dir_for(
+    paths: &codepack_core::AppPaths,
+    archive: &std::path::Path,
+) -> CommandResult<std::path::PathBuf> {
     use sha2::{Digest, Sha256};
 
-    let paths = codepack_core::AppPaths::resolve().map_err(CommandError::new)?;
     let mut hasher = Sha256::new();
     hasher.update(archive.to_string_lossy().as_bytes());
     let digest = hasher.finalize();
@@ -332,13 +351,33 @@ fn find_in_bundle(bundle_dir: &std::path::Path, relative: &[&str]) -> Option<std
 /// Reads back the `PROJECT_PROFILE.json` a past export wrote, for the Analytics page.
 ///
 /// `result_path` is whatever the run recorded — an archive, or an archive-set directory.
-/// The profile is read from inside it; see [`extracted_bundle_dir`] for why extraction is
-/// necessary rather than looking beside the file.
+/// The profile is read from inside it; see [`extracted_bundle_dir_at`] for why extraction
+/// is necessary rather than looking beside the file.
 #[tauri::command]
 pub fn read_project_profile(
     result_path: String,
 ) -> CommandResult<crate::dto::ProjectProfileSummary> {
-    let bundle_dir = extract_validated_bundle(std::path::Path::new(&result_path), &result_path)?;
+    let paths = codepack_core::AppPaths::resolve()?;
+    read_project_profile_at(&paths, &result_path)
+}
+
+/// [`read_project_profile`] against an explicit [`codepack_core::AppPaths`] — the form
+/// every test in this module uses, so that reading a profile back is tested along with
+/// the validation step audit 2026-09-07 (S-1) found missing here entirely: before this
+/// pass, this command extracted and read whatever directory or archive path the webview
+/// supplied, with no check that any export had ever produced it.
+///
+/// `pub` rather than `pub(crate)` for the same reason as [`super::run_to_completion`]:
+/// the wizard-flow integration test in `tests/end_to_end.rs` records its run against a
+/// temporary database, so reading it back afterwards has to go through that same
+/// explicit [`codepack_core::AppPaths`] rather than the real one `AppPaths::resolve()`
+/// would give the public command.
+pub fn read_project_profile_at(
+    paths: &codepack_core::AppPaths,
+    result_path: &str,
+) -> CommandResult<crate::dto::ProjectProfileSummary> {
+    let validated = ValidatedResultPath::resolve(paths, result_path)?;
+    let bundle_dir = extract_validated_bundle(paths, &validated)?;
     let profile_file = find_in_bundle(&bundle_dir, &["PROJECT_PROFILE.json"]).ok_or_else(|| {
         CommandError::new(
             "this export contains no PROJECT_PROFILE.json; the run may have been cancelled \
@@ -385,12 +424,20 @@ fn string_array_at(value: &serde_json::Value, key: &str) -> Vec<String> {
 /// each of those is a one-line wrapper naming its own file and its own "not generated"
 /// message, rather than a fourth copy of extraction, bundle-layout lookup, and
 /// OS-handler dispatch.
+///
+/// Validates `result_path` itself now (audit 2026-09-07, S-1): all four callers used to
+/// reach this directly with no check that the path they were handed was ever an export
+/// this installation produced, which is the whole isolation the webview's empty
+/// filesystem capability was meant to provide, given away by the one function every
+/// report-opening command funnels through.
 fn open_bundle_report(
+    paths: &codepack_core::AppPaths,
     result_path: &str,
     candidates: &[&str],
     not_found_message: &str,
 ) -> CommandResult<()> {
-    let bundle_dir = extract_validated_bundle(std::path::Path::new(result_path), result_path)?;
+    let validated = ValidatedResultPath::resolve(paths, result_path)?;
+    let bundle_dir = extract_validated_bundle(paths, &validated)?;
     let file = find_in_bundle(&bundle_dir, candidates)
         .ok_or_else(|| CommandError::new(not_found_message.to_string()))?;
 
@@ -417,7 +464,9 @@ fn open_bundle_report(
 /// Opens `REPORT_DASHBOARD.html`.
 #[tauri::command]
 pub fn open_dashboard(result_path: String) -> CommandResult<()> {
+    let paths = codepack_core::AppPaths::resolve()?;
     open_bundle_report(
+        &paths,
         &result_path,
         &[
             "reports/insights/REPORT_DASHBOARD.html",
@@ -432,7 +481,9 @@ pub fn open_dashboard(result_path: String) -> CommandResult<()> {
 /// overview for a reader with no code access.
 #[tauri::command]
 pub fn open_project_overview(result_path: String) -> CommandResult<()> {
+    let paths = codepack_core::AppPaths::resolve()?;
     open_bundle_report(
+        &paths,
         &result_path,
         &[
             "reports/insights/PROJECT_OVERVIEW.html",
@@ -446,7 +497,9 @@ pub fn open_project_overview(result_path: String) -> CommandResult<()> {
 /// Opens `ONBOARDING_GUIDE.md` (stage S12).
 #[tauri::command]
 pub fn open_onboarding_guide(result_path: String) -> CommandResult<()> {
+    let paths = codepack_core::AppPaths::resolve()?;
     open_bundle_report(
+        &paths,
         &result_path,
         &[
             "reports/insights/ONBOARDING_GUIDE.md",
@@ -460,7 +513,9 @@ pub fn open_onboarding_guide(result_path: String) -> CommandResult<()> {
 /// Opens `REVIEW_CHECKLIST.md` (stage S12).
 #[tauri::command]
 pub fn open_review_checklist(result_path: String) -> CommandResult<()> {
+    let paths = codepack_core::AppPaths::resolve()?;
     open_bundle_report(
+        &paths,
         &result_path,
         &[
             "reports/insights/REVIEW_CHECKLIST.md",
