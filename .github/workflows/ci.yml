@@ -9,6 +9,13 @@ on:
     branches: ["**"]
   pull_request:
 
+# Neither job here needs more than reading the checked-out code (audit 2026-09-07,
+# C-2): no job creates a release, publishes a package, or uploads a security report.
+# Without this, actions/checkout's default token carries write access every step
+# inherits, whether it needs it or not.
+permissions:
+  contents: read
+
 concurrency:
   # `head_ref` is set only for pull_request, `ref` only otherwise, so a branch and its
   # open PR share one group. Without this, enabling push on every branch would run the

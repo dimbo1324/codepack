@@ -25,19 +25,27 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 0 — non-behavior-changing corrections
 
-- [ ] Q-6 README / overview.md / xtask USAGE / ROADMAP §1 status line: Linux packaging is real
-- [ ] S-3 deny.toml: rewrite the eleven GTK3 ignore reasons, add a revisit date
-- [ ] Q-1 (partial) fix the two false comments in export/mod.rs (mechanism comes in Step 1)
-- [ ] C-2 (partial) add `permissions: contents: read` to ci.yml
-- [ ] L-12/S-6 (partial) one line in README about unsigned Linux packages
+- [x] Q-6 README / overview.md / xtask USAGE / ROADMAP §1 status line: Linux packaging is real
+- [x] S-3 deny.toml: rewrite the eleven GTK3 ignore reasons, add a revisit date
+- [x] Q-1 (partial) fix the two false comments in export/mod.rs — superseded: Step 1's
+      `ValidatedResultPath` mechanism rewrote both comments as part of closing S-1 itself,
+      rather than as a separate stopgap patch first
+- [x] C-2 (partial) add `permissions: contents: read` to ci.yml
+- [x] L-12/S-6 (partial) one line in README about unsigned Linux packages
 
 ## Step 1 — broken and claimed (the critical findings)
 
-- [ ] T-2/S-7 `CODEPACK_HOME` override for `AppPaths::resolve()`, `TestHome` test helper
-- [ ] S-2 fix `resolve_export_result`'s `LIMIT 0` query (switch to EXISTS, no full scan)
-- [ ] T-1 acceptance-path tests: path accepted when a run produced it; all 6 commands reject a stranger path
-- [ ] S-1 `ValidatedResultPath` newtype; `extract_validated_bundle` becomes its method
-- [ ] Record the "boundary you can bypass gets a type or a gate step" rule in `.ai/universal/04-architecture-boundaries.md`
+- [x] T-2/S-7 test isolation for `AppPaths` — not the planned `CODEPACK_HOME` env-var
+      override: `std::env::set_var` is `unsafe fn` on this toolchain (a genuine
+      multi-threaded soundness hazard) and the workspace forbids `unsafe` outright, so
+      every touched command was split into a dependency-injected `_at(paths: &AppPaths,
+      ...)` form instead, tested against `AppPaths::for_root(&tempdir)`
+- [x] S-2 fix `resolve_export_result`'s `LIMIT 0` query — replaced with
+      `export_run_result_path_matches` (`LIKE` pre-filter + canonicalized comparison, no
+      full-table scan)
+- [x] T-1 acceptance-path tests: path accepted when a run produced it; all 6 commands reject a stranger path
+- [x] S-1 `ValidatedResultPath` newtype; `extract_validated_bundle` becomes its method
+- [x] Record the "boundary you can bypass gets a type or a gate step" rule in `.ai/universal/04-architecture-boundaries.md`
 
 ## Step 2 — process-halting / crashing risks
 
