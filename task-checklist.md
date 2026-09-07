@@ -77,7 +77,10 @@ conflict gets escalated, not guessed past silently.
       `.exportignore`, README, Q44 — the real `setup.exe`/`SETUP.txt` themselves are a
       separate commit at the very end (D-2 step 7: a binary must not share a diff with
       code, and any commit before the last one would make it stale again immediately)
-- [ ] G-2 gate run report: per-section timing, JUnit XML, `$GITHUB_STEP_SUMMARY`
+- [x] G-2 gate run report: `xtask::gate_report`, per-section timing, JUnit XML for
+      `tests`, `target/gate-logs/latest/` + 20-run rotation, `$GITHUB_STEP_SUMMARY`,
+      CI artifact upload on failure — gate now runs every section instead of stopping
+      at the first failure
 
 ## Step 5 — decisions resolved via safe interim default + recorded open question
 
