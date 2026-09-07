@@ -196,6 +196,16 @@ impl AppPaths {
         &self.log_dir
     }
 
+    /// The user's home directory, as resolved for this platform.
+    ///
+    /// Exists so a caller can strip it out of text before handing that text to someone
+    /// else — `codepack doctor --collect-logs` (audit 2026-09-07, G-1) redacts it out of
+    /// copied log lines, the same disclosure instinct [`disclosed_root`](super::config::disclosed_root)
+    /// already applies to a project's own path.
+    pub fn home_dir(&self) -> &Path {
+        &self.home_dir
+    }
+
     pub fn settings_file(&self) -> PathBuf {
         self.settings_dir.join(SETTINGS_FILE_NAME)
     }

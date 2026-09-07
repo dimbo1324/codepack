@@ -40,7 +40,7 @@ pub(crate) enum Command {
     /// List previous export runs.
     History(HistoryArgs),
     /// Check the environment and report what is available.
-    Doctor,
+    Doctor(DoctorArgs),
     /// Strip comments (tree-sitter) and reformat with a `PATH` tool into a separate
     /// destination folder. A standalone action, not part of `export`'s pipeline.
     Sanitize(SanitizeArgs),
@@ -228,6 +228,16 @@ pub(crate) struct ExportArgs {
     /// Directory to write the bundle into. Defaults to the current directory.
     #[arg(long)]
     pub out: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DoctorArgs {
+    /// Copy the activity log (audit 2026-09-07, G-1) into DIR so it can be attached to
+    /// a bug report. Home-directory paths inside the copied lines are replaced with
+    /// `<home>` first, the same disclosure rule reports already apply to the project
+    /// root, so sending the copy does not also hand over the local username.
+    #[arg(long, value_name = "DIR")]
+    pub collect_logs: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]

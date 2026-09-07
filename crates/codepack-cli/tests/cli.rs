@@ -459,6 +459,40 @@ fn doctor_states_the_privacy_guarantee_and_lists_the_presets() {
     assert!(!listed.is_empty(), "doctor listed no presets at all");
     assert_eq!(listed.len(), codepack_core::config::ai_presets().len());
     assert_eq!(report["project_config_file"], ".codepack.toml");
+    // No `--collect-logs` was passed: the field is absent entirely, not `null`.
+    assert!(report.get("log_collection").is_none());
+}
+
+#[test]
+fn doctor_collect_logs_copies_the_activity_log_an_export_just_wrote() {
+    let sandbox = Sandbox::new();
+    let project = sandbox.project().display().to_string();
+    let out = sandbox.out().display().to_string();
+    let collected = sandbox.project().join("collected-logs");
+
+    let exported = sandbox.run(&["--json", "export", &project, "--out", &out]);
+    assert_eq!(code(&exported), 0);
+
+    let report = json(&sandbox.run(&[
+        "--json",
+        "doctor",
+        "--collect-logs",
+        &collected.display().to_string(),
+    ]));
+
+    let files = report["log_collection"]["files"].as_array().unwrap();
+    assert!(
+        !files.is_empty(),
+        "the export just ran should have left at least one log file: {report}"
+    );
+    for file in files {
+        let copied = collected.join(file.as_str().unwrap());
+        assert!(
+            copied.is_file(),
+            "{} should have been copied",
+            copied.display()
+        );
+    }
 }
 
 // --- explain, --budget by model, and the PR Review preset ---------------------------
