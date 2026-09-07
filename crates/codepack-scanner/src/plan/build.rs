@@ -143,6 +143,62 @@ fn classify_file(
         };
     }
 
+    // Audit 2026-09-07, L-3: a Linux file name is any byte sequence without `/` or
+    // `\0` — no encoding is enforced by the kernel at all, so a name that is not valid
+    // UTF-8 is entirely legal and not exotic (a file from a `tar` extracted under a
+    // different locale, or created directly with one). `display_path` above already
+    // used `to_string_lossy`, which replaces every undecodable byte with U+FFFD — a
+    // name that no longer exists on disk. Every later pipeline step reconstructs a path
+    // from that string and reopens it, so the file simply failed to copy, counted as an
+    // error, and — because a successful run requires zero copy errors — permanently
+    // disabled the differential baseline for reasons invisible anywhere in the output.
+    // Excluding it here instead, with a reason that says what actually happened, is the
+    // honest outcome the audit calls the "quick, correct" half of this fix; carrying a
+    // native `PathBuf` end-to-end alongside `PlannedFile.relative_path`'s string
+    // contract is the "right, expensive" other half, recorded as an open question
+    // (Q45) rather than done as a side effect of this fix.
+    if file.relative_path.to_str().is_none() {
+        return PlannedFile {
+            relative_path: display_path,
+            size: file.size,
+            status: "excluded".to_string(),
+            reason: "file name is not valid UTF-8; the file was skipped".to_string(),
+            severity: "medium".to_string(),
+            group,
+        };
+    }
+
+    // Audit 2026-09-07, L-4: a literal `\` is a legal filename byte on Linux and macOS,
+    // but this project's own stored-path convention (`display_backslash`/
+    // `relative_from_stored`) joins path segments with `\` on every platform. A real
+    // file named `a\b.txt` in the project root is indistinguishable, once stored, from
+    // a real `b.txt` inside a real directory `a` — the same silent-loss failure as
+    // L-3's non-UTF-8 case, plus a worse one: a project containing *both* would collide
+    // on one `relative_path`, double-counted in the summary and represented by only one
+    // archive member. `safe_join`'s own backslash rejection cannot help here either,
+    // because `relative_from_stored` already split the string into segments before
+    // `safe_join` ever sees them. The real fix — changing the stored separator to `/`,
+    // which no platform allows in a file name at all — moves the artifact contract
+    // (I5) and needs `schema_version` plus an owner decision, recorded as Q45 rather
+    // than done here; excluding the file with a named reason is this pass's interim,
+    // honest default, the same shape as L-3's.
+    if file
+        .relative_path
+        .components()
+        .any(|component| component.as_os_str().to_string_lossy().contains('\\'))
+    {
+        return PlannedFile {
+            relative_path: display_path,
+            size: file.size,
+            status: "excluded".to_string(),
+            reason: "file name contains a backslash, which this project's stored path \
+                     format reserves as a separator; the file was skipped"
+                .to_string(),
+            severity: "medium".to_string(),
+            group,
+        };
+    }
+
     // Legacy's own order in `export_plan.py`: rule-based exclusion is decided before
     // safety, so a file excluded by an `.exportignore` rule keeps that rule's reason
     // and `"medium"` severity rather than being reported as a credential risk.
@@ -449,5 +505,129 @@ mod tests {
             .map(|f| f.relative_path.as_str())
             .collect();
         assert!(!included.iter().any(|p| p.contains("target")));
+    }
+
+    // --- Non-UTF-8 file names (audit 2026-09-07, L-3) ----------------------------------
+    //
+    // Unix-only: a Linux/macOS file name is any byte sequence without `/` or `\0`, no
+    // encoding enforced at all. Windows names are UTF-16 and essentially always
+    // representable (the audit's own note on why this defect was invisible on the
+    // machine that shipped it), so there is no equivalent fixture to build there.
+
+    #[cfg(unix)]
+    fn classify_a_synthetic_file(relative_name_bytes: &[u8]) -> PlannedFile {
+        use std::os::unix::ffi::OsStrExt;
+        let relative_path =
+            std::path::PathBuf::from(std::ffi::OsStr::from_bytes(relative_name_bytes));
+        let file = walk::WalkedFile {
+            relative_path,
+            size: 0,
+        };
+        let options = ScanOptions::default();
+        let dir = tempfile::tempdir().unwrap();
+        let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
+        classify_file(&file, &rules, &no_safety_classification, &cancel_never())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_non_utf8_file_name_is_excluded_with_a_named_reason_not_silently_corrupted() {
+        // Not a `/` or a `\0` (the two bytes Linux itself forbids in a name), and not
+        // valid UTF-8 on its own — exactly a `KOI8-R`- or `tar`-from-a-foreign-locale
+        // file name, the audit's own example.
+        let planned = classify_a_synthetic_file(b"\xC0\xC1.txt");
+        assert_eq!(planned.status, "excluded");
+        assert_eq!(
+            planned.reason,
+            "file name is not valid UTF-8; the file was skipped"
+        );
+        // Never silently promoted to "critical"/"error" — a `.exportignore` rule or a
+        // credential-shaped name still gets its own, more specific reason first; this
+        // is the reason only when nothing more specific already excluded the file.
+        assert_eq!(planned.severity, "medium");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_normal_utf8_file_name_is_unaffected() {
+        let planned = classify_a_synthetic_file(b"main.rs");
+        assert_eq!(planned.status, "included");
+    }
+
+    // --- A literal backslash in a file name (audit 2026-09-07, L-4) --------------------
+    //
+    // Legal on Linux/macOS; indistinguishable, once stored, from this project's own
+    // path-segment separator.
+
+    #[cfg(unix)]
+    #[test]
+    fn a_literal_backslash_in_a_file_name_is_excluded_not_misparsed_as_a_directory() {
+        let planned = classify_a_synthetic_file(b"a\\b.txt");
+        assert_eq!(planned.status, "excluded");
+        assert!(
+            planned.reason.contains("backslash"),
+            "unexpected reason: {}",
+            planned.reason
+        );
+        assert_eq!(planned.severity, "medium");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_real_backslash_named_file_does_not_collide_with_a_real_subdirectory() {
+        // The collision the audit calls out explicitly: without the L-4 exclusion,
+        // both `a/b.txt` and a file literally named `a\b.txt` stringify to the same
+        // stored `relative_path`, doubling one and losing the other from the summary.
+        use std::os::unix::ffi::OsStrExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("a")).unwrap();
+        fs::write(dir.path().join("a/b.txt"), "the real one").unwrap();
+        let colliding_name = std::ffi::OsStr::from_bytes(b"a\\b.txt");
+        fs::write(dir.path().join(colliding_name), "not the same file").unwrap();
+
+        let options = ScanOptions::default();
+        let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
+
+        assert_eq!(plan.included_files.len(), 1);
+        assert_eq!(plan.included_files[0].relative_path, "a\\b.txt");
+        assert_eq!(plan.excluded_files.len(), 1);
+        assert!(plan.excluded_files[0].reason.contains("backslash"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_real_non_utf8_named_file_on_disk_does_not_break_the_whole_plan() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("normal.txt"), "hello").unwrap();
+        let bad_name = std::ffi::OsStr::from_bytes(b"\xC0\xC1-bad.txt");
+        fs::write(dir.path().join(bad_name), "hidden by its own name").unwrap();
+
+        let options = ScanOptions::default();
+        let rules = ExportIgnoreRules::from_project_and_config(dir.path(), &options);
+        let plan = build_export_plan(
+            dir.path(),
+            &options,
+            &rules,
+            &no_safety_classification,
+            &cancel_never(),
+        )
+        .unwrap();
+
+        assert_eq!(plan.included_files.len(), 1);
+        assert_eq!(plan.included_files[0].relative_path, "normal.txt");
+        assert_eq!(plan.excluded_files.len(), 1);
+        assert_eq!(
+            plan.excluded_files[0].reason,
+            "file name is not valid UTF-8; the file was skipped"
+        );
     }
 }
