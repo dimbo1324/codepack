@@ -25,6 +25,7 @@ Everything runs **locally**. Nothing is uploaded, ever.
 - [Labelled redaction](#labelled-redaction)
 - [Pre-commit use](#pre-commit-use)
 - [In CI](#in-ci)
+- [Logs](#logs)
 - [Guarantees](#guarantees)
 - [Documentation](#documentation)
 - [Developing](#developing)
@@ -357,6 +358,34 @@ There is a ready-made GitHub Action in this repository:
 The action builds codepack from source on the runner: there are no signed release
 binaries yet, and downloading an unsigned one would be the very thing this tool argues
 against. Pin `ref:` to a commit for reproducible runs.
+
+## Logs
+
+Every run — from either the CLI or the desktop app — writes to a daily log file, kept
+alongside a separate `codepack-panics.log` that a crash writes to directly:
+
+| Platform | Directory |
+|---|---|
+| Windows | `%LOCALAPPDATA%\codepack\logs\` |
+| macOS | `~/Library/Logs/codepack/` |
+| Linux | `$XDG_STATE_HOME/codepack/` (usually `~/.local/state/codepack/`) |
+
+Lines are `INFO`/`WARN`/`ERROR` by default. Set `CODEPACK_LOG=debug` to also capture
+`DEBUG` lines (per-file copy decisions, mainly) for one invocation, or turn on "Verbose
+activity log" in the desktop app's settings to keep it on. Files rotate past 50 MB, and
+old ones are deleted after 14 days or once the directory passes 200 MB — whichever
+comes first. Every line is redacted the same way a report is: a secret that would not
+survive into `03_text_dump.txt` will not survive into a log line either.
+
+To attach the log to a bug report without also handing over your username or folder
+layout:
+
+```bash
+codepack doctor --collect-logs ./codepack-logs
+```
+
+This copies every file in the log directory into `./codepack-logs`, with your home
+directory replaced by `<home>` in every line first.
 
 ## Guarantees
 
