@@ -147,10 +147,17 @@ pub fn run_export(
     // Level-aware since audit 2026-09-07 (G-1): a future file log (or any other
     // consumer that wants to filter by severity) needs the caller's own judgment of how
     // serious each line is, not one flat level for everything this closure ever sends.
+    //
+    // Redacted here, not only where a file log later reads it (audit 2026-09-07, S-8):
+    // this is the one place every step's narration passes through on its way to the
+    // progress channel, and from there straight to CLI stderr and the desktop webview —
+    // both reachable before any log file existed to redact on the way in. Every pipeline
+    // step already reaches the channel only through `log`/`log_info` below, so fixing it
+    // here protects every caller at once rather than asking each one to remember to.
     let log = |level: LogLevel, message: &str| {
         let _ = progress.send(ProgressEvent::Log(LogEvent {
             level,
-            message: message.to_string(),
+            message: codepack_security::redact_secrets(message),
         }));
     };
     // Most calls below are informational; naming this once keeps them from repeating

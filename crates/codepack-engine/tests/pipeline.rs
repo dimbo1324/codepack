@@ -195,6 +195,69 @@ fn planted_secrets_never_reach_the_text_dump() {
     }
 }
 
+/// Audit 2026-09-07, S-8, test 9 of `04-TESTS.txt`: a twin of
+/// `planted_secrets_never_reach_the_text_dump`, but for the progress channel rather
+/// than the archive. Before the fix, a file whose *name* happened to look like a
+/// `KEY=value` assignment reached `ProgressEvent::Log` verbatim in the copy step's own
+/// "copied: {relpath}" narration — reaching CLI stderr and the desktop webview, neither
+/// of which had ever redacted it, before any log file existed to catch it on the way
+/// to disk.
+#[test]
+fn a_planted_secret_never_reaches_the_progress_channel() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(
+        source
+            .path()
+            .join("API_KEY=totally-fake-value-0002-do-not-use.txt"),
+        "ordinary content, nothing sensitive here\n",
+    )
+    .unwrap();
+    init_git_repo(source.path());
+
+    let output = tempfile::tempdir().unwrap();
+    let db_dir = tempfile::tempdir().unwrap();
+    let mut conn = codepack_storage::open(&db_dir.path().join("codepack.db")).unwrap();
+    let config = Config {
+        redact_secrets: true,
+        ..Config::default()
+    };
+    let cancel = CancellationToken::new();
+    let (tx, rx) = codepack_core::progress_channel();
+
+    let outcome = run_export(
+        &mut conn,
+        source.path(),
+        output.path(),
+        &config,
+        &HashMap::new(),
+        &tx,
+        &cancel,
+    )
+    .unwrap();
+    drop(tx);
+    assert!(outcome.successful, "copy_stats = {:?}", outcome.copy_stats);
+
+    let mut saw_the_file_named_in_a_log_line = false;
+    for event in rx.try_iter() {
+        let codepack_core::ProgressEvent::Log(log) = event else {
+            continue;
+        };
+        assert!(
+            !log.message.contains("totally-fake-value-0002-do-not-use"),
+            "a secret-shaped file name leaked into the progress channel: {}",
+            log.message
+        );
+        if log.message.contains("<REDACTED>") {
+            saw_the_file_named_in_a_log_line = true;
+        }
+    }
+    assert!(
+        saw_the_file_named_in_a_log_line,
+        "the file should have been named in a copy-step log line at all, or this test \
+         proves nothing"
+    );
+}
+
 /// `redaction_labels` end to end: the same credential used twice must come out of the
 /// pipeline wearing the same label, a different one must not, and neither value may
 /// appear anywhere in the bundle.
