@@ -342,7 +342,7 @@ fn process_file(
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    match format_source(language, &file_name, &stripped) {
+    match format_source(language, &file_name, &stripped, cancel) {
         Some((formatted, formatter)) => finish(
             destination_root,
             relative,
