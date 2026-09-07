@@ -308,6 +308,7 @@ pub fn run_export(
             config.effective_max_text_file_bytes(),
             redactor.as_ref(),
             config.developer_context.trim(),
+            codepack_reports::i18n::Language::from_config(config),
             &log_info,
             cancel,
         )?;

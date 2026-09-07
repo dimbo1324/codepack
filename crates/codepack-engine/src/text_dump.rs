@@ -159,11 +159,23 @@ fn peek_sample(path: &Path) -> std::io::Result<Vec<u8>> {
     Ok(buffer)
 }
 
-fn prepend_developer_context(output_file: &Path, context: &str, log: &dyn Fn(&str)) {
+/// Audit 2026-09-07, Q-5: legacy's own `i18n.py` carries this heading in both
+/// languages (`"clipboard.context_header"`: `"TASK / DEVELOPER CONTEXT"` in English,
+/// `"ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА"` in Russian) and picks between them by the
+/// configured language — checked directly against `docs/__arch__/codepack-main.zip`
+/// rather than assumed, per `14-legacy-reference.md`. The Russian string alone, with no
+/// way to pick the English one, was an oversight carried over during the port, not
+/// parity: `artifact_language` already exists for exactly this decision, and every
+/// other artifact defaults to English.
+fn prepend_developer_context(
+    output_file: &Path,
+    context: &str,
+    language: codepack_reports::i18n::Language,
+    log: &dyn Fn(&str),
+) {
     let rule = "═".repeat(54);
-    let header = format!(
-        "# {rule}\n# ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА\n# {rule}\n\n{context}\n\n# {rule}\n\n"
-    );
+    let title = language.pick("TASK / DEVELOPER CONTEXT", "ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА");
+    let header = format!("# {rule}\n# {title}\n# {rule}\n\n{context}\n\n# {rule}\n\n");
     match fs::read(output_file) {
         Ok(existing) => {
             let mut combined = header.into_bytes();
@@ -232,13 +244,17 @@ fn write_text(out: &mut BufWriter<fs::File>, output_file: &Path, text: &str) -> 
 /// `config.effective_max_text_file_bytes()`; `redactor` is `Some` exactly when
 /// `config.redact_secrets` is set, and carries the run's placeholder policy;
 /// `developer_context` mirrors `config.developer_context.trim()` — pass an empty string
-/// to skip the header-prepend step entirely.
+/// to skip the header-prepend step entirely; `language` picks which language the
+/// developer-context header itself is written in (audit 2026-09-07, Q-5) and mirrors
+/// `codepack_reports::i18n::Language::from_config(config)`.
+#[allow(clippy::too_many_arguments)]
 pub fn write_text_dump(
     root: &Path,
     output_file: &Path,
     max_bytes_per_file: Option<u64>,
     redactor: Option<&codepack_security::Redactor>,
     developer_context: &str,
+    language: codepack_reports::i18n::Language,
     log: &dyn Fn(&str),
     cancel: &CancellationToken,
 ) -> Result<TextDumpOutcome> {
@@ -427,7 +443,7 @@ pub fn write_text_dump(
 
     let trimmed_context = developer_context.trim();
     if !trimmed_context.is_empty() {
-        prepend_developer_context(output_file, trimmed_context, log);
+        prepend_developer_context(output_file, trimmed_context, language, log);
     }
 
     Ok(TextDumpOutcome {
@@ -461,6 +477,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -489,6 +506,7 @@ mod tests {
             None,
             None,
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -520,6 +538,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -542,6 +561,7 @@ mod tests {
             Some(10),
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -564,6 +584,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -590,6 +611,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -618,6 +640,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -640,6 +663,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "  fix the login bug  ",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -649,6 +673,34 @@ mod tests {
         let content = fs::read_to_string(&output).unwrap();
         assert!(content.starts_with("# ═"));
         assert!(content.contains("fix the login bug"));
+        assert!(content.contains("TASK / DEVELOPER CONTEXT"));
+    }
+
+    /// Audit 2026-09-07, Q-5: the heading follows `artifact_language` the same way
+    /// legacy's own `i18n.py` did, rather than always being the Russian string it was
+    /// hardcoded to during the port.
+    #[test]
+    fn developer_context_header_follows_the_artifact_language() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("main.py"), "x = 1\n").unwrap();
+        let output = dir.path().join("dump.txt");
+
+        let _ = write_text_dump(
+            dir.path(),
+            &output,
+            None,
+            Some(&codepack_security::Redactor::plain()),
+            "fix the login bug",
+            codepack_reports::i18n::Language::Ru,
+            &no_log,
+            &CancellationToken::new(),
+        )
+        .unwrap()
+        .stats;
+
+        let content = fs::read_to_string(&output).unwrap();
+        assert!(content.contains("ЗАДАЧА / КОНТЕКСТ РАЗРАБОТЧИКА"));
+        assert!(!content.contains("TASK / DEVELOPER CONTEXT"));
     }
 
     #[test]
@@ -663,6 +715,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "   ",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &CancellationToken::new(),
         )
@@ -689,6 +742,7 @@ mod tests {
             None,
             Some(&codepack_security::Redactor::plain()),
             "",
+            codepack_reports::i18n::Language::En,
             &no_log,
             &cancel,
         )

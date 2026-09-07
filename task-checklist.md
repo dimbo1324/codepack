@@ -84,16 +84,23 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 5 — decisions resolved via safe interim default + recorded open question
 
-- [ ] Q-2 7z format declared one-directional in help text/README/UI (Q44 went to D-1
-      instead, recorded when D-1 actually landed in Step 4 — this item takes the next
-      free number when it is written)
-- [ ] L-4 schema change (backslash → forward slash separator) recorded as Q45, not implemented this pass
-- [ ] L-9 case-insensitive directory matching on Linux documented as-is (Q46)
-- [ ] S-6 GitHub Releases + build provenance attestation (no paid cert this pass) (Q47)
+- [x] Q-2 7z format declared one-directional, in help text/README/UI, and enforced by
+      `ArchiveFormat::ensure_reopenable` before `verify`/`handoff`/desktop extraction —
+      not just documentation (Q46; Q44 went to D-1 instead)
+- [x] L-4 schema change (backslash → forward slash separator) recorded as Q45 (done
+      earlier in Step 3, alongside L-3), not implemented this pass
+- [x] L-9 case-insensitive directory matching on Linux documented as-is (Q47) — and the
+      audit's own claimed workaround (`.exportignore` negation) was checked and found
+      not to actually rescue a base-ignored name; corrected rather than repeated
+- [x] S-6 GitHub Releases + build provenance attestation, no paid cert this pass (Q48) —
+      decision recorded; implementation is Step 6's C-7, not this step
 - [x] D-1 git-history-growth caveat — folded into Q44 itself rather than a separate
       entry, since the audit's own text asks for the decision and the caveat recorded
       together in one place
-- [ ] Q-5 legacy archive checked for the Russian header string; decision recorded
+- [x] Q-5 legacy archive checked for the Russian header string (Q50) — unpacked
+      `codepack-main.zip` and confirmed it is a port oversight, not parity: legacy's own
+      `i18n.py` carries both languages and picks by config. Fixed, not just recorded:
+      `write_text_dump` now follows `artifact_language` via `codepack_reports::i18n`
 
 ## Step 6 — security and supply chain
 

@@ -1,9 +1,11 @@
 //! A minimal RU/EN string-table pilot for report localization (BLUEPRINT §B.6),
-//! applied to exactly one report this pass — `01_summary.txt`
-//! (`crate::reports::summary`) — per the stage plan's explicit one-report scope.
-//! Every other report in this crate stays English-only; extending the table to more
-//! reports is future scope, recorded honestly rather than silently deferred (see
-//! `task-checklist.md`).
+//! applied to `01_summary.txt` (`crate::reports::summary`) per the stage plan's
+//! original one-report scope, and — since audit 2026-09-07, Q-5 — to the one heading
+//! `codepack-engine::text_dump` prepends ahead of `03_text_dump.txt`'s developer-context
+//! block, which had been hardcoded to the Russian string alone rather than following
+//! `artifact_language` like every other artifact. Every other report in this crate
+//! stays English-only; extending the table further is future scope, recorded honestly
+//! rather than silently deferred (see `task-checklist.md`).
 //!
 //! Wired since 2026-09-05 to `Config::artifact_language`, a field of its own — see
 //! [`Language::from_config`]. The note below explains why it is not
