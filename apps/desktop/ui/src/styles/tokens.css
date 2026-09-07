@@ -32,14 +32,25 @@
   /* Type. Sizes are absolute rather than rem-relative because the desktop shell scales
      the whole webview natively (`set_ui_zoom`), so a second relative layer would compound
      with it and make "150%" mean something different on every page. */
+  /* Linux names (audit 2026-09-07, L-8) are inserted, not substituted: Windows and
+     macOS lose nothing. `Cantarell` is GNOME's own, `Ubuntu` is Ubuntu's; `Noto Sans`/
+     `DejaVu Sans` are close to universally installed and are the last named step
+     before the generic family. `system-ui` stays, but after the named Linux fonts
+     rather than before them — in WebKitGTK it resolves inconsistently across versions
+     (sometimes the GTK theme font, sometimes fontconfig's own default, which on a bare
+     system can be nearly anything), so it should catch what the list did not name, not
+     decide for a platform this list already names explicitly. Unverified by a
+     screenshot on a real GTK/fontconfig system from this session — see the final
+     report. */
   --font-sans:
-    "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
-    sans-serif;
+    "Segoe UI Variable Text", "Segoe UI", -apple-system, "Cantarell", "Ubuntu", "Noto Sans",
+    "DejaVu Sans", system-ui, "Helvetica Neue", Arial, sans-serif;
   --font-display:
-    "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", "Cantarell", "Ubuntu",
+    "Noto Sans", "DejaVu Sans", system-ui, sans-serif;
   --font-mono:
-    "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Consolas, "Liberation Mono",
-    monospace;
+    "Cascadia Mono", "Cascadia Code", "SF Mono", "JetBrains Mono", "Fira Code", "Ubuntu Mono",
+    "DejaVu Sans Mono", "Liberation Mono", ui-monospace, Consolas, monospace;
 
   --text-2xs: 10px;
   --text-xs: 11px;

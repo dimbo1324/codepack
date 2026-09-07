@@ -63,8 +63,8 @@ conflict gets escalated, not guessed past silently.
       (thread-shutdown correctness reasoned through carefully, not exercised by a live Tauri app — see final report)
 - [x] L-3/L-4 non-UTF-8 / backslash-named files excluded with a clear reason instead of silently breaking the baseline; open question recorded for the larger schema change (Q45)
 - [x] L-6 `$XDG_STATE_HOME` respected for the log directory; the `logs`-subdirectory form question recorded as Q49 (BLUEPRINT §D.4 already fixes the current form)
-- [ ] L-8 Linux font names added to the stacks
-- [ ] L-7 WebKitGTK DMABUF workaround documented in README
+- [x] L-8 Linux font names added to the stacks (unverified by a screenshot on a real GTK/fontconfig system — see final report)
+- [x] L-7 WebKitGTK DMABUF workaround documented in README; the conditional code workaround is deferred per the plan's own sequencing (needs 3.1's containerized job to actually run and show whether it reproduces, which this session cannot observe)
 
 ## Step 4 — owner-requested features
 

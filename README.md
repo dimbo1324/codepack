@@ -91,6 +91,23 @@ Windows, macOS, or from the AppImage, build the CLI separately:
 cargo build --release -p codepack-cli
 ```
 
+**If the window opens blank on Linux** (white or black, with the process otherwise
+running), this is a known WebKitGTK defect: the DMABUF renderer it has enabled since
+2.42 fails to draw on a noticeable share of configurations — proprietary NVIDIA drivers
+and some Wayland sessions and virtual machines most often — and it is the single most
+common Linux complaint about Tauri v2 applications in general, not something specific to
+this one. Work around it by setting one of these before launching, whichever your
+WebKitGTK build responds to:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 codepack-desktop
+# or, on older builds:
+WEBKIT_DISABLE_COMPOSITING_MODE=1 codepack-desktop
+```
+
+codepack does not set this for you: on an unaffected system DMABUF draws noticeably
+faster, and disabling it for everyone to help a fraction would be a bad trade.
+
 ## Quick start
 
 See what an export would include, without writing anything:
