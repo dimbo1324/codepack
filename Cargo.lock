@@ -547,8 +547,6 @@ name = "codepack-ai"
 version = "2.0.0"
 dependencies = [
  "codepack-core",
- "serde",
- "serde_json",
  "tempfile",
  "thiserror 2.0.19",
 ]
@@ -630,7 +628,6 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tempfile",
- "thiserror 2.0.19",
  "zip",
 ]
 
@@ -747,7 +744,6 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.19",
- "walkdir",
 ]
 
 [[package]]

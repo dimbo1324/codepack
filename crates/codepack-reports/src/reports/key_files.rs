@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use codepack_tokens::{estimate_tokens_fallback, format_bytes};
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::{InventoryFile, ReportContext};
@@ -76,14 +78,16 @@ const ARCHITECTURAL_FOLDERS: &[&str] = &[
 ];
 const INTERESTING_EXTENSIONS: &[&str] = &["py", "ts", "tsx", "js", "jsx", "go", "rs"];
 
-fn import_reference_pattern() -> Regex {
+// Compiled once rather than per scanned file: the scoring loop below reaches both for
+// every file it ranks.
+static IMPORT_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(import|from|require\s*\(|include|using)\b").expect("fixed literal")
-}
+});
 
-fn class_func_pattern() -> Regex {
+static CLASS_OR_FUNC: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(class|def|function|const|let|var|interface|type|struct|func)\b")
         .expect("fixed literal")
-}
+});
 
 fn score_file(
     file: &InventoryFile,
@@ -143,8 +147,8 @@ fn score_file(
                 "medium-size implementation file ({line_count} lines)"
             ));
         }
-        let import_count = import_reference_pattern().find_iter(&text).count();
-        let symbol_count = class_func_pattern().find_iter(&text).count();
+        let import_count = IMPORT_REFERENCE.find_iter(&text).count();
+        let symbol_count = CLASS_OR_FUNC.find_iter(&text).count();
         if import_count >= 8 {
             score += 10;
             reasons.push(format!("many imports/references ({import_count})"));

@@ -31,6 +31,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::ReportContext;
@@ -75,29 +77,36 @@ impl DependencyGraph {
     }
 }
 
-fn js_import_pattern() -> Regex {
-    // Legacy `_JS_IMPORT_RE`, ported verbatim.
+// Compiled once for the whole process, not once per scanned file. These are called from
+// the dependency-graph walk, which visits every source file in the project: as plain
+// `fn -> Regex` they rebuilt the identical automaton on each visit, so a 50,000-file
+// export paid for 50,000 regex compilations that could not produce a different result.
+// `code_quality.rs` already carried this reasoning for its own pattern; the rest of the
+// crate now follows it (2026-09-08).
+
+/// Legacy `_JS_IMPORT_RE`, ported verbatim.
+static JS_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?:from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|require\s*\(\s*['"]([^'"]+)['"]\s*\))"#,
     )
     .expect("fixed, compile-time-verified literal")
-}
+});
 
-fn go_import_pattern() -> Regex {
-    // Legacy `_GO_IMPORT_RE`, ported verbatim.
+/// Legacy `_GO_IMPORT_RE`, ported verbatim.
+static GO_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?m)^\s*(?:import\s+)?["`]([^"`]+)["`]"#)
         .expect("fixed, compile-time-verified literal")
-}
+});
 
-fn python_import_pattern() -> Regex {
+static PYTHON_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^[ \t]*import\s+([\w.]+(?:\s*,\s*[\w.]+)*)")
         .expect("fixed, compile-time-verified literal")
-}
+});
 
-fn python_from_import_pattern() -> Regex {
+static PYTHON_FROM_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^[ \t]*from\s+(\.*)\s*([\w.]*)\s+import\b")
         .expect("fixed, compile-time-verified literal")
-}
+});
 
 fn split_segments(relative_path: &str) -> Vec<String> {
     relative_path
@@ -164,7 +173,7 @@ fn python_edges(
 ) -> BTreeSet<String> {
     let mut edges = BTreeSet::new();
 
-    for captures in python_import_pattern().captures_iter(text) {
+    for captures in PYTHON_IMPORT.captures_iter(text) {
         let Some(list) = captures.get(1) else {
             continue;
         };
@@ -175,7 +184,7 @@ fn python_edges(
         }
     }
 
-    for captures in python_from_import_pattern().captures_iter(text) {
+    for captures in PYTHON_FROM_IMPORT.captures_iter(text) {
         let dots = captures.get(1).map(|m| m.as_str()).unwrap_or("");
         let module = captures.get(2).map(|m| m.as_str()).unwrap_or("").trim();
         let level = dots.len();
@@ -241,7 +250,7 @@ fn resolve_js_relative(
 
 fn js_edges(current_relative_path: &str, text: &str, known: &HashSet<String>) -> BTreeSet<String> {
     let mut edges = BTreeSet::new();
-    for captures in js_import_pattern().captures_iter(text) {
+    for captures in JS_IMPORT.captures_iter(text) {
         let Some(specifier) = captures
             .get(1)
             .or_else(|| captures.get(2))
@@ -265,7 +274,7 @@ fn go_edges(module_name: &str, text: &str, known: &HashSet<String>) -> BTreeSet<
     if module_name.is_empty() {
         return edges;
     }
-    for captures in go_import_pattern().captures_iter(text) {
+    for captures in GO_IMPORT.captures_iter(text) {
         let Some(spec) = captures.get(1).map(|m| m.as_str()) else {
             continue;
         };

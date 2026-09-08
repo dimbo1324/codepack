@@ -12,6 +12,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::{ReportContext, redact_line};
@@ -39,27 +41,31 @@ const OPENAPI_NAMES: &[&str] = &[
     "swagger.json",
 ];
 
-fn fastapi_pattern() -> Regex {
+// Compiled once, not once per file: the loop below reaches these for every `.py`, `.js`,
+// `.ts`, `.go` and single-file-component source in the project, and a plain
+// `fn -> Regex` rebuilt the identical automaton on each one.
+
+static FASTAPI: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)@(?:app|router)\.(get|post|put|patch|delete|options|head)\(\s*['"]([^'"]+)"#)
         .expect("fixed literal")
-}
-fn flask_pattern() -> Regex {
+});
+static FLASK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?i)@(?:app|blueprint|bp)\.route\(\s*['"]([^'"]+).*?(?:methods\s*=\s*\[([^\]]+)\])?"#,
     )
     .expect("fixed literal")
-}
-fn express_pattern() -> Regex {
+});
+static EXPRESS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)(?:app|router)\.(get|post|put|patch|delete|use)\(\s*['"]([^'"]+)"#)
         .expect("fixed literal")
-}
-fn go_pattern() -> Regex {
+});
+static GO_HANDLE_FUNC: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:http\.)?HandleFunc\(\s*['"]([^'"]+)"#).expect("fixed literal")
-}
-fn fetch_pattern() -> Regex {
+});
+static FETCH_CALL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:fetch|axios\.(?:get|post|put|patch|delete)|client\.(?:get|post|put|patch|delete))\(\s*`?['"]?([^'"`)]+)"#)
         .expect("fixed literal")
-}
+});
 
 fn write_api_surface_report(
     ctx: &ReportContext<'_>,
@@ -92,7 +98,7 @@ fn write_api_surface_report(
         };
 
         if extension == "py" {
-            for captures in fastapi_pattern().captures_iter(&text) {
+            for captures in FASTAPI.captures_iter(&text) {
                 let method = captures
                     .get(1)
                     .map(|m| m.as_str())
@@ -105,7 +111,7 @@ fn write_api_surface_report(
                     .to_string();
                 backend_routes.insert((file.relative_path.clone(), method, route));
             }
-            for captures in flask_pattern().captures_iter(&text) {
+            for captures in FLASK.captures_iter(&text) {
                 let route = captures
                     .get(1)
                     .map(|m| m.as_str())
@@ -122,7 +128,7 @@ fn write_api_surface_report(
             extension,
             "js" | "jsx" | "ts" | "tsx" | "vue" | "svelte" | "astro"
         ) {
-            for captures in express_pattern().captures_iter(&text) {
+            for captures in EXPRESS.captures_iter(&text) {
                 let method = captures
                     .get(1)
                     .map(|m| m.as_str())
@@ -135,7 +141,7 @@ fn write_api_surface_report(
                     .to_string();
                 backend_routes.insert((file.relative_path.clone(), method, route));
             }
-            for captures in fetch_pattern().captures_iter(&text) {
+            for captures in FETCH_CALL.captures_iter(&text) {
                 let Some(call) = captures.get(1).map(|m| m.as_str()) else {
                     continue;
                 };
@@ -149,7 +155,7 @@ fn write_api_surface_report(
                 }
             }
         } else if extension == "go" {
-            for captures in go_pattern().captures_iter(&text) {
+            for captures in GO_HANDLE_FUNC.captures_iter(&text) {
                 let route = captures
                     .get(1)
                     .map(|m| m.as_str())

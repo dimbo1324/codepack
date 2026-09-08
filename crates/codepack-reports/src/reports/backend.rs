@@ -4,6 +4,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::ReportContext;
@@ -34,12 +36,12 @@ const DIR_ROLE_KEYS: &[&str] = &[
     "config",
 ];
 
-fn py_class_pattern() -> Regex {
-    Regex::new(r"(?m)^class\s+([A-Za-z_][A-Za-z0-9_]*)").expect("fixed literal")
-}
-fn py_func_pattern() -> Regex {
-    Regex::new(r"(?m)^def\s+([A-Za-z_][A-Za-z0-9_]*)").expect("fixed literal")
-}
+// Compiled once rather than per scanned file: both are reached from the loop below,
+// which visits every Python source in the project.
+static PY_CLASS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^class\s+([A-Za-z_][A-Za-z0-9_]*)").expect("fixed literal"));
+static PY_FUNC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^def\s+([A-Za-z_][A-Za-z0-9_]*)").expect("fixed literal"));
 
 fn dir_role(directory: &str, key: &str) -> bool {
     let lower_parts: Vec<String> = directory
@@ -105,7 +107,7 @@ fn write_backend_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
         let Some(text) = read_text_unredacted(&ctx.staging_root.join(&native), max_bytes) else {
             continue;
         };
-        for captures in py_class_pattern().captures_iter(&text) {
+        for captures in PY_CLASS.captures_iter(&text) {
             if let Some(name) = captures.get(1) {
                 py_symbols.insert((
                     file.relative_path.clone(),
@@ -114,7 +116,7 @@ fn write_backend_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<(
                 ));
             }
         }
-        for captures in py_func_pattern().captures_iter(&text) {
+        for captures in PY_FUNC.captures_iter(&text) {
             if let Some(name) = captures.get(1) {
                 py_symbols.insert((file.relative_path.clone(), "def", name.as_str().to_string()));
             }

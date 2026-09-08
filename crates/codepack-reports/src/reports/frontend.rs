@@ -4,6 +4,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::ReportContext;
@@ -41,14 +43,16 @@ const INTERESTING_DEPS: &[&str] = &[
     "echarts",
 ];
 
-fn component_pattern() -> Regex {
+// Compiled once rather than per scanned file: both are reached from the loop below,
+// which visits every frontend source in the project.
+static COMPONENT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b(?:export\s+default\s+)?function\s+([A-Z][A-Za-z0-9_]*)|\bconst\s+([A-Z][A-Za-z0-9_]*)\s*=\s*(?:\(|React\.)")
         .expect("fixed literal")
-}
-fn hook_pattern() -> Regex {
+});
+static HOOK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\bfunction\s+(use[A-Z][A-Za-z0-9_]*)|\bconst\s+(use[A-Z][A-Za-z0-9_]*)\s*=")
         .expect("fixed literal")
-}
+});
 
 fn dir_role(directory: &str, key: &str) -> bool {
     let lower_parts: Vec<String> = directory
@@ -136,12 +140,12 @@ fn write_frontend_report(ctx: &ReportContext<'_>, output_file: &Path) -> Result<
         let Some(text) = read_text_unredacted(&ctx.staging_root.join(&native), max_bytes) else {
             continue;
         };
-        for captures in component_pattern().captures_iter(&text) {
+        for captures in COMPONENT.captures_iter(&text) {
             if let Some(name) = captures.get(1).or_else(|| captures.get(2)) {
                 components.insert((file.relative_path.clone(), name.as_str().to_string()));
             }
         }
-        for captures in hook_pattern().captures_iter(&text) {
+        for captures in HOOK.captures_iter(&text) {
             if let Some(name) = captures.get(1).or_else(|| captures.get(2)) {
                 hooks.insert((file.relative_path.clone(), name.as_str().to_string()));
             }

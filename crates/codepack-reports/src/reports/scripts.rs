@@ -15,6 +15,8 @@
 
 use std::path::Path;
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 
 use crate::context::{ReportContext, package_scripts, redact_line, root_entry_exists};
@@ -34,13 +36,14 @@ pub const JOB: ReportJob = ReportJob {
 
 const MAKEFILE_TARGET_LIMIT: usize = 200;
 
-fn makefile_target_pattern() -> Regex {
-    // Legacy `re.match(r"^([A-Za-z0-9_.-]+):(?:\s|$)", line)`.
+/// Legacy `re.match(r"^([A-Za-z0-9_.-]+):(?:\s|$)", line)`. Compiled once: `makefile_targets`
+/// is itself called from the per-file loop below.
+static MAKEFILE_TARGET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^([A-Za-z0-9_.-]+):(?:\s|$)").expect("fixed, compile-time-verified literal")
-}
+});
 
 fn makefile_targets(text: &str) -> Vec<String> {
-    let pattern = makefile_target_pattern();
+    let pattern = &*MAKEFILE_TARGET;
     let mut targets: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for line in text.lines() {
         if line.starts_with('\t') {
