@@ -147,7 +147,7 @@ fn install_hook_with(project_root: &Path, force: bool, strict: bool) -> Result<I
         ))
     })?;
 
-    let (hooks_dir, custom_hooks_path) = hooks_directory(&repository);
+    let (hooks_dir, custom_hooks_path) = hooks_directory(&repository)?;
     std::fs::create_dir_all(&hooks_dir).map_err(|source| CliError::Read {
         path: hooks_dir.clone(),
         source,
@@ -192,7 +192,20 @@ fn install_hook_with(project_root: &Path, force: bool, strict: bool) -> Result<I
 /// A relative `core.hooksPath` is resolved against the working directory, which is what
 /// git does; a bare repository has no working directory, so it falls back to the git
 /// directory itself.
-fn hooks_directory(repository: &git2::Repository) -> (PathBuf, bool) {
+///
+/// A *relative* `core.hooksPath` that climbs out of the repository via `..` (audit
+/// 2026-09-07, S-11) is refused rather than followed: `core.hooksPath` can point
+/// anywhere, including — deliberately, this project's own `.githooks/` is exactly this —
+/// a directory inside the repository other than `.git/hooks`, but a value that escapes
+/// the repository entirely is far more likely a stray relative path from a copied config
+/// than a considered choice, and this command has no business writing an executable
+/// script wherever that resolves to. [`codepack_core::safe_join`] is the same
+/// traversal check that already guards archive extraction and a ZIP member's own
+/// path — this is the identical shape of problem: an untrusted-enough relative path
+/// joined to a base it must not leave. An *absolute* `core.hooksPath` is left alone: that
+/// is unambiguously a deliberate, machine-wide choice, not a relative path that
+/// accidentally climbed too far.
+fn hooks_directory(repository: &git2::Repository) -> Result<(PathBuf, bool)> {
     let configured = repository
         .config()
         .ok()
@@ -201,17 +214,25 @@ fn hooks_directory(repository: &git2::Repository) -> (PathBuf, bool) {
 
     match configured {
         Some(value) => {
-            let path = PathBuf::from(value);
+            let path = PathBuf::from(&value);
             if path.is_absolute() {
-                return (path, true);
+                return Ok((path, true));
             }
             let base = repository
                 .workdir()
                 .unwrap_or_else(|| repository.path())
                 .to_path_buf();
-            (base.join(path), true)
+            let resolved = codepack_core::safe_join(&base, &path).map_err(|_| {
+                CliError::message(format!(
+                    "core.hooksPath is set to {value:?}, which climbs outside the \
+                     repository ({}) — refusing to install a hook there. Point \
+                     core.hooksPath at a directory inside the repository instead.",
+                    base.display()
+                ))
+            })?;
+            Ok((resolved, true))
         }
-        None => (repository.path().join("hooks"), false),
+        None => Ok((repository.path().join("hooks"), false)),
     }
 }
 
@@ -352,6 +373,48 @@ mod tests {
         let written = std::fs::canonicalize(&report.hook).unwrap();
         let expected =
             std::fs::canonicalize(dir.path().join(".githooks").join("pre-commit")).unwrap();
+        assert_eq!(written, expected);
+    }
+
+    /// Audit 2026-09-07, S-11: a *relative* `core.hooksPath` that climbs outside the
+    /// repository must be refused, not followed — this is the exact scenario the audit
+    /// named (`core.hooksPath = ../../elsewhere`), and before this fix `hooks_directory`
+    /// took the configured value as written, letting `PathBuf::join` walk the `..`
+    /// components straight out of the repository.
+    #[test]
+    fn a_hooks_path_that_climbs_outside_the_repository_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = repository(dir.path());
+        repo.config()
+            .unwrap()
+            .set_str("core.hooksPath", "../../elsewhere")
+            .unwrap();
+
+        let error = install_hook_with(dir.path(), false, false).unwrap_err();
+        assert!(error.to_string().contains("climbs outside"), "{error}");
+        // Nothing should have been written anywhere, inside the repository or out.
+        assert!(!dir.path().parent().unwrap().join("elsewhere").exists());
+    }
+
+    /// The negative control for the test above: a relative `core.hooksPath` that stays
+    /// *inside* the repository but is nested more than one level deep must still work —
+    /// the fix must refuse an escape, not merely reject every path with a `/` in it.
+    #[test]
+    fn a_nested_hooks_path_still_inside_the_repository_is_honoured() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = repository(dir.path());
+        repo.config()
+            .unwrap()
+            .set_str("core.hooksPath", "tools/githooks")
+            .unwrap();
+
+        let report = install_hook_with(dir.path(), false, false).unwrap();
+
+        assert!(report.custom_hooks_path);
+        let written = std::fs::canonicalize(&report.hook).unwrap();
+        let expected =
+            std::fs::canonicalize(dir.path().join("tools").join("githooks").join("pre-commit"))
+                .unwrap();
         assert_eq!(written, expected);
     }
 

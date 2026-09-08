@@ -213,7 +213,16 @@ conflict gets escalated, not guessed past silently.
       "package-linux-release"` (distinct from `gate`'s ubuntu leg, a debug build) and
       `save-if: github.ref == 'refs/heads/main'` so a topic branch only reads the
       shared cache rather than filling it with a branch-specific variant
-- [ ] S-11 test for `core.hooksPath` pointing outside the repo
+- [x] S-11 a relative `core.hooksPath` that climbs outside the repository (the audit's
+      own `../../elsewhere` example) is now refused rather than followed — real bug,
+      not just a missing test: `hooks_directory` reused `codepack_core::safe_join`, the
+      same traversal check archive extraction already relies on, rather than a new
+      bespoke one. Verified the new test fails without the fix (reverted locally,
+      confirmed the hook wrote outside the tempdir, restored the fix) before
+      committing. A negative control (nested-but-still-inside path) proves the fix
+      does not just reject every path with a separator. The "tell the user the real
+      path" half of the finding needed no change — `InitReport.hook`/`print_human`
+      already showed the resolved path and flagged a custom `hooksPath`
 
 ## Completion
 
