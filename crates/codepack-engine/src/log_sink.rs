@@ -31,8 +31,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use codepack_core::config::Config;
 use codepack_core::time::UtcDateTime;
-use codepack_core::{LogLevel, ProgressEvent};
+use codepack_core::{AppPaths, LogLevel, ProgressEvent};
 
 const BYTES_PER_MEBIBYTE: u64 = 1024 * 1024;
 
@@ -143,6 +144,33 @@ impl LogSink {
     pub fn set_verbose(&self, verbose: bool) {
         let mut state = lock(&self.state);
         state.verbose = verbose;
+    }
+
+    /// Resolves `AppPaths`, opens the sink against `config`'s log settings, and applies
+    /// the `CODEPACK_LOG=debug` override — the one sequence both `codepack-cli` and
+    /// `codepack-desktop` need at startup, moved here after review found it copied
+    /// identically in each (audit 2026-09-07 remediation): a third override source
+    /// added to only one shell would have logging silently diverge between them, the
+    /// exact defect this module's redaction guarantee exists to prevent for message
+    /// content.
+    ///
+    /// `None` on any failure to resolve paths or open the sink: logging is diagnostic,
+    /// never something a shell should refuse to start over.
+    pub fn open_for_config(config: &Config) -> Option<Self> {
+        let app_paths = AppPaths::resolve().ok()?;
+        let sink = Self::open(
+            app_paths.log_dir(),
+            config.log_max_file_mb,
+            config.log_retention_days,
+            config.log_total_cap_mb,
+        )
+        .ok()?;
+        let verbose = match std::env::var("CODEPACK_LOG") {
+            Ok(value) => value.eq_ignore_ascii_case("debug"),
+            Err(_) => config.log_verbose,
+        };
+        sink.set_verbose(verbose);
+        Some(sink)
     }
 
     /// Translates one [`ProgressEvent`] into zero or one log line, tagged with `run_id`.

@@ -136,20 +136,7 @@ pub(crate) fn open_history_db() -> Result<codepack_storage::Connection> {
 /// per-invocation choice; anything else in the variable (including unset) defers to the
 /// setting.
 pub(crate) fn open_log_sink(config: &Config) -> Option<codepack_engine::LogSink> {
-    let app_paths = AppPaths::resolve().ok()?;
-    let sink = codepack_engine::LogSink::open(
-        app_paths.log_dir(),
-        config.log_max_file_mb,
-        config.log_retention_days,
-        config.log_total_cap_mb,
-    )
-    .ok()?;
-    let verbose = match std::env::var("CODEPACK_LOG") {
-        Ok(value) => value.eq_ignore_ascii_case("debug"),
-        Err(_) => config.log_verbose,
-    };
-    sink.set_verbose(verbose);
-    Some(sink)
+    codepack_engine::LogSink::open_for_config(config)
 }
 
 /// A `run=` tag for the activity log — not the database `export_run.id` (unknown until

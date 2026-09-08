@@ -180,20 +180,7 @@ pub fn open_database() -> CommandResult<codepack_storage::Connection> {
 pub(crate) fn open_log_sink(
     config: &codepack_core::config::Config,
 ) -> Option<codepack_engine::LogSink> {
-    let paths = codepack_core::AppPaths::resolve().ok()?;
-    let sink = codepack_engine::LogSink::open(
-        paths.log_dir(),
-        config.log_max_file_mb,
-        config.log_retention_days,
-        config.log_total_cap_mb,
-    )
-    .ok()?;
-    let verbose = match std::env::var("CODEPACK_LOG") {
-        Ok(value) => value.eq_ignore_ascii_case("debug"),
-        Err(_) => config.log_verbose,
-    };
-    sink.set_verbose(verbose);
-    Some(sink)
+    codepack_engine::LogSink::open_for_config(config)
 }
 
 #[cfg(test)]

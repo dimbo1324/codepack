@@ -19,11 +19,13 @@ mod scripts;
 mod sync_agents;
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Instant;
 
 use gate_report::GateReport;
+use sha2::Digest;
 
 const USAGE: &str = "\
 codepack task runner
@@ -62,6 +64,35 @@ fn run(root: &Path, program: &str, args: &[&str]) -> bool {
             false
         }
     }
+}
+
+/// The short commit hash of `HEAD`, or `"unknown"` if `root` is not a git checkout at
+/// all (a source tarball, say) — packaging and the gate report both name the commit
+/// they ran from, and both must fail the same honest way, not each guess independently.
+/// Shared here after review found the two had drifted into separate, identical copies.
+pub(crate) fn git_head_commit(root: &Path) -> String {
+    Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|commit| !commit.is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// A SHA-256 digest rendered as lowercase hex — the form both `SETUP.txt` and
+/// `SHA256SUMS.txt` publish and `sha256sum -c` reads back. Shared here after review
+/// found the packaging installer and the Linux checksum file each hand-rolling the
+/// identical byte-to-hex loop.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = sha2::Sha256::digest(bytes);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest.iter() {
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
 }
 
 /// The `tests` section, with the names of whatever failed.

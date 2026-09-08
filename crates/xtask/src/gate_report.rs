@@ -362,16 +362,11 @@ fn rotate_old_runs(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The gate report's own commit label: the short hash `crate::git_head_commit` resolves,
+/// with `(dirty)` appended when the tree has uncommitted changes — the one thing a
+/// packaging artifact's own commit label (`installer.rs`) does not need to say.
 fn git_head_commit(root: &Path) -> String {
-    let commit = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .filter(|commit| !commit.is_empty())
-        .unwrap_or_else(|| "unknown".to_string());
+    let commit = crate::git_head_commit(root);
 
     let dirty = Command::new("git")
         .args(["status", "--porcelain"])

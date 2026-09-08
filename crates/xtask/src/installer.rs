@@ -31,35 +31,11 @@
 
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
+use crate::{git_head_commit, sha256_hex};
 
 /// `setup.exe`'s permanent name — referenced by the README link, never renamed.
 const INSTALLER_FILE: &str = "setup.exe";
 const INFO_FILE: &str = "SETUP.txt";
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut hex = String::with_capacity(digest.len() * 2);
-    for byte in digest.iter() {
-        use std::fmt::Write as _;
-        let _ = write!(hex, "{byte:02x}");
-    }
-    hex
-}
-
-fn git_head_commit(root: &Path) -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .filter(|commit| !commit.is_empty())
-        // Packaging must not fail just because the tree it is building from is not a
-        // git checkout (a source tarball, say) — `SETUP.txt` says so honestly instead.
-        .unwrap_or_else(|| "unknown".to_string())
-}
 
 /// Copies the NSIS installer from `bundle_root/nsis/*.exe` to `root/setup.exe`, and
 /// writes `root/SETUP.txt` describing it. Does nothing, successfully, when

@@ -12,9 +12,9 @@
 //! step impossible to do quietly.
 
 use std::path::{Path, PathBuf};
-
-use sha2::{Digest, Sha256};
 use std::process::Command;
+
+use crate::sha256_hex;
 
 /// pnpm ships as `pnpm.CMD` on Windows, and `std::process::Command` only ever appends
 /// `.exe` when resolving a bare name — so naming it `pnpm` fails with "program not found"
@@ -212,12 +212,7 @@ fn write_checksums(bundle: &Path) -> Result<PathBuf, String> {
     for path in entries {
         let bytes = std::fs::read(&path)
             .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
-        let digest = Sha256::digest(&bytes);
-        let mut hex = String::with_capacity(digest.len() * 2);
-        for byte in digest.iter() {
-            use std::fmt::Write as _;
-            let _ = write!(hex, "{byte:02x}");
-        }
+        let hex = sha256_hex(&bytes);
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         lines.push(format!("{hex}  {name}"));
     }
