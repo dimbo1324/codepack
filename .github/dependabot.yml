@@ -7,7 +7,19 @@ updates:
   # keeps that pin from going stale by hand — it moves the SHA and the comment
   # together, as a normal, reviewable PR, rather than either being updated alone or
   # never updated at all.
+  #
+  # Monthly and grouped, not weekly and one-per-action (2026-09-08). The first week
+  # this config existed it opened five separate PRs and five branches, which is the
+  # correct behaviour for a repository someone reads every day and the wrong one for
+  # this project, which is expected to sit untouched for months at a stretch: by the
+  # time anyone looks, the queue is dozens of branches deep and each PR is stale
+  # against the others. One grouped PR a month is still a prompt to update, still
+  # reviewable in a single sitting, and cannot bury the branch list.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 3
