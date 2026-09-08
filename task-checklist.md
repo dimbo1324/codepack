@@ -192,7 +192,11 @@ conflict gets escalated, not guessed past silently.
 - [ ] The 15 adversarial tests from `04-TESTS.txt` not already covered above
 - [ ] T-11 print skip reason instead of silently passing when a tool is absent
 - [ ] T-12 split unit tests from against-the-real-repository tests in xtask
-- [ ] C-5 completions test stops flooding the gate log
+- [x] C-5 completions test stops flooding the gate log — `write_completions` split out
+      so the test captures into a `Vec<u8>` instead of calling `run` (which writes to
+      real stdout) directly; now asserts the script is non-empty and actually names
+      `codepack` and a real subcommand, not just "did not panic". `manpage.rs`'s own
+      test already captured correctly, so needed no change
 - [ ] C-6 package-linux job scoped to relevant paths
 - [ ] C-8 rust-cache prefix keys for package-linux
 - [ ] S-11 test for `core.hooksPath` pointing outside the repo
