@@ -80,7 +80,7 @@ jobs:
       # steps that skip is what CI did — the checks existed and never ran anywhere except a
       # developer's machine. `xtask` now also hard-fails instead of skipping when `CI` is
       # set, so deleting these steps breaks the build loudly rather than silently.
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
