@@ -189,7 +189,39 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 8 — remaining tests and hygiene
 
-- [ ] The 15 adversarial tests from `04-TESTS.txt` not already covered above
+- [x] The 15 adversarial tests from `04-TESTS.txt` not already covered above — audited
+      one by one against everything already done this session:
+      - Already covered by earlier work in this session: 2 (non-UTF-8 filename), 3
+        (path check accepts own output), 5 (7z reads like ZIP, Q-2), 6 (extraction
+        doesn't create a world-writable file, S-5), 9 (secret doesn't reach the
+        progress channel, S-8)
+      - Already covered before this session, confirmed still present: 1 (backslash
+        filename), 4 (foreign path rejected), 7 (a hung formatter doesn't hang the
+        run, P-1), 8 (watch doesn't subscribe to ignored dirs, L-2), 14 (`codepack` in
+        the built package, CI `.deb` check), 15 (app starts without a tray, "GUI
+        starts under Xvfb" CI step)
+      - 13 (log directory respects `$XDG_STATE_HOME`): already adequately covered —
+        `xdg_dir_from`'s 3 unit tests plus `linux_layout_matches_blueprint_d4`'s
+        wiring test, confirmed against `resolve_base_dirs()`'s source calling
+        `xdg_dir("XDG_STATE_HOME", ...)` distinctly from the `XDG_DATA_HOME` call — no
+        new work needed
+      - 10 (a huge text file doesn't eat memory): the test already existed
+        (`crates/codepack-security/tests/large_file_scan.rs`, `#[ignore]`-gated, its
+        own doc comment already said "run explicitly or in the weekly job") but
+        `grep -rln large_file_scan .github/` found it wired into nothing — genuine gap,
+        closed by adding it to `.github/workflows/perf-smoke-weekly.yml`
+      - 12 (cancelling mid-packing of a large file is not interruptible): no test
+        existed. Written as a characterization test (documents current known-debt
+        behavior, does not fix it, per the audit's own instruction to write such a
+        test before anyone starts fixing the behavior) —
+        `crates/codepack-archive/tests/cancellation_mid_file.rs`, `#[ignore]`-gated,
+        wired into the same weekly job. Verified by running it explicitly
+        (`cargo test -p codepack-archive --release --test cancellation_mid_file --
+        --ignored --nocapture`): passes, confirming both writers only check
+        cancellation once per member and never mid-copy
+      - 11 (two processes opening a new database simultaneously): explicitly and
+        already deferred with reasoning in the P-3/Q-8 commit — recorded in
+        `docs/architecture/overview.md`'s Known Debt, not silently dropped
 - [x] T-11 `codepack-sanitize`'s gofmt/ruff/ktlint tests print `skipped: <tool> is not
       on PATH` via a shared `skip_if_absent` helper instead of returning silently;
       `gofmt` itself needs no new CI step since Go ships preinstalled on all three

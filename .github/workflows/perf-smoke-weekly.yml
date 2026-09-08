@@ -9,11 +9,20 @@ name: perf smoke (weekly)
 # what happened on 2026-09-06, and diagnosing it that day took several manual timed
 # runs instead of reading one.
 #
-# Not in the main gate: five extra minutes on every push is unacceptable, and
+# `04-TESTS.txt` adversarial items 10 and 12 ride along in the same job:
+# `codepack-security`'s `large_file_scan` test writes a 300 MiB fixture to prove a huge
+# file is scanned up to the ceiling rather than read whole, and its own module doc
+# already said "run explicitly or in the weekly job" — this workflow is that job.
+# `codepack-archive`'s `cancellation_mid_file` test is a characterization test for
+# known debt (docs/architecture/overview.md): cancelling mid-copy of a single large
+# archive member does not interrupt it, since both writers only check cancellation
+# once per member.
+#
+# Not in the main gate: several extra minutes on every push is unacceptable, and
 # `12-domain-rules.md`'s own opt-in rule for heavy tests says so. A schedule, on a fixed
-# runner type — the scaling *ratio* travels across hardware, but the absolute-time
-# backstop this test also checks does not, so comparing one Monday's ubuntu-latest run
-# against another's is what makes a week-over-week trend legible at all.
+# runner type — the scaling *ratio* `perf_smoke` checks travels across hardware, but the
+# absolute-time backstop it also checks does not, so comparing one Monday's
+# ubuntu-latest run against another's is what makes a week-over-week trend legible.
 on:
   schedule:
     - cron: "0 3 * * 1" # Monday, 03:00 UTC
@@ -24,7 +33,7 @@ permissions:
 
 jobs:
   perf-smoke:
-    name: perf_smoke (release)
+    name: perf_smoke + large_file_scan + cancellation_mid_file (release)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -45,6 +54,22 @@ jobs:
           set -o pipefail
           cargo test -p codepack-engine --release -- --ignored --nocapture 2>&1 | tee perf-smoke.log
 
+      # `04-TESTS.txt` item 10: same binary-opt-in convention, its own log so a failure
+      # here is never mistaken for a `perf_smoke` scaling regression.
+      - name: cargo test -p codepack-security --release --test large_file_scan -- --ignored --nocapture
+        run: |
+          set -o pipefail
+          cargo test -p codepack-security --release --test large_file_scan -- --ignored --nocapture 2>&1 | tee large-file-scan.log
+
+      # `04-TESTS.txt` item 12: a characterization test, not a regression test — it is
+      # expected to keep passing until someone deliberately changes the known-debt
+      # behavior it documents, at which point it (and the Known Debt entry) get updated
+      # together, not silently broken by a red weekly run nobody investigates.
+      - name: cargo test -p codepack-archive --release --test cancellation_mid_file -- --ignored --nocapture
+        run: |
+          set -o pipefail
+          cargo test -p codepack-archive --release --test cancellation_mid_file -- --ignored --nocapture 2>&1 | tee cancellation-mid-file.log
+
       # One line per run, appended forever: this is the whole "a week-over-week trend"
       # the audit asked for, and it costs nothing more than grepping the log this step
       # already has open.
@@ -56,11 +81,22 @@ jobs:
             echo '```text'
             grep "^perf_smoke:" perf-smoke.log || echo "(no perf_smoke lines found — see the full log below)"
             echo '```'
+            echo "### large_file_scan — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo '```text'
+            grep -E "^test result:|running 1 test" large-file-scan.log || echo "(no summary line found — see the full log below)"
+            echo '```'
+            echo "### cancellation_mid_file — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo '```text'
+            grep -E "^test result:|running 1 test" cancellation-mid-file.log || echo "(no summary line found — see the full log below)"
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: always()
         with:
           name: perf-smoke-log
-          path: perf-smoke.log
+          path: |
+            perf-smoke.log
+            large-file-scan.log
+            cancellation-mid-file.log
           if-no-files-found: warn
