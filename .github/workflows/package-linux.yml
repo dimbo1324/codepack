@@ -1,0 +1,321 @@
+name: package (linux)
+
+# Split out of ci.yml (audit 2026-09-07, C-6): this job builds a release desktop app
+# end to end — 6:28 of a 7:14 run, measured on run #109 — and the comment that used to
+# sit beside it in ci.yml already explained why it does not belong in the gate ("needs
+# a release build of the whole desktop app, which would roughly double the gate's wall
+# clock on every push for a check that only has to hold when packaging changes"). That
+# reasoning is exactly the argument for the step that was still missing: run it only
+# when packaging-relevant files actually changed, plus on demand and on every tag,
+# rather than on every push to any branch.
+# A release tag needs no trigger of its own here: `release.yml` already runs this same
+# `cargo xtask package` step (and actually publishes what it produces) on every `v*`
+# tag, so this workflow's own job is redundant with it on that path and does not need
+# to also fire unconditionally there.
+on:
+  push:
+    branches: ["**"]
+    paths: &packaging-relevant-paths
+      - "apps/desktop/src-tauri/tauri.conf.json"
+      - "apps/desktop/src-tauri/linux/**"
+      - "crates/xtask/src/frontend.rs"
+      - "crates/xtask/src/packaging_assets.rs"
+      - "crates/xtask/src/installer.rs"
+      - ".github/workflows/package-linux.yml"
+  pull_request:
+    paths: *packaging-relevant-paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Packaging is the one thing the gate cannot check: `cargo xtask gate` compiles and
+  # tests the workspace, and a bundler config can be wrong in every way while all of that
+  # stays green. The Windows installer at least gets built by hand before a release; the
+  # Linux packages were introduced on a Windows machine with no way to run them, so this
+  # job is the only thing standing between "the config looks right" and "it works".
+  package-linux:
+    name: package (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # No job in this workflow pushes anything; the checkout token has no reason to
+          # outlive this step (audit 2026-09-07, S-4). Without this it stays in the
+          # working tree's git config, readable by every later step, including
+          # `cargo build`, which runs the `build.rs` of a dependency that could be
+          # replaced by a compromised update between one run and the next.
+          persist-credentials: false
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libdbus-1-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      # Audit 2026-09-07, C-8: `gate`'s ubuntu leg and this job both cache Rust builds
+      # for the same OS, but this one is a full *release* build of the whole desktop
+      # app and `gate` is debug — sharing the default key would mean the two evict each
+      # other rather than each keeping its own useful cache. `prefix-key` makes them
+      # distinct caches; `save-if` limits who is allowed to overwrite the shared cache
+      # to `main`, so a topic branch's packaging run only ever reads it, never fills it
+      # with a branch-specific variant nobody else benefits from.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          prefix-key: "package-linux-release"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Audit 2026-09-07, S-10: `xtask::packaging_assets::prepare` builds the CLI this
+      # job ships at `/usr/bin/codepack` with `cargo auditable`, not a plain build.
+      - name: Install cargo-auditable
+        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
+        with:
+          tool: cargo-auditable
+
+      - name: cargo xtask package
+        run: cargo xtask package
+
+      # What the config claims, checked against what the bundler actually wrote. Reading
+      # the .deb's control file and file list is the difference between "the JSON parsed"
+      # and "the package declares its webview dependency and installs a desktop entry".
+      - name: Inspect the .deb
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=$(ls target/release/bundle/deb/*.deb)
+          echo "== control =="
+          dpkg-deb --field "$deb"
+          echo "== contents =="
+          dpkg-deb --contents "$deb"
+
+          # Read each stream once into a variable and match against that, rather than
+          # piping into `grep -q`: `-q` exits on the first match, closing its end of the
+          # pipe, and dpkg-deb (tar underneath) can get SIGPIPE/EPIPE on its next write
+          # and return non-zero — which `pipefail` then reports as *this check* failing,
+          # even though the dependency or entry it was looking for is right there (audit
+          # 2026-09-07, C-1, run #109). `case` also has no need for `grep`'s regex
+          # escaping, the way the icon check below already avoids it for `128x128` being
+          # a prefix of `128x128@2x`.
+          fail=0
+          depends="$(dpkg-deb --field "$deb" Depends)"
+          contents="$(dpkg-deb --contents "$deb")"
+          for dependency in libwebkit2gtk-4.1-0 libgtk-3-0 xdg-utils; do
+            case "$depends" in
+              *"$dependency"*) ;;
+              *)
+                echo "::error title=deb::Depends is missing $dependency" >&2
+                fail=1
+                ;;
+            esac
+          done
+          case "$contents" in
+            *applications/*.desktop*) ;;
+            *)
+              echo "::error title=deb::no desktop entry in the package" >&2
+              fail=1
+              ;;
+          esac
+          # Audit 2026-09-07, L-1/L-10: this is the one place that can tell "the CLI was
+          # never bundled" apart from "the CLI was bundled and I forgot to check for it"
+          # — README's whole Quick start is CLI commands, and a package without
+          # `usr/bin/codepack` makes every one of them `command not found`.
+          case "$contents" in
+            *usr/bin/codepack*) ;;
+            *)
+              echo "::error title=deb::usr/bin/codepack is missing from the package" >&2
+              fail=1
+              ;;
+          esac
+          case "$contents" in
+            *usr/share/bash-completion/completions/codepack*) ;;
+            *)
+              echo "::error title=deb::no shell completion file in the package" >&2
+              fail=1
+              ;;
+          esac
+          # `128x128@2x.png` installs into a `128x128@2x` directory, not `256x256`:
+          # hicolor names a scaled directory after its base size, and Tauri follows that.
+          # So the sizes asserted here are the ones with a plainly named source file.
+          # Membership in a space-separated list rather than a regex, because `128x128`
+          # is a prefix of `128x128@2x` and a careless pattern would accept the wrong one.
+          icons=$(printf '%s\n' "$contents" | grep -o 'icons/hicolor/[^/]*' | sort -u | xargs)
+          for size in 128x128 512x512; do
+            case " $icons " in
+              *" icons/hicolor/$size "*) ;;
+              *)
+                echo "::error title=deb::no $size icon in the package; it installs: $icons" >&2
+                fail=1
+                ;;
+            esac
+          done
+          exit $fail
+
+      - name: Verify the checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in target/release/bundle/*/; do
+            if [ -f "$dir/SHA256SUMS.txt" ]; then
+              (cd "$dir" && sha256sum -c SHA256SUMS.txt)
+            fi
+          done
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: linux-packages
+          path: |
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/*/SHA256SUMS.txt
+          if-no-files-found: error
+
+  # Audit 2026-09-07, C-4/L-13/T-9: `package-linux` proves the packages build and that
+  # `.deb` declares the dependencies and files it should. Nobody checked what happens
+  # after `apt-get install` — which is exactly why L-1 (no CLI in the package) went
+  # unnoticed until this pass. No checkout here on purpose: everything this job needs is
+  # the downloaded package plus a fixture built inline, which sidesteps needing git (and
+  # therefore an extra Node bootstrap for `actions/checkout`) inside a bare distribution
+  # image.
+  install-and-run-linux:
+    name: install & run (${{ matrix.image }})
+    needs: package-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: "ubuntu:24.04"
+            pkg_manager: apt
+            package_glob: "target/release/bundle/deb/*.deb"
+          - image: "debian:12"
+            pkg_manager: apt
+            package_glob: "target/release/bundle/deb/*.deb"
+          - image: "fedora:41"
+            pkg_manager: dnf
+            package_glob: "target/release/bundle/rpm/*.rpm"
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-packages
+
+      - name: Install the package (apt)
+        if: matrix.pkg_manager == 'apt'
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          # xvfb and dbus (dbus-run-session) plus dbus-x11 (dbus-launch and the rest of
+          # the X11 integration) are for the GUI-startup check below, not for installing
+          # the package itself — apt resolves codepack's own runtime dependencies
+          # (webkit2gtk, gtk3, appindicator, librsvg2, xdg-utils) from its `Depends`
+          # field, which is the whole point of installing through the package manager
+          # rather than copying the binary out by hand.
+          apt-get install -y --no-install-recommends xvfb dbus dbus-x11
+          apt-get install -y ./${{ matrix.package_glob }}
+
+      - name: Install the package (dnf)
+        if: matrix.pkg_manager == 'dnf'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dnf install -y xorg-x11-server-Xvfb dbus dbus-x11
+          dnf install -y ./${{ matrix.package_glob }}
+
+      - name: Headless export with the installed CLI
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/fixture/src
+          printf 'fn main() { println!("hi"); }\n' > /tmp/fixture/src/main.rs
+          printf '# fixture\n' > /tmp/fixture/README.md
+          printf 'API_KEY=totally-fake-not-a-real-secret\n' > /tmp/fixture/.env
+
+          # `|| exported=$?` rather than a bare call: errexit would otherwise abort this
+          # step before the code below can tell exit 3 (critical findings — the `.env`
+          # above is planted on purpose) apart from a real failure.
+          exported=0
+          codepack export /tmp/fixture --out /tmp/bundle --safe-mode safe --json \
+            > /tmp/export.json || exported=$?
+          if [ "$exported" -ne 0 ] && [ "$exported" -ne 3 ]; then
+            echo "::error title=install-and-run::headless export failed with exit $exported" >&2
+            cat /tmp/export.json >&2 || true
+            exit 1
+          fi
+
+          # A light check, not `tests/ci/check_export_report.py`'s full one: this job
+          # has no checkout, so it has no copy of that script, and reaching for one
+          # here would mean either fetching it over the network mid-job or duplicating
+          # its logic — the `gate` job's native-OS legs already run the thorough
+          # version of this check on every push. What this job answers is narrower and
+          # does not need it: did the *installed* binary run at all.
+          report="$(cat /tmp/export.json)"
+          case "$report" in
+            *'"successful": true'*) ;;
+            *)
+              echo "::error title=install-and-run::export report does not say successful: true" >&2
+              echo "$report" >&2
+              exit 1
+              ;;
+          esac
+          result_path=$(printf '%s\n' "$report" | grep -o '"result_path": "[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ -z "$result_path" ] || [ ! -f "$result_path" ]; then
+            echo "::error title=install-and-run::result_path missing or does not exist: $result_path" >&2
+            exit 1
+          fi
+          echo "headless export via the installed package produced: $result_path"
+
+      # Rough on purpose (audit's own words): this tells "does not start at all" apart
+      # from everything else, which is what caught L-5 (a failed tray aborting startup)
+      # and is meant to surface L-7 (DMABUF under a software renderer) if it reproduces
+      # here. `continue-on-error`: a runner's GPU/Xvfb interaction is exactly the kind
+      # of environment-specific failure this step exists to observe, not something this
+      # job can fix from here, and it must not block the export check above — which is
+      # the one this job actually exists to guarantee — from reporting green.
+      - name: GUI starts under Xvfb
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          Xvfb :99 -screen 0 1024x768x24 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          dbus-run-session -- codepack-desktop &
+          app_pid=$!
+          sleep 5
+          if kill -0 "$app_pid" 2>/dev/null; then
+            echo "codepack-desktop is still running after 5s under Xvfb"
+            status=0
+          else
+            echo "::warning title=install-and-run::codepack-desktop exited within 5s under Xvfb (L-5/L-7?)"
+            status=1
+          fi
+          kill "$app_pid" 2>/dev/null || true
+          kill "$xvfb_pid" 2>/dev/null || true
+          exit $status

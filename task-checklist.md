@@ -197,8 +197,15 @@ conflict gets escalated, not guessed past silently.
       real stdout) directly; now asserts the script is non-empty and actually names
       `codepack` and a real subcommand, not just "did not panic". `manpage.rs`'s own
       test already captured correctly, so needed no change
-- [ ] C-6 package-linux job scoped to relevant paths
-- [ ] C-8 rust-cache prefix keys for package-linux
+- [x] C-6 `package-linux`/`install-and-run-linux` split out of `ci.yml` into a new
+      path-filtered `.github/workflows/package-linux.yml` (`tauri.conf.json`, the
+      Linux-relevant xtask sources, its own workflow file), plus `workflow_dispatch`;
+      the release tag path needs no trigger of its own here since `release.yml`
+      already runs the same `cargo xtask package` on every `v*` tag
+- [x] C-8 `Swatinem/rust-cache` in the new `package-linux.yml` gets `prefix-key:
+      "package-linux-release"` (distinct from `gate`'s ubuntu leg, a debug build) and
+      `save-if: github.ref == 'refs/heads/main'` so a topic branch only reads the
+      shared cache rather than filling it with a branch-specific variant
 - [ ] S-11 test for `core.hooksPath` pointing outside the repo
 
 ## Completion
