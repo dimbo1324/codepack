@@ -50,7 +50,7 @@ question appear. No `codepack-*` crate knows about Tauri or the frontend
 | `codepack-scanner` | Walks the tree, applies ignore rules (base, per-stack, `.exportignore`, user rules), detects the stack, and builds the export plan. Symlinks are never followed (invariant I7). |
 | `codepack-security` | Safe-export modes, secret redaction (plain, or with a stable per-secret label — `Redactor`), and the detector: provider signatures, entropy, a keyword cascade and named risky-code shapes. Carries an accuracy corpus test whose precision/recall thresholds may never be lowered (invariant I9). Emits SARIF 2.1.0. |
 | `codepack-diff` | Differential export and snapshots through `git2`. Never requires a `git` binary. |
-| `codepack-storage` | SQLite: seven tables plus `schema_version`, numbered migrations, run history, snapshots, findings, and per-project retention. Has no runtime dependency on any other `codepack-*` crate. |
+| `codepack-storage` | SQLite: seven tables plus `schema_version`, numbered migrations, run history, snapshots, findings, and per-project retention. Has no runtime dependency on any other `codepack-*` crate. `enable_wal` deliberately never fails when WAL cannot be switched on after contention (a rollback-mode connection still works, just serialises readers behind writers) — `journal_mode()` reads the mode back, and `codepack doctor` surfaces it, so that degradation is observable instead of silent (audit 2026-09-07, P-3/Q-8). |
 | `codepack-tokens` | Byte formatting (preserved verbatim from the previous version — invariant I4), token estimation, the budget selection, and `ModelContextLimits`, the model→context-window table that `--budget <model>` resolves through. |
 | `codepack-reports` | Around thirty insight reports, `PROJECT_PROFILE.json`, the AI context and prompt folders, the HTML dashboard, and the human-oriented reports (project overview, onboarding guide, review checklist). |
 | `codepack-archive` | Archive building and restore. Two entry points: the export pipeline's planned, splittable, reported output, and `pack_files`, which packs a caller-named list of files into one archive. Both honour `ArchiveFormat` — ZIP by default, 7z on request, RAR reserved and refused. Extraction is path-traversal safe (invariant I7). |
@@ -158,6 +158,17 @@ run id and can be cancelled.
   loop. Accepted deliberately: the pipeline level already bounds the risk.
 - Cancelling while a single very large file is being packed into an archive is not
   interruptible until that file finishes.
+- The desktop shell opens a fresh SQLite connection (full pragma re-application and
+  migration no-op check) on every Tauri command that touches history, rather than
+  holding one shared, mutex-guarded connection in `AppState` — audit 2026-09-07, P-3's
+  second half. Recorded rather than rushed: sharing one connection across a
+  long-running export's own writes and a concurrent `history` read needs careful
+  lock-scoping to avoid serialising one behind the other, which is a properly tested
+  change, not one to make near the end of an already large remediation pass. The first
+  half of P-3 (making a WAL fallback observable) is done; the third — a two-*process*
+  WAL-contention regression test, mirroring the real "app and a pre-commit hook running
+  at once" scenario `wal_concurrency.rs`'s existing thread-based test cannot reproduce —
+  is deferred alongside it for the same reason.
 
 ## What came before
 

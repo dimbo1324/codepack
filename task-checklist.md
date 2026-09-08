@@ -164,7 +164,18 @@ conflict gets escalated, not guessed past silently.
 - [x] P-5 scan-cache mutex poisoning asymmetry fixed (`lookup`/`store` now recover from
       poisoning the same way `flush` already did); 2 new tests, verified to fail
       without the fix before committing it
-- [ ] P-3/Q-8 observable WAL fallback in `doctor`; single shared connection in desktop `AppState`
+- [x] P-3/Q-8 (part 1 of 3) observable WAL fallback: `codepack_storage::journal_mode`,
+      surfaced by `codepack doctor` (JSON and human output), tested both ways (a
+      freshly-created database reports `wal`; the field is absent, not `null`, when no
+      database exists yet — opening one just to check would create it)
+- [ ] P-3 (part 2 of 3) single shared `Mutex<Connection>` in desktop `AppState`, replacing
+      a fresh connection per Tauri command — genuinely not done: needs careful
+      lock-scoping so a long export's own writes do not serialise a concurrent
+      `history` read behind them, which is a properly tested structural change, not one
+      to rush near the end of an already large remediation pass. Recorded in
+      `docs/architecture/overview.md`'s Known debt rather than silently dropped
+- [ ] P-3 (part 3 of 3) a second `wal_concurrency` regression test from two real
+      **processes**, not threads — deferred alongside part 2 for the same reason
 - [x] P-9/Q-9 `codepack-security::scan`'s three `sort_by` calls (files/secrets/risky)
       converted to `sort_by_cached_key`, stability preserved and restated in comment
       (invariant I5); `codepack-scanner::walk.rs`'s `compare_like_os_walk` deliberately

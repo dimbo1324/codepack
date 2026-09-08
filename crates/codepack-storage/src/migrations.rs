@@ -178,6 +178,18 @@ fn enable_wal(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reads back the journal mode a connection is actually running in.
+///
+/// Audit 2026-09-07, Q-8: [`enable_wal`] deliberately never fails when WAL cannot be
+/// switched on — refusing to open the database over a journalling mode would be worse —
+/// but a rollback-mode connection degrades silently otherwise: a reader blocks a writer
+/// in that mode, and "the interface hangs during export" would be undiagnosable from
+/// the outside. This is the other half of that decision: making the degradation
+/// observable rather than changing it. `codepack doctor` is the caller that surfaces it.
+pub fn journal_mode(conn: &Connection) -> Result<String> {
+    Ok(conn.query_row("PRAGMA journal_mode", [], |row| row.get(0))?)
+}
+
 fn is_busy(error: &rusqlite::Error) -> bool {
     matches!(
         error,
@@ -331,6 +343,21 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .unwrap();
         assert_eq!(journal_mode.to_lowercase(), "wal");
+    }
+
+    /// Audit 2026-09-07, Q-8: the public accessor `codepack doctor` calls agrees with
+    /// the pragma it wraps.
+    #[test]
+    fn journal_mode_reports_wal_for_a_normal_on_disk_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open(&dir.path().join("codepack.db")).unwrap();
+        assert_eq!(journal_mode(&conn).unwrap().to_lowercase(), "wal");
+    }
+
+    #[test]
+    fn journal_mode_reports_memory_for_an_in_memory_database() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert_eq!(journal_mode(&conn).unwrap().to_lowercase(), "memory");
     }
 
     #[test]

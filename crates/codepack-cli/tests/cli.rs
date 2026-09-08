@@ -461,6 +461,26 @@ fn doctor_states_the_privacy_guarantee_and_lists_the_presets() {
     assert_eq!(report["project_config_file"], ".codepack.toml");
     // No `--collect-logs` was passed: the field is absent entirely, not `null`.
     assert!(report.get("log_collection").is_none());
+    // No export has run in this sandbox yet, so there is no database to open — the
+    // journal mode field must be absent entirely too, not `null` (audit 2026-09-07, Q-8).
+    assert!(report["paths"].get("database_journal_mode").is_none());
+}
+
+/// Audit 2026-09-07, Q-8: the WAL-fallback degradation `enable_wal` deliberately never
+/// fails on is made observable through `doctor` rather than left silent.
+#[test]
+fn doctor_reports_the_journal_mode_once_a_database_exists() {
+    let sandbox = Sandbox::new();
+    // Any command that opens the history database creates it; `history` is the
+    // cheapest one that does not need a real export first.
+    let created = sandbox.run(&["--json", "history"]);
+    assert_eq!(code(&created), 0, "stderr:\n{}", stderr(&created));
+
+    let report = json(&sandbox.run(&["--json", "doctor"]));
+    let mode = report["paths"]["database_journal_mode"]
+        .as_str()
+        .unwrap_or_else(|| panic!("paths.database_journal_mode missing or not a string: {report}"));
+    assert_eq!(mode.to_lowercase(), "wal");
 }
 
 #[test]

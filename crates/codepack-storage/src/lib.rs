@@ -42,7 +42,7 @@ pub use baseline::latest_snapshot;
 pub use error::{Result, StorageError};
 pub use history::{ExportRunRecord, export_run_result_path_matches, list_export_runs};
 pub use import::{ImportReport, import_legacy_history};
-pub use migrations::open;
+pub use migrations::{journal_mode, open};
 pub use project::{find_or_create_project, find_project_id};
 pub use retention::cleanup_old_runs;
 pub use run::record_export_run;

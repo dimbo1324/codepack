@@ -55,6 +55,13 @@ pub(crate) struct Paths {
     /// the moment the database is opened, because opening it performs the move.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub database_superseded: Option<String>,
+    /// `None` when `database_exists` is `false` — `doctor` opens the file at its
+    /// already-confirmed path to read this back rather than through the usual
+    /// `migrated_db_file` entry point, specifically so checking it never performs the
+    /// old-location move `database_superseded` above is reporting as still pending
+    /// (audit 2026-09-07, Q-8).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub database_journal_mode: Option<String>,
     pub user_profiles_file: String,
     pub user_profiles_file_exists: bool,
     pub(crate) model_limits_file: String,
@@ -103,6 +110,18 @@ fn build(args: &DoctorArgs) -> Result<DoctorReport> {
         None => None,
     };
 
+    // Only when the file already exists: opening a path that does not yet exist would
+    // create an empty database there, which is not `doctor`'s call to make, and would
+    // interact badly with `database_superseded` above if the *old* location still holds
+    // the real data (audit 2026-09-07, Q-8).
+    let database_journal_mode = if database.is_file() {
+        codepack_storage::open(&database)
+            .ok()
+            .and_then(|conn| codepack_storage::journal_mode(&conn).ok())
+    } else {
+        None
+    };
+
     Ok(DoctorReport {
         version: env!("CARGO_PKG_VERSION"),
         json_schema_version: crate::output::JSON_SCHEMA_VERSION,
@@ -117,6 +136,7 @@ fn build(args: &DoctorArgs) -> Result<DoctorReport> {
             database_superseded: superseded
                 .filter(|path| path.is_file())
                 .map(|path| path.display().to_string()),
+            database_journal_mode,
             user_profiles_file_exists: user_profiles_file.is_file(),
             user_profiles_file: user_profiles_file.display().to_string(),
             model_limits_file_exists: model_limits_file.is_file(),
@@ -260,6 +280,21 @@ fn print_human(report: &DoctorReport) {
             "  {:<13} {superseded} (moves here on first use)",
             "history (old)"
         ));
+    }
+
+    // Audit 2026-09-07, Q-8: named here rather than left silent, matching the project's
+    // own "skipped with a notice" precedent for the frontend gate checks — a rollback
+    // connection degrades quietly otherwise, and "the interface hangs during export"
+    // would have no diagnosable cause without this line.
+    if let Some(mode) = &report.paths.database_journal_mode {
+        if mode.eq_ignore_ascii_case("wal") {
+            output::line(format!("  journal mode:  {mode}"));
+        } else {
+            output::line(format!(
+                "  journal mode:  {mode} — the database is open in a fallback mode; \
+                 the app and the CLI working with history at the same time will be slow"
+            ));
+        }
     }
 
     output::line("");
