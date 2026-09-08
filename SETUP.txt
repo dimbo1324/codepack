@@ -1,0 +1,15 @@
+codepack setup
+------------------------------------------------------------
+file:      setup.exe
+version:   2.0.0
+platform:  Windows x64 (NSIS, install for the current user)
+built:     2026-09-08T13:57:18Z
+commit:    fc0546f
+source:    target/release/bundle\nsis\codepack_2.0.0_x64-setup.exe
+sha256:    0d6923ba0bc0f52bc0de61d863208c71b418fae5119ced30e779b94b76c59195
+
+Verify before running (PowerShell):
+    Get-FileHash .\setup.exe -Algorithm SHA256
+
+This installer is unsigned: SmartScreen will warn about an unknown publisher.
+Signing is planned for stage S14.
