@@ -260,10 +260,10 @@ conflict gets escalated, not guessed past silently.
 
 - [x] Full `cargo xtask gate` green locally (Windows leg) — 12/12 sections, re-verified
       after each fix below
-- [ ] Push and confirm CI green on all three OS legs and the packaging job — first push
+- [x] Push and confirm CI green on all three OS legs and the packaging job — first push
       of this branch (needed to actually exercise CI, which this session's commits
-      could only build/clippy/test locally for) found two real, previously-unexecuted
-      bugs, both fixed and re-pushed:
+      could only build/clippy/test locally for) found four real, previously-unexecuted
+      bugs, all fixed and re-pushed, final state confirmed fully green:
       - macOS gate: `codepack-scanner`'s
         `a_real_non_utf8_named_file_on_disk_does_not_break_the_whole_plan` was
         `#[cfg(unix)]` but writes a genuinely non-UTF-8-named file to disk — Linux
@@ -303,7 +303,34 @@ conflict gets escalated, not guessed past silently.
         recorded as narrower, separate Known Debt in overview.md, since that check is
         `continue-on-error` and cross-building the whole webview stack is a bigger,
         separately-risked change.
-      - Re-pushed after each fix; CI result for the final push checked below
+      - Fourth bug, found immediately after the third fix landed: `package (linux) #4`
+        failed at `cargo xtask package` with a bare "exit code 101" — but the GitHub
+        REST API's per-step timestamps (`.../actions/runs/<id>/jobs`, unlike the
+        public-but-sparse annotations) showed the step started and finished one second
+        apart, right after all seven new debian:12 steps had genuinely succeeded. A
+        real compile failing that fast was implausible, so measured what those seven
+        steps actually leave behind: a from-scratch `cargo auditable build --release
+        -p codepack-cli` alone puts 2.2 GiB of intermediate build output into
+        `target/release`, because building the container with `/repo` bind-mounted
+        wrote that output straight onto the runner's own disk — immediately before the
+        native `cargo xtask package` step needed to compile much of that same
+        dependency graph a second time (a different toolchain path) for the Tauri
+        desktop build. A GitHub-hosted runner's default disk is roughly 14 GiB; two
+        overlapping multi-GiB compilations exhausting it before the second one writes
+        its first byte matches an instant failure exactly. Fixed with
+        `CARGO_TARGET_DIR=/build` — a path inside the container's own ephemeral
+        filesystem, never bind-mounted — so the container's own output disappears with
+        it (`docker rm -f`) instead of ever touching the runner's disk; only the
+        finished binary crosses back out via `docker cp`. Verified locally: the
+        isolated build succeeds, the host's `target/release` does not grow at all
+        (2.2 GiB before and after), and the copied-out binary still runs correctly in
+        `debian:12`/`ubuntu:24.04`/`fedora:41`.
+      - Re-pushed after each fix. Final push (commit `f8b429b`) confirmed fully green
+        via the GitHub API: `CI` (all three OS legs) `success`; `package (linux)`
+        `success`, including every one of `cargo xtask package`, `Inspect the .deb`,
+        `Verify the checksums`, the artifact upload, and all three
+        `install-and-run-linux` distro legs (`ubuntu:24.04`, `debian:12`, `fedora:41`)
+        — install, headless export, and the Xvfb GUI-start check all `success`.
 - [ ] `docs/architecture/overview.md`, README, ROADMAP `**Status.**` lines updated
 - [ ] No dead code, no magic numbers left unexplained, duplication from the audit resolved
 - [ ] `cargo xtask package` run; `setup.exe`/`SETUP.txt` reflect the final state
