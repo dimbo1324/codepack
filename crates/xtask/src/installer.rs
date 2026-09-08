@@ -23,11 +23,14 @@
 //! path and a checksum, in the same plain `key: value` shape already established by
 //! `SHA256SUMS.txt`. [`check_gate`] is the enforcement half — a gate step, in the same
 //! genre as `sync-agents --check`, that fails the build the day `setup.exe` and
-//! `Cargo.toml`'s version disagree, or the file on disk stops matching its own recorded
-//! checksum. It cannot prove `setup.exe` was built from the commit it sits in (that would
-//! mean rebuilding the installer inside the gate); it proves the two files agree with
-//! each other and with the workspace version, which is the part a rushed release most
-//! often gets wrong.
+//! `Cargo.toml`'s version disagree, the file on disk stops matching its own recorded
+//! checksum, or the recorded `source:` names a different version's installer than the one
+//! being released. That last check exists because the first two proved insufficient on
+//! their own: during 2.0.1 the wrong binary was published with entirely self-consistent
+//! metadata over it (see [`pick_installer`]). It still cannot prove `setup.exe` was built
+//! from the commit it sits in — that would mean rebuilding the installer inside the gate
+//! — but it now proves the bytes came from a build of the version being released, which
+//! is the part a rushed release most often gets wrong.
 
 use std::path::Path;
 
@@ -36,6 +39,59 @@ use crate::{git_head_commit, sha256_hex};
 /// `setup.exe`'s permanent name — referenced by the README link, never renamed.
 const INSTALLER_FILE: &str = "setup.exe";
 const INFO_FILE: &str = "SETUP.txt";
+
+/// The installer for `version`, chosen by name rather than by whichever `.exe` the
+/// directory happens to list first.
+///
+/// `target/release/bundle/nsis/` accumulates: `tauri build` writes
+/// `codepack_<version>_x64-setup.exe` and never removes the previous one, so after a
+/// version bump the directory holds both. Taking the first entry — which is what this
+/// did until 2026-09-08 — meant publishing `codepack_2.0.0_x64-setup.exe` while
+/// `SETUP.txt`, whose version comes from `CARGO_PKG_VERSION`, declared 2.0.1. The gate
+/// could not catch it either: it compares `SETUP.txt`'s version against `Cargo.toml`
+/// (both 2.0.1) and the file's checksum against `SETUP.txt`'s (both taken from the same
+/// stale file), so both halves agreed with each other while describing the wrong binary.
+/// It was found by reading the build output, which named one file and published another.
+///
+/// Matching on the version makes the mismatch impossible instead of merely detectable,
+/// and a build that produced no matching installer now says so — naming what it did find,
+/// because "no installer" and "an installer for a different version" need different
+/// fixes.
+fn pick_installer(nsis_dir: &Path, version: &str) -> Result<std::path::PathBuf, String> {
+    let mut executables: Vec<std::path::PathBuf> = std::fs::read_dir(nsis_dir)
+        .map_err(|error| format!("cannot list {}: {error}", nsis_dir.display()))?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("exe"))
+        .collect();
+    executables.sort();
+
+    if let Some(matching) = executables.iter().find(|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.contains(version))
+    }) {
+        return Ok(matching.clone());
+    }
+
+    if executables.is_empty() {
+        return Err(format!(
+            "{} produced no .exe to publish",
+            nsis_dir.display()
+        ));
+    }
+    let found: Vec<String> = executables
+        .iter()
+        .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
+        .map(str::to_string)
+        .collect();
+    Err(format!(
+        "{} holds no installer for version {version} — found {found:?}. The bundler \
+         names its output after the version, so this means the build did not produce \
+         {version}: rebuild, or clear the stale installers out of that directory.",
+        nsis_dir.display()
+    ))
+}
 
 /// Copies the NSIS installer from `bundle_root/nsis/*.exe` to `root/setup.exe`, and
 /// writes `root/SETUP.txt` describing it. Does nothing, successfully, when
@@ -47,12 +103,8 @@ pub(crate) fn publish(root: &Path, bundle_root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    let installer = std::fs::read_dir(&nsis_dir)
-        .map_err(|error| format!("cannot list {}: {error}", nsis_dir.display()))?
-        .flatten()
-        .map(|entry| entry.path())
-        .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("exe"))
-        .ok_or_else(|| format!("{} produced no .exe to publish", nsis_dir.display()))?;
+    let version = env!("CARGO_PKG_VERSION");
+    let installer = pick_installer(&nsis_dir, version)?;
 
     let bytes = std::fs::read(&installer)
         .map_err(|error| format!("cannot read {}: {error}", installer.display()))?;
@@ -62,7 +114,6 @@ pub(crate) fn publish(root: &Path, bundle_root: &Path) -> Result<(), String> {
     std::fs::write(&setup_exe, &bytes)
         .map_err(|error| format!("cannot write {}: {error}", setup_exe.display()))?;
 
-    let version = env!("CARGO_PKG_VERSION");
     let commit = git_head_commit(root);
     let built_at = codepack_core::time::UtcDateTime::now().format_iso8601_utc();
     let source = installer.strip_prefix(root).unwrap_or(&installer).display();
@@ -92,16 +143,19 @@ pub(crate) fn publish(root: &Path, bundle_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// What [`parse_info`] reads back out of `SETUP.txt` — only the two fields the gate
+/// What [`parse_info`] reads back out of `SETUP.txt` — only the three fields the gate
 /// actually checks.
 struct InstallerInfo {
     version: String,
     sha256: String,
+    /// The bundler-named file this was copied from. Carries the version in its own name,
+    /// which is what makes the "published the wrong build" check below possible.
+    source: String,
 }
 
 /// A deliberately plain line-by-line reader, not a format parser: `SETUP.txt` is prose
 /// for a person first, so this reads past everything it does not recognize rather than
-/// rejecting a file whose wording changes around the two lines that matter.
+/// rejecting a file whose wording changes around the three lines that matter.
 fn parse_info(text: &str) -> Result<InstallerInfo, String> {
     let field = |prefix: &str| {
         text.lines()
@@ -112,6 +166,7 @@ fn parse_info(text: &str) -> Result<InstallerInfo, String> {
     Ok(InstallerInfo {
         version: field("version:")?,
         sha256: field("sha256:")?,
+        source: field("source:")?,
     })
 }
 
@@ -155,6 +210,21 @@ fn check_gate_at(root: &Path, expected_version: &str) -> Result<(), String> {
         ));
     }
 
+    // The version line alone cannot catch publishing the wrong build: it is written from
+    // `CARGO_PKG_VERSION`, so it says the right thing even when the bytes beside it came
+    // from a previous version's installer still sitting in the bundle directory. The
+    // bundler puts the version in the file's own name, so the recorded source is the one
+    // field that describes the *bytes* rather than the build that copied them. Added
+    // 2026-09-08, after exactly that happened during the 2.0.1 release.
+    if !info.source.contains(expected_version) {
+        return Err(format!(
+            "{INFO_FILE} records version {expected_version} but was published from \
+             `{}`, which is a different version's installer — {INSTALLER_FILE} holds the \
+             wrong build. Re-run `cargo xtask package`.",
+            info.source
+        ));
+    }
+
     let bytes = std::fs::read(&setup_exe)
         .map_err(|error| format!("cannot read {}: {error}", setup_exe.display()))?;
     let actual_sha256 = sha256_hex(&bytes);
@@ -180,10 +250,16 @@ mod tests {
 
     use super::*;
 
+    /// Named after the current version, because the real bundler is: `publish` picks the
+    /// installer whose name carries the version it is publishing, so a fixture with an
+    /// arbitrary version would exercise the failure path rather than the ordinary one.
     fn fake_nsis_bundle(bundle_root: &Path, exe_bytes: &[u8]) -> PathBuf {
         let nsis = bundle_root.join("nsis");
         std::fs::create_dir_all(&nsis).unwrap();
-        let exe = nsis.join("codepack_9.9.9_x64-setup.exe");
+        let exe = nsis.join(format!(
+            "codepack_{}_x64-setup.exe",
+            env!("CARGO_PKG_VERSION")
+        ));
         std::fs::write(&exe, exe_bytes).unwrap();
         exe
     }
@@ -241,6 +317,85 @@ mod tests {
         publish(root.path(), bundle_root.path()).unwrap();
 
         check_gate_at(root.path(), env!("CARGO_PKG_VERSION")).unwrap();
+    }
+
+    /// The regression this pair exists for, found during the 2.0.1 release.
+    ///
+    /// `tauri build` never deletes the previous version's installer, so after a bump the
+    /// directory holds both. Publishing whichever the filesystem listed first put the
+    /// **older** binary in `setup.exe` while `SETUP.txt` — written from
+    /// `CARGO_PKG_VERSION` — declared the new version over it.
+    #[test]
+    fn the_installer_for_the_current_version_wins_over_a_stale_one_beside_it() {
+        let root = tempfile::tempdir().unwrap();
+        let bundle_root = tempfile::tempdir().unwrap();
+        let nsis = bundle_root.path().join("nsis");
+        std::fs::create_dir_all(&nsis).unwrap();
+
+        // Sorts before the current version either way (2.0.1 today, and any later bump),
+        // which is exactly the ordering that produced the defect.
+        std::fs::write(nsis.join("codepack_0.0.1_x64-setup.exe"), b"stale build").unwrap();
+        let current = nsis.join(format!(
+            "codepack_{}_x64-setup.exe",
+            env!("CARGO_PKG_VERSION")
+        ));
+        std::fs::write(&current, b"current build").unwrap();
+
+        publish(root.path(), bundle_root.path()).unwrap();
+
+        assert_eq!(
+            std::fs::read(root.path().join(INSTALLER_FILE)).unwrap(),
+            b"current build",
+            "the stale installer was published over the current one"
+        );
+        check_gate_at(root.path(), env!("CARGO_PKG_VERSION")).unwrap();
+    }
+
+    /// And the gate now catches it even if something else republishes the wrong build:
+    /// the recorded `source:` names the file the bytes came from, which carries its own
+    /// version. Without this the two halves agree with each other while describing the
+    /// wrong binary, which is why the defect above reached a release.
+    #[test]
+    fn a_setup_txt_published_from_another_versions_installer_fails_the_gate() {
+        let root = tempfile::tempdir().unwrap();
+        let bundle_root = tempfile::tempdir().unwrap();
+        fake_nsis_bundle(bundle_root.path(), b"bytes");
+        publish(root.path(), bundle_root.path()).unwrap();
+
+        // Rewrite only the source line, leaving version and checksum internally
+        // consistent — precisely the shape the old check could not see through.
+        let info_path = root.path().join(INFO_FILE);
+        let text = std::fs::read_to_string(&info_path).unwrap();
+        let tampered: String = text
+            .lines()
+            .map(|line| {
+                if line.starts_with("source:") {
+                    "source:    target/release/bundle/nsis/codepack_0.0.1_x64-setup.exe".to_string()
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&info_path, tampered).unwrap();
+
+        let error = check_gate_at(root.path(), env!("CARGO_PKG_VERSION")).unwrap_err();
+        assert!(error.contains("wrong build"), "{error}");
+        assert!(error.contains("0.0.1"), "{error}");
+    }
+
+    /// A directory with installers but none for this version is a different problem from
+    /// an empty one — a build that produced the wrong version rather than none at all —
+    /// and the message says which, listing what it did find.
+    #[test]
+    fn no_installer_for_this_version_names_what_it_found_instead() {
+        let nsis = tempfile::tempdir().unwrap();
+        std::fs::write(nsis.path().join("codepack_0.0.1_x64-setup.exe"), b"other").unwrap();
+
+        let error = pick_installer(nsis.path(), "2.0.1").unwrap_err();
+        assert!(error.contains("2.0.1"), "{error}");
+        assert!(error.contains("codepack_0.0.1_x64-setup.exe"), "{error}");
+        assert!(error.contains("rebuild"), "{error}");
     }
 
     #[test]
