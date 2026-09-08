@@ -281,7 +281,29 @@ conflict gets escalated, not guessed past silently.
         `install-and-run-linux` matrix still named. Fixed by pointing
         `package_glob` at `deb/*.deb`/`rpm/*.rpm` — confirmed against
         `actions/upload-artifact`'s README rather than guessed.
-      - Re-pushed after each fix; awaiting the resulting run at the time of writing
+      - `install-and-run-linux`'s debian:12 leg, third bug: with the two fixes above,
+        the package installed correctly on all three distros, but `codepack export`
+        through the installed CLI failed only on Debian 12 with exit 1. Root-caused
+        with real evidence, not guessed: `objdump -T target/release/codepack` showed a
+        weak reference to `pidfd_spawnp`/`pidfd_getpid` under `GLIBC_2.39`; running the
+        actual binary in a real `debian:12` container reproduced
+        `version 'GLIBC_2.39' not found` directly. Ubuntu 24.04 (this runner's own OS)
+        ships glibc 2.39, Fedora 41 ships 2.40, Debian 12 ships only 2.36 — glibc
+        promises forward compatibility, never backward, so building natively on the
+        runner silently assumed a newer floor than the CI matrix's own oldest distro
+        provides. Fixed by cross-building `codepack-cli` inside a `debian:12` container
+        in both `package-linux.yml` and `release.yml` (the latter matters more: it is
+        what a real user downloads) — verified afterward, in the same containers, that
+        the rebuilt binary requires only up to `GLIBC_2.34`, still carries
+        `cargo-auditable`'s `.dep-v0` section, and actually runs on `debian:12`,
+        `ubuntu:24.04` and `fedora:41`. `xtask::packaging_assets::ensure_cli_binary`
+        (new, unit-tested) accepts the pre-built binary via `CODEPACK_CLI_PREBUILT`
+        instead of silently having `cargo xtask package` overwrite it with a native
+        (broken) rebuild. Deliberately not applied to `codepack-desktop` in this pass —
+        recorded as narrower, separate Known Debt in overview.md, since that check is
+        `continue-on-error` and cross-building the whole webview stack is a bigger,
+        separately-risked change.
+      - Re-pushed after each fix; CI result for the final push checked below
 - [ ] `docs/architecture/overview.md`, README, ROADMAP `**Status.**` lines updated
 - [ ] No dead code, no magic numbers left unexplained, duplication from the audit resolved
 - [ ] `cargo xtask package` run; `setup.exe`/`SETUP.txt` reflect the final state

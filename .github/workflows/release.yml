@@ -90,14 +90,32 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      # Audit 2026-09-07, S-10: the CLI this bundles at /usr/bin/codepack is built
-      # auditable by xtask::packaging_assets::prepare, which needs this on PATH.
-      - name: Install cargo-auditable
-        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
-        with:
-          tool: cargo-auditable
+      # 2026-09-08: see the identical step in package-linux.yml for the full story — a
+      # `codepack` built natively here (Ubuntu 24.04, glibc 2.39) refuses to start at
+      # all on Debian 12 (glibc 2.36) with `version 'GLIBC_2.39' not found`, confirmed
+      # by hand against real containers. This job publishes the file a real user
+      # downloads, so it needs the fix even more than the CI-only validation job does.
+      - name: Build codepack-cli against an older glibc baseline (debian:12)
+        run: |
+          set -euo pipefail
+          toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          docker run --rm -v "$PWD:/repo" -w /repo debian:12 bash -c "
+            set -euo pipefail
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
+            curl --proto '=https' --tlsv1.2 --retry 5 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
+            sh /tmp/rustup.sh -y --default-toolchain '$toolchain' --profile minimal -q
+            . \"\$HOME/.cargo/env\"
+            cargo install cargo-auditable --locked -q
+            cargo auditable build --release -p codepack-cli
+          "
+
+      - name: Verify the CLI needs no newer glibc than debian:12 provides
+        run: docker run --rm -v "$PWD:/repo" -w /repo debian:12 ./target/release/codepack --version
 
       - name: cargo xtask package
+        env:
+          CODEPACK_CLI_PREBUILT: "1"
         run: cargo xtask package
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
