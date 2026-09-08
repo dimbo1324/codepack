@@ -395,23 +395,36 @@ codepack scan --sarif codepack.sarif
 There is a ready-made GitHub Action in this repository:
 
 ```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0 # only needed for history scanning
-- uses: dimbo1324/codepack@main
-  with:
-    history: "true"
-    since: ${{ github.event.pull_request.base.ref }}
-    fail-on: critical
-- uses: github/codeql-action/upload-sarif@v3
-  if: always()
-  with:
-    sarif_file: codepack.sarif
+permissions:
+  contents: read # this job only reads the checkout; it does not need more
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0 # only needed for history scanning
+          persist-credentials: false
+      - uses: dimbo1324/codepack@e782e85 # pin to a commit, not a moving branch
+        with:
+          history: "true"
+          since: ${{ github.event.pull_request.base.ref }}
+          fail-on: critical
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: codepack.sarif
 ```
 
 The action builds codepack from source on the runner: there are no signed release
 binaries yet, and downloading an unsigned one would be the very thing this tool argues
-against. Pin `ref:` to a commit for reproducible runs.
+against. Pin every third-party action by commit SHA, not a moving tag (`@main`, `@v4`) —
+whoever owns that action's repository can repoint a tag at any time, and the next run
+would execute different code with access to the checkout and the job's token
+(audit 2026-09-07, S-4). `permissions: contents: read` keeps that token from carrying
+more access than a read-only scan ever needs, in case one of those actions is ever
+compromised.
 
 ## Logs
 

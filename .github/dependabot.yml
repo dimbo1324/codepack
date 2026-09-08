@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Every action in .github/workflows/*.yml is pinned to a commit SHA, with the
+  # version as a trailing comment (audit 2026-09-07, S-4): a moving major-version tag
+  # (`@v5`) is a mutable reference a compromised action's own maintainer could
+  # re-point without this repository's knowledge. Dependabot is the update path that
+  # keeps that pin from going stale by hand — it moves the SHA and the comment
+  # together, as a normal, reviewable PR, rather than either being updated alone or
+  # never updated at all.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

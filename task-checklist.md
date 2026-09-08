@@ -104,7 +104,11 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 6 — security and supply chain
 
-- [ ] S-4 pin GitHub Actions by SHA, add Dependabot for github-actions, `persist-credentials: false`
+- [x] S-4 every third-party action in `ci.yml` pinned to a commit SHA (version as a
+      comment), `.github/dependabot.yml` added for `github-actions`,
+      `persist-credentials: false` on both `actions/checkout` steps; README's own
+      example workflow fixed to demonstrate the same instead of contradicting it
+      (`actions/checkout@v4`/`dimbo1324/codepack@main`, both moving refs)
 - [ ] S-5 mask world/group-write on extraction (`& !0o022`)
 - [ ] S-9 extracted bundles moved to `data_dir`, given a ceiling and a retention sweep
 - [ ] S-10 `cargo auditable` in the packaging step
