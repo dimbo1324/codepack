@@ -258,8 +258,30 @@ conflict gets escalated, not guessed past silently.
 
 ## Completion
 
-- [ ] Full `cargo xtask gate` green locally (Windows leg)
-- [ ] Push and confirm CI green on all three OS legs and the packaging job
+- [x] Full `cargo xtask gate` green locally (Windows leg) — 12/12 sections, re-verified
+      after each fix below
+- [ ] Push and confirm CI green on all three OS legs and the packaging job — first push
+      of this branch (needed to actually exercise CI, which this session's commits
+      could only build/clippy/test locally for) found two real, previously-unexecuted
+      bugs, both fixed and re-pushed:
+      - macOS gate: `codepack-scanner`'s
+        `a_real_non_utf8_named_file_on_disk_does_not_break_the_whole_plan` was
+        `#[cfg(unix)]` but writes a genuinely non-UTF-8-named file to disk — Linux
+        accepts that as an opaque byte string, macOS's APFS refuses it with `EILSEQ`
+        before the test's own fixture setup can finish. Narrowed to
+        `#[cfg(target_os = "linux")]`; the classification logic itself stays proven on
+        every platform via a separate synthetic-path unit test. Documented in
+        `.ai/project/15-command-reference.md` and `.ai/CHANGELOG.md`.
+      - `package-linux.yml`'s `install-and-run-linux`: never actually run before this
+        push (added in c9d233a, whose own commit message said so explicitly). Failed
+        on all three distro images — `apt-get`/`dnf install` on an unexpanded glob
+        that matched nothing, because `actions/upload-artifact`'s own documented
+        behavior roots the artifact at the *least common ancestor* of its glob
+        patterns (`target/release/bundle/`), not the original build path the
+        `install-and-run-linux` matrix still named. Fixed by pointing
+        `package_glob` at `deb/*.deb`/`rpm/*.rpm` — confirmed against
+        `actions/upload-artifact`'s README rather than guessed.
+      - Re-pushed after each fix; awaiting the resulting run at the time of writing
 - [ ] `docs/architecture/overview.md`, README, ROADMAP `**Status.**` lines updated
 - [ ] No dead code, no magic numbers left unexplained, duplication from the audit resolved
 - [ ] `cargo xtask package` run; `setup.exe`/`SETUP.txt` reflect the final state
