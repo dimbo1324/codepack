@@ -126,7 +126,9 @@ conflict gets escalated, not guessed past silently.
       to substitute in `cargo auditable`, and guessing at one without testing a real
       Tauri release build would risk a silently broken installer for a low-priority
       finding; left as follow-up work, not silently dropped
-- [ ] S-12 weekly scheduled job building `codepack-ai-api`
+- [x] S-12 `.github/workflows/ai-api-weekly.yml` — Monday cron, `cargo xtask ai-api`
+      (format/clippy/test), same pinning/permissions discipline as `ci.yml`; verified
+      the crate currently passes (27 tests) so this job starts green, not already red
 - [ ] C-7 release job on tag
 
 ## Step 7 — performance, measured first

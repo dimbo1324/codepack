@@ -95,7 +95,10 @@ that `keyring` and `ureq` are not compiled on every platform for code no binary 
 **The gate does not run it**, which is the cost of the exclusion: this crate is preserved,
 not maintained. Run it when touching that crate, and before finishing stage S13. Its
 formatting *is* covered by `cargo xtask fmt` and by the gate's format step, because
-formatting compiles nothing.
+formatting compiles nothing. `.github/workflows/ai-api-weekly.yml` (audit 2026-09-07,
+S-12) runs the full `cargo xtask ai-api` on a Monday schedule regardless — insurance
+against the crate quietly stopping to compile for six months before anyone notices,
+without slowing down a single push.
 
 ## Reading a red CI run
 
