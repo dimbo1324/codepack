@@ -109,7 +109,10 @@ conflict gets escalated, not guessed past silently.
       `persist-credentials: false` on both `actions/checkout` steps; README's own
       example workflow fixed to demonstrate the same instead of contradicting it
       (`actions/checkout@v4`/`dimbo1324/codepack@main`, both moving refs)
-- [ ] S-5 mask world/group-write on extraction (`& !0o022`)
+- [x] S-5 mask world/group-write on extraction (`& !0o022`), plus the test the audit
+      itself specified (cross-checked with `cargo check`/`clippy --target
+      x86_64-unknown-linux-gnu`, since this dev machine is Windows; not exercised by a
+      live run here — CI's Linux/macOS legs do that)
 - [ ] S-9 extracted bundles moved to `data_dir`, given a ceiling and a retention sweep
 - [ ] S-10 `cargo auditable` in the packaging step
 - [ ] S-12 weekly scheduled job building `codepack-ai-api`

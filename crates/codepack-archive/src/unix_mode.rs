@@ -37,9 +37,19 @@ pub(crate) fn for_member(_file: &std::fs::File) -> Option<u32> {
 /// **The mask is the security part.** The mode comes out of an archive, which is
 /// untrusted input like every other field in it: `0o777` drops set-user-ID,
 /// set-group-ID and sticky, so a crafted archive cannot ask for a setuid file to be
-/// written. `| 0o600` guarantees the owner can still read and write what was just
-/// created, so an archive claiming mode 0 cannot produce a file its extractor cannot
-/// open.
+/// written. `!0o022` additionally drops group- and world-write (audit 2026-09-07, S-5)
+/// — `std` has no thread-safe way to read the *real* umask (`libc::umask` is the only
+/// way, and it is not thread-safe, so reading it would mean a `libc` dependency and a
+/// process-wide lock this project has no other reason to take on), so this hardcodes
+/// `0o022`, the default on the overwhelming majority of systems. `tar` and `unzip` both
+/// apply the caller's actual umask on top of an archive's recorded mode; without any
+/// mask at all, an archive member recorded as `0o777` extracted verbatim into a
+/// world-writable file — on a shared machine (`/tmp`, a CI runner with several jobs on
+/// it), any local user could then rewrite a script like `gradlew` or `configure`
+/// before the next person who runs it does, a local privilege escalation through an
+/// artifact this product itself calls safe to hand out. `| 0o600` guarantees the owner
+/// can still read and write what was just created, so an archive claiming mode 0 cannot
+/// produce a file its extractor cannot open.
 ///
 /// Best effort: a filesystem that does not carry Unix modes at all (a mounted FAT
 /// volume, say) refuses `chmod`, and failing an extraction that has already written
@@ -53,7 +63,7 @@ pub(crate) fn apply_extracted(path: &Path, mode: Option<u32>) {
     };
     let _ = std::fs::set_permissions(
         path,
-        std::fs::Permissions::from_mode((mode & 0o777) | 0o600),
+        std::fs::Permissions::from_mode((mode & 0o777 & !0o022) | 0o600),
     );
 }
 
@@ -98,6 +108,24 @@ mod tests {
         let mode = mode_of(&target);
         assert_eq!(mode & 0o4000, 0, "set-user-ID survived: {mode:o}");
         assert_eq!(mode & 0o2000, 0, "set-group-ID survived: {mode:o}");
+        assert_eq!(mode, 0o755);
+    }
+
+    /// Audit 2026-09-07, S-5: an archive member recorded as world- and group-writable
+    /// must not extract as one — the exact scenario a shared `/tmp` or a multi-job CI
+    /// runner turns into a local privilege escalation the next time someone runs the
+    /// extracted `gradlew`/`configure`.
+    #[test]
+    fn a_world_and_group_writable_member_loses_both_bits_on_extraction() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("shared_script");
+        std::fs::write(&target, "#!/bin/sh\n").unwrap();
+
+        apply_extracted(&target, Some(0o777));
+        let mode = mode_of(&target);
+        assert_eq!(mode & 0o022, 0, "group/world write survived: {mode:o}");
+        // The executable bit — the whole reason this module exists — must survive
+        // alongside the mask, not be a casualty of it.
         assert_eq!(mode, 0o755);
     }
 
