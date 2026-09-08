@@ -95,20 +95,39 @@ jobs:
       # all on Debian 12 (glibc 2.36) with `version 'GLIBC_2.39' not found`, confirmed
       # by hand against real containers. This job publishes the file a real user
       # downloads, so it needs the fix even more than the CI-only validation job does.
-      - name: Build codepack-cli against an older glibc baseline (debian:12)
+      # See package-linux.yml's identical steps for why this is a persistent container
+      # plus one step per phase rather than one long inline `bash -c`: a monolithic
+      # step's failure annotation names no phase at all, which cost a whole CI round
+      # trip to diagnose there.
+      - name: Start a debian:12 container for an older-glibc build of codepack-cli
+        run: docker run -d --name codepack-cli-glibc-baseline -v "$PWD:/repo" -w /repo debian:12 sleep 1800
+
+      - name: "debian:12 build: install system packages"
         run: |
-          set -euo pipefail
-          toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
-          docker run --rm -v "$PWD:/repo" -w /repo debian:12 bash -c "
+          docker exec codepack-cli-glibc-baseline bash -c "
             set -euo pipefail
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
+            apt-get -o Acquire::Retries=5 update -qq
+            apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
+          "
+
+      - name: "debian:12 build: install the pinned Rust toolchain"
+        run: |
+          toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          docker exec codepack-cli-glibc-baseline bash -c "
+            set -euo pipefail
             curl --proto '=https' --tlsv1.2 --retry 5 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
             sh /tmp/rustup.sh -y --default-toolchain '$toolchain' --profile minimal -q
-            . \"\$HOME/.cargo/env\"
-            cargo install cargo-auditable --locked -q
-            cargo auditable build --release -p codepack-cli
           "
+
+      - name: "debian:12 build: install cargo-auditable"
+        run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo install cargo-auditable --locked -q'
+
+      - name: "debian:12 build: cargo auditable build codepack-cli"
+        run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo auditable build --release -p codepack-cli'
+
+      - name: Stop the debian:12 build container
+        if: always()
+        run: docker rm -f codepack-cli-glibc-baseline
 
       - name: Verify the CLI needs no newer glibc than debian:12 provides
         run: docker run --rm -v "$PWD:/repo" -w /repo debian:12 ./target/release/codepack --version

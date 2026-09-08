@@ -117,20 +117,41 @@ jobs:
       # comment), and cross-building the whole webview/GTK stack for an older base
       # image is a meaningfully bigger, separately-risked change — see
       # `docs/architecture/overview.md`'s Known Debt for that half.
-      - name: Build codepack-cli against an older glibc baseline (debian:12)
+      # A persistent container plus one step per phase, not one long inline `bash -c`:
+      # each step gets its own name in a failure annotation, which a single monolithic
+      # step does not — a real difference verified the hard way (run #3 above failed
+      # with a bare "exit code 101" naming no phase at all). Also verified by hand,
+      # exactly this way (`docker exec` into a container kept alive with `sleep`),
+      # before writing it here — not merely the equivalent single-`bash -c` form.
+      - name: Start a debian:12 container for an older-glibc build of codepack-cli
+        run: docker run -d --name codepack-cli-glibc-baseline -v "$PWD:/repo" -w /repo debian:12 sleep 1800
+
+      - name: "debian:12 build: install system packages"
         run: |
-          set -euo pipefail
-          toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
-          docker run --rm -v "$PWD:/repo" -w /repo debian:12 bash -c "
+          docker exec codepack-cli-glibc-baseline bash -c "
             set -euo pipefail
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
+            apt-get -o Acquire::Retries=5 update -qq
+            apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
+          "
+
+      - name: "debian:12 build: install the pinned Rust toolchain"
+        run: |
+          toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          docker exec codepack-cli-glibc-baseline bash -c "
+            set -euo pipefail
             curl --proto '=https' --tlsv1.2 --retry 5 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
             sh /tmp/rustup.sh -y --default-toolchain '$toolchain' --profile minimal -q
-            . \"\$HOME/.cargo/env\"
-            cargo install cargo-auditable --locked -q
-            cargo auditable build --release -p codepack-cli
           "
+
+      - name: "debian:12 build: install cargo-auditable"
+        run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo install cargo-auditable --locked -q'
+
+      - name: "debian:12 build: cargo auditable build codepack-cli"
+        run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo auditable build --release -p codepack-cli'
+
+      - name: Stop the debian:12 build container
+        if: always()
+        run: docker rm -f codepack-cli-glibc-baseline
 
       - name: Verify the CLI needs no newer glibc than debian:12 provides
         run: docker run --rm -v "$PWD:/repo" -w /repo debian:12 ./target/release/codepack --version
