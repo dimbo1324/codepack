@@ -138,8 +138,12 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Kept apart from `tests`'s unit tests (audit 2026-09-07, T-12): a failure here means
+/// the workspace itself has an undeclared raw-content reader, while a failure in `tests`
+/// means the checker is wrong — different things to go fix, and the module boundary
+/// says which one before reading the failure message.
 #[cfg(test)]
-mod tests {
+mod against_the_real_repository {
     use super::*;
 
     /// The check passes against the repository as it stands. If it does not, either a
@@ -153,6 +157,11 @@ mod tests {
             .expect("the workspace root is two levels above this crate");
         check(root).expect("every report that reads raw content is declared");
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     /// Every entry carries a reason a person can read. An empty justification would make
     /// the list a checkbox rather than a record.

@@ -507,19 +507,6 @@ ureq = \"3\"
             let _ = std::fs::remove_dir_all(&root);
         }
     }
-
-    #[test]
-    fn the_real_workspace_passes_its_own_check() {
-        // The guard is only worth having if it runs against reality — a check that only
-        // ever sees synthetic input proves nothing about this repository.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_path_buf();
-        check(&root).expect("the workspace must satisfy invariant I1");
-    }
 }
 
 #[cfg(test)]
@@ -649,15 +636,38 @@ git2 = "0.19"
             );
         }
     }
+}
 
-    /// And the whole check still passes on the real tree — the positive half, so a
-    /// tightening that refused everything could not pass unnoticed.
-    #[test]
-    fn the_real_workspace_is_clean() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+/// The two real-repo tests from `tests` and `bypass_tests` above, kept apart from the
+/// unit tests that exercise the analyzer against synthetic fixtures (audit 2026-09-07,
+/// T-12). A failure here means the workspace violates invariant I1; a failure in
+/// `tests`/`bypass_tests` means the analyzer itself is wrong — two different things to
+/// go fix, and the module boundary says which one at a glance, before reading a single
+/// line of the failure message.
+#[cfg(test)]
+mod against_the_real_repository {
+    use super::*;
+
+    fn workspace_root() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(std::path::Path::parent)
-            .expect("xtask lives two levels below the workspace root");
-        check(root).expect("the workspace must satisfy its own isolation rule");
+            .expect("xtask lives two levels below the workspace root")
+            .to_path_buf()
+    }
+
+    /// The guard is only worth having if it runs against reality — a check that only
+    /// ever sees synthetic input proves nothing about this repository.
+    #[test]
+    fn the_real_workspace_passes_its_own_check() {
+        check(&workspace_root()).expect("the workspace must satisfy invariant I1");
+    }
+
+    /// The positive half of the bypass tests: the same check that refuses a planted
+    /// violation still passes on the real tree, so a tightening that refused everything
+    /// could not pass unnoticed.
+    #[test]
+    fn the_real_workspace_is_clean() {
+        check(&workspace_root()).expect("the workspace must satisfy its own isolation rule");
     }
 }

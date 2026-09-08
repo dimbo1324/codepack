@@ -229,6 +229,24 @@ mod tests {
     /// something is draining the pipe concurrently.
     const STUB_FLOOD_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 
+    /// Whether a test needing `binary_name` on `PATH` should skip — printing the
+    /// reason first (audit 2026-09-07, T-11).
+    ///
+    /// A test that returns silently when a tool is missing is right not to fail — a
+    /// machine without Go installed should not fail a Rust workspace's test suite for
+    /// lacking it — but "skipped, unproven" and "ran, passed" are indistinguishable in
+    /// a green test run otherwise. None of `gofmt`/`ruff`/`ktlint` are installed on any
+    /// of the three GitHub-hosted CI runners today, so every test gated on one of them
+    /// currently prints this notice on every run rather than exercising the code it
+    /// guards — visible now, where it was invisible before.
+    fn skip_if_absent(binary_name: &'static str) -> bool {
+        if find_on_path(binary_name).is_some() {
+            return false;
+        }
+        eprintln!("skipped: {binary_name} is not on PATH");
+        true
+    }
+
     #[test]
     fn rustfmt_formats_rust_when_present_on_path() {
         // `rustfmt` ships with every toolchain this workspace's `rust-toolchain.toml`
@@ -246,7 +264,7 @@ mod tests {
 
     #[test]
     fn go_formats_when_gofmt_is_on_path() {
-        if find_on_path("gofmt").is_none() {
+        if skip_if_absent("gofmt") {
             return;
         }
         let (formatted, label) = format_source(
@@ -262,7 +280,7 @@ mod tests {
 
     #[test]
     fn python_prefers_ruff_over_black_when_both_are_present() {
-        if find_on_path("ruff").is_none() {
+        if skip_if_absent("ruff") {
             return;
         }
         let (formatted, label) =
@@ -274,7 +292,7 @@ mod tests {
 
     #[test]
     fn kotlin_formats_when_ktlint_is_on_path() {
-        if find_on_path("ktlint").is_none() {
+        if skip_if_absent("ktlint") {
             return;
         }
         let (formatted, label) = format_source(

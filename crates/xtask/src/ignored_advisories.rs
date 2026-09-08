@@ -215,8 +215,13 @@ fn declared_ignores(root: &Path) -> Result<Vec<IgnoredAdvisory>, String> {
         .collect())
 }
 
+/// Kept apart from `tests`'s fixture-driven unit tests (audit 2026-09-07, T-12): a
+/// failure here means the real `deny.toml` needs attention (a missing id, a lapsed
+/// revisit date — exactly the defect class S-3 found), while a failure in `tests` means
+/// the parser itself is wrong. The module boundary says which before reading a line of
+/// the failure message.
 #[cfg(test)]
-mod tests {
+mod against_the_real_repository {
     use super::*;
 
     fn workspace_root() -> &'static Path {
@@ -265,6 +270,11 @@ mod tests {
             );
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     /// Both spellings cargo-deny accepts are understood, so switching between them cannot
     /// quietly empty the list this step examines.

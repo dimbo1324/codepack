@@ -190,8 +190,15 @@ conflict gets escalated, not guessed past silently.
 ## Step 8 — remaining tests and hygiene
 
 - [ ] The 15 adversarial tests from `04-TESTS.txt` not already covered above
-- [ ] T-11 print skip reason instead of silently passing when a tool is absent
-- [ ] T-12 split unit tests from against-the-real-repository tests in xtask
+- [x] T-11 `codepack-sanitize`'s gofmt/ruff/ktlint tests print `skipped: <tool> is not
+      on PATH` via a shared `skip_if_absent` helper instead of returning silently;
+      `gofmt` itself needs no new CI step since Go ships preinstalled on all three
+      GitHub-hosted runner images, so that test already exercises the real path there
+- [x] T-12 the real-repository tests in `network_isolation.rs`, `report_redaction.rs`,
+      `ai_api.rs` and `ignored_advisories.rs` moved into their own
+      `mod against_the_real_repository`, apart from the fixture-driven unit tests —
+      `network_isolation.rs`'s two (from separate `tests`/`bypass_tests` modules) also
+      lost a duplicated path-computation block to one shared `workspace_root()` helper
 - [x] C-5 completions test stops flooding the gate log — `write_completions` split out
       so the test captures into a `Vec<u8>` instead of calling `run` (which writes to
       real stdout) directly; now asserts the script is non-empty and actually names

@@ -59,8 +59,12 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Both tests here are against the real repository rather than a synthetic fixture —
+/// unlike the other xtask checks, this command has no fixture-driven unit test to keep
+/// apart from them (audit 2026-09-07, T-12): the module name says so directly instead
+/// of leaving a reader to notice by reading each test's own body.
 #[cfg(test)]
-mod tests {
+mod against_the_real_repository {
     use super::*;
 
     /// The manifest this command drives has to exist, or the command silently checks
