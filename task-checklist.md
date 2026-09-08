@@ -152,6 +152,15 @@ conflict gets escalated, not guessed past silently.
       `cargo build`/`cargo clippy --all-targets` and code review, with the real
       execution left to the new scheduled job above
 - [ ] P-4/Q-7 parallelize copy step if measurement shows it matters, else record why not
+      — genuinely not done, honestly: the audit's own instruction is "measure first,
+      then decide", and this session cannot supply that measurement — the multi-minute
+      `--ignored` perf_smoke run was not executed here per explicit user preference
+      (interactive long-running benchmarks avoided this session). The per-step timing
+      breakdown that would answer "does copy actually dominate at 50k files" now exists
+      (this Step 7 slice, committed) and the new `perf-smoke-weekly.yml` job will
+      produce real numbers on its first scheduled run. Neither parallelizing copy
+      blind nor recording a "measured, decided against it" rationale I do not have
+      would be honest; recorded as open in Q51 instead of guessed either way
 - [x] P-5 scan-cache mutex poisoning asymmetry fixed (`lookup`/`store` now recover from
       poisoning the same way `flush` already did); 2 new tests, verified to fail
       without the fix before committing it
