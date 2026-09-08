@@ -97,6 +97,15 @@ Linux, there is no GPG signature on the `.deb`/`.rpm` yet. A checksum proves the
 arrived intact, not who made it, and only a signature says the second thing. Signing,
 notarisation and auto-update are not done.
 
+Every tagged version is also published as a
+[GitHub Release](https://github.com/dimbo1324/codepack/releases), built by
+[`release.yml`](.github/workflows/release.yml) rather than on anyone's own machine, with
+each file carrying a build-provenance attestation
+(`actions/attest-build-provenance`) — verifiable proof of which workflow run and which
+commit produced it, which a checksum alone cannot give. `setup.exe` at the repository
+root always tracks the latest one; a Release is how to get an older version, or to check
+that provenance yourself.
+
 There is no macOS bundle yet — the code, the tests and the quality gate run there too,
 but `tauri.conf.json` names no `dmg` target (stage S14).
 

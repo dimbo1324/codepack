@@ -129,7 +129,12 @@ conflict gets escalated, not guessed past silently.
 - [x] S-12 `.github/workflows/ai-api-weekly.yml` — Monday cron, `cargo xtask ai-api`
       (format/clippy/test), same pinning/permissions discipline as `ci.yml`; verified
       the crate currently passes (27 tests) so this job starts green, not already red
-- [ ] C-7 release job on tag
+- [x] C-7 `.github/workflows/release.yml`: on `v*`, builds Windows + Linux installers
+      via the same `cargo xtask package` the gate already exercises, attests every
+      artifact (`actions/attest-build-provenance`, S-6 Q48 step 1), publishes to a
+      GitHub Release; the SHA256SUMS.txt-per-format-directory collision (verified by
+      hand against a fake artifact tree) is resolved by renaming before upload, since
+      release assets have no subdirectories
 
 ## Step 7 — performance, measured first
 
