@@ -27,7 +27,8 @@
       ],
       "notes": [
         "The AppImage carries its own WebKitGTK and runs on any distribution; the .deb and .rpm rely on the distribution's own, declared in tauri.conf.json.",
-        "Unsigned: there is no GPG signature on the packages yet. Verify SHA256SUMS.txt beside them."
+        "Unsigned: there is no GPG signature on the packages yet. Verify SHA256SUMS.txt beside them.",
+        "Needs the cargo-auditable subcommand on PATH (cargo install cargo-auditable): the CLI bundled at /usr/bin/codepack is built with it, embedding a dependency list `cargo audit bin` can read (audit 2026-09-07, S-10)."
       ],
       "_optional_note": "A format missing from the build is reported, not fatal: rpm bundling needs no extra tool, but a stripped-down container can still lack what one format wants, and two packages out of three is a usable result."
     }

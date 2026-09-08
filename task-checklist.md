@@ -116,7 +116,16 @@ conflict gets escalated, not guessed past silently.
 - [x] S-9 extracted bundles moved to `data_dir` (only changes anything on Linux, per
       the audit's own note that Windows/macOS already coincide), old location deleted
       at startup, 14-day/1024 MB retention sweep matching the scan cache's own shape
-- [ ] S-10 `cargo auditable` in the packaging step
+- [x] S-10 `cargo auditable build` replaces the plain build in
+      `xtask::packaging_assets::prepare` (the Linux-shipped `/usr/bin/codepack`);
+      verified locally that the resulting binary carries a `.dep-v0` section
+      (`objdump -h`) `cargo audit bin` reads. CI installs `cargo-auditable` via
+      `taiki-e/install-action`, matching `cargo-deny`. Scoped to this one binary, not
+      the SBOM half (`cargo cyclonedx`/`cargo sbom`) or the Tauri-built desktop binary
+      on Windows/macOS — Tauri's own internal `cargo build` call has no documented hook
+      to substitute in `cargo auditable`, and guessing at one without testing a real
+      Tauri release build would risk a silently broken installer for a low-priority
+      finding; left as follow-up work, not silently dropped
 - [ ] S-12 weekly scheduled job building `codepack-ai-api`
 - [ ] C-7 release job on tag
 

@@ -36,7 +36,7 @@ fn cli_binary_name() -> &'static str {
 ///
 /// | in the package                                       | written here as                          |
 /// |-------------------------------------------------------|-----------------------------------------|
-/// | `/usr/bin/codepack`                                    | `target/release/codepack` (by `cargo build`, not this function) |
+/// | `/usr/bin/codepack`                                    | `target/release/codepack` (by `cargo auditable build`, not this function) |
 /// | `/usr/share/bash-completion/completions/codepack`       | `target/packaging-assets/codepack.bash`  |
 /// | `/usr/share/zsh/site-functions/_codepack`               | `target/packaging-assets/_codepack`      |
 /// | `/usr/share/fish/vendor_completions.d/codepack.fish`    | `target/packaging-assets/codepack.fish`  |
@@ -46,17 +46,27 @@ pub(crate) fn prepare(root: &Path) -> Result<(), String> {
         return Ok(());
     }
 
+    // `auditable` rather than a plain build (audit 2026-09-07, S-10): this is the
+    // binary a `.deb`/`.rpm` actually ships at `/usr/bin/codepack`, and embedding its
+    // dependency list (a `.dep-v0` linker section `cargo audit bin` reads directly) is
+    // the cheap half of "what is inside this file" for a product whose own job is
+    // reasoning about a supply chain. Needs the `cargo-auditable` subcommand on PATH —
+    // CI installs it the same way it already installs `cargo-deny`.
     run(
-        Command::new("cargo")
-            .current_dir(root)
-            .args(["build", "--release", "-p", "codepack-cli"]),
-        "cargo build -p codepack-cli",
+        Command::new("cargo").current_dir(root).args([
+            "auditable",
+            "build",
+            "--release",
+            "-p",
+            "codepack-cli",
+        ]),
+        "cargo auditable build -p codepack-cli",
     )?;
 
     let cli_binary = root.join("target/release").join(cli_binary_name());
     if !cli_binary.is_file() {
         return Err(format!(
-            "cargo build succeeded but {} does not exist",
+            "cargo auditable build succeeded but {} does not exist",
             cli_binary.display()
         ));
     }
