@@ -1,0 +1,66 @@
+name: perf smoke (weekly)
+
+# Audit 2026-09-07, T-3/C-3: `perf_smoke.rs` is a genuinely good test — it checks
+# *scaling* (5,000 files against 50,000, requiring a 10x file count to cost less than a
+# 20x wall clock) rather than one absolute number, with the reasoning for why a single
+# figure cannot tell a quadratic blowup from a slower machine written out in its own
+# module doc comment. But `#[ignore]`-gated and run by nobody means a performance
+# regression's first signal was a user complaint, not a red build — which is exactly
+# what happened on 2026-09-06, and diagnosing it that day took several manual timed
+# runs instead of reading one.
+#
+# Not in the main gate: five extra minutes on every push is unacceptable, and
+# `12-domain-rules.md`'s own opt-in rule for heavy tests says so. A schedule, on a fixed
+# runner type — the scaling *ratio* travels across hardware, but the absolute-time
+# backstop this test also checks does not, so comparing one Monday's ubuntu-latest run
+# against another's is what makes a week-over-week trend legible at all.
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Monday, 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  perf-smoke:
+    name: perf_smoke (release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      # `--nocapture` so the test's own `eprintln!` measurements (file counts, elapsed
+      # time, the scaling factor) reach the log instead of being swallowed on success;
+      # `tee` keeps them for the summary step below without a second, differently-timed
+      # run.
+      - name: cargo test -p codepack-engine --release -- --ignored --nocapture
+        run: |
+          set -o pipefail
+          cargo test -p codepack-engine --release -- --ignored --nocapture 2>&1 | tee perf-smoke.log
+
+      # One line per run, appended forever: this is the whole "a week-over-week trend"
+      # the audit asked for, and it costs nothing more than grepping the log this step
+      # already has open.
+      - name: Record this run's numbers
+        if: always()
+        run: |
+          {
+            echo "### perf_smoke — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo '```text'
+            grep "^perf_smoke:" perf-smoke.log || echo "(no perf_smoke lines found — see the full log below)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        if: always()
+        with:
+          name: perf-smoke-log
+          path: perf-smoke.log
+          if-no-files-found: warn

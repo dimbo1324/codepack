@@ -40,8 +40,8 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use codepack_core::CancellationToken;
 use codepack_core::config::Config;
+use codepack_core::{CancellationToken, ProgressEvent};
 use codepack_storage::open;
 
 const FILE_COUNT: usize = 50_000;
@@ -94,11 +94,20 @@ fn build_fixture(root: &Path, file_count: usize) {
     }
 }
 
-/// One export of `file_count` files, returning how long the pipeline itself took.
+/// One export of `file_count` files, returning how long the pipeline itself took and a
+/// per-step breakdown (audit 2026-09-07, P-4/Q-7: "measure first, then decide" — this
+/// is the measurement).
 ///
 /// The fixture is built outside the timer: generating files measures the filesystem, not
 /// codepack, and at 50k it is a large part of the wall clock.
-fn timed_export(file_count: usize) -> Duration {
+///
+/// The breakdown comes from the same `StepStarted`/`StepFinished` events both shells
+/// already drain for their own progress display — no new instrumentation inside
+/// `codepack-engine` itself, just a second consumer of what it already emits. `run_export`
+/// runs on its own thread specifically so this one can time-stamp each event as it
+/// arrives; draining the channel only after `run_export` returns would still see every
+/// event in order, but with no record of *when* each one was sent.
+fn timed_export(file_count: usize) -> (Duration, HashMap<String, Duration>) {
     let source = tempfile::tempdir().unwrap();
     build_fixture(source.path(), file_count);
 
@@ -106,19 +115,37 @@ fn timed_export(file_count: usize) -> Duration {
     let db_dir = tempfile::tempdir().unwrap();
     let mut conn = open(&db_dir.path().join("codepack.db")).unwrap();
     let config = Config::default();
-    let (tx, _rx) = codepack_core::progress_channel();
+    let (tx, rx) = codepack_core::progress_channel();
 
     let started = Instant::now();
-    let outcome = codepack_engine::run_export(
-        &mut conn,
-        source.path(),
-        output.path(),
-        &config,
-        &HashMap::new(),
-        &tx,
-        &CancellationToken::new(),
-    )
-    .unwrap();
+    let export_thread = std::thread::spawn(move || {
+        codepack_engine::run_export(
+            &mut conn,
+            source.path(),
+            output.path(),
+            &config,
+            &HashMap::new(),
+            &tx,
+            &CancellationToken::new(),
+        )
+    });
+
+    let mut step_started_at: HashMap<String, Instant> = HashMap::new();
+    let mut step_durations: HashMap<String, Duration> = HashMap::new();
+    for event in rx {
+        match event {
+            ProgressEvent::StepStarted { step } => {
+                step_started_at.insert(step, Instant::now());
+            }
+            ProgressEvent::StepFinished { step } => {
+                if let Some(step_started_at) = step_started_at.remove(&step) {
+                    step_durations.insert(step, step_started_at.elapsed());
+                }
+            }
+            ProgressEvent::Log(_) | ProgressEvent::StepProgress { .. } => {}
+        }
+    }
+    let outcome = export_thread.join().unwrap().unwrap();
     let elapsed = started.elapsed();
 
     assert!(outcome.successful, "copy_stats = {:?}", outcome.copy_stats);
@@ -130,7 +157,12 @@ fn timed_export(file_count: usize) -> Duration {
     assert!(primary.exists());
 
     eprintln!("perf_smoke: {file_count} files, elapsed = {elapsed:?}");
-    elapsed
+    let mut steps: Vec<(&String, &Duration)> = step_durations.iter().collect();
+    steps.sort_by_key(|(step, _)| (*step).clone());
+    for (step, duration) in steps {
+        eprintln!("perf_smoke:   {step} = {duration:?}");
+    }
+    (elapsed, step_durations)
 }
 
 #[test]
@@ -138,8 +170,21 @@ fn timed_export(file_count: usize) -> Duration {
 fn the_pipeline_scales_linearly_and_stays_usable_at_fifty_thousand_files() {
     // Small first: if the pipeline is broken outright, this says so in half a minute
     // rather than after the large fixture has been generated and exported.
-    let small = timed_export(SMALL_FILE_COUNT);
-    let large = timed_export(FILE_COUNT);
+    let (small, small_steps) = timed_export(SMALL_FILE_COUNT);
+    let (large, large_steps) = timed_export(FILE_COUNT);
+
+    // Per-step scaling, not just the total: this is what turns "it got twice as slow"
+    // into "which of the eight steps did" without a second, manually-instrumented run.
+    let mut steps: Vec<&String> = large_steps.keys().collect();
+    steps.sort();
+    for step in steps {
+        let large_step = large_steps[step];
+        let Some(&small_step) = small_steps.get(step) else {
+            continue;
+        };
+        let step_factor = large_step.as_secs_f64() / small_step.as_secs_f64().max(f64::EPSILON);
+        eprintln!("perf_smoke:   {step}: {small_step:?} -> {large_step:?} ({step_factor:.1}x)");
+    }
 
     let factor = large.as_secs_f64() / small.as_secs_f64();
     eprintln!(

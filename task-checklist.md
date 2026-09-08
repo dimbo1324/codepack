@@ -138,8 +138,19 @@ conflict gets escalated, not guessed past silently.
 
 ## Step 7 — performance, measured first
 
-- [ ] T-3/C-3 perf_smoke runs on a schedule
-- [ ] Break perf_smoke's timing down per pipeline step
+- [x] T-3/C-3 `.github/workflows/perf-smoke-weekly.yml` — Monday cron + `workflow_dispatch`,
+      fixed `ubuntu-latest` runner (needed for the absolute-time backstop to be
+      comparable week over week; the scaling ratio alone would tolerate different
+      hardware), `--nocapture` so the numbers reach the log, one line per run appended
+      to `$GITHUB_STEP_SUMMARY`, full log kept as a build artifact
+- [x] Break perf_smoke's timing down per pipeline step — no new instrumentation inside
+      `codepack-engine`: `timed_export` now drains the same `StepStarted`/`StepFinished`
+      events both shells already consume, on a side thread, time-stamping each as it
+      arrives; prints per-step duration and per-step scaling factor (5k → 50k) for each
+      of the eight steps. Not run end-to-end on this dev machine — the user asked not to
+      run the multi-minute `--ignored` benchmark interactively; verified by
+      `cargo build`/`cargo clippy --all-targets` and code review, with the real
+      execution left to the new scheduled job above
 - [ ] P-4/Q-7 parallelize copy step if measurement shows it matters, else record why not
 - [x] P-5 scan-cache mutex poisoning asymmetry fixed (`lookup`/`store` now recover from
       poisoning the same way `flush` already did); 2 new tests, verified to fail
