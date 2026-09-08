@@ -210,17 +210,25 @@ jobs:
         include:
           - image: "ubuntu:24.04"
             pkg_manager: apt
-            package_glob: "target/release/bundle/deb/*.deb"
+            package_glob: "deb/*.deb"
           - image: "debian:12"
             pkg_manager: apt
-            package_glob: "target/release/bundle/deb/*.deb"
+            package_glob: "deb/*.deb"
           - image: "fedora:41"
             pkg_manager: dnf
-            package_glob: "target/release/bundle/rpm/*.rpm"
+            package_glob: "rpm/*.rpm"
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
     steps:
+      # `upload-artifact` above (`path:` with four glob patterns all rooted at
+      # `target/release/bundle/`) stores each file relative to the *least common
+      # ancestor* of everything it matched, not the original build path — so the
+      # download here lands at `deb/*.deb`/`rpm/*.rpm`, never
+      # `target/release/bundle/deb/*.deb`. First real run of this job (this workflow
+      # was split out of ci.yml, and its predecessor there had never been exercised by
+      # Actions either) found this the hard way: exit 100 from `apt-get install` on an
+      # unexpanded glob that matched nothing (found in CI, 2026-09-08).
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: linux-packages
