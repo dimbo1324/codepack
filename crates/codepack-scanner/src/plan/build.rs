@@ -602,7 +602,16 @@ mod tests {
         assert!(plan.excluded_files[0].reason.contains("backslash"));
     }
 
-    #[cfg(unix)]
+    // Linux only, not every `unix`: the classification logic itself is already proven
+    // platform-independent by the synthetic-path test above, which builds a
+    // `WalkedFile` in memory and never touches a filesystem. This test additionally
+    // proves the real walk-to-plan pipeline sees such a file at all — which needs a
+    // filesystem that will actually store the name. Linux (ext4 and friends) treats a
+    // filename as an opaque byte string; macOS's APFS validates it as UTF-8 and refuses
+    // to create the file with `EILSEQ` before this test's own setup can run, so running
+    // this on macOS fails on the fixture, not the code under test (found via CI,
+    // 2026-09-08).
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_real_non_utf8_named_file_on_disk_does_not_break_the_whole_plan() {
         use std::os::unix::ffi::OsStrExt;

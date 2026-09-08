@@ -155,5 +155,13 @@ it; `docs/__arch__/open-questions.md` holds both decisions and the Q21 history.
   and failing on both Unix runners since July for exactly that reason.
 - Test helpers under `#[cfg(unix)]` stay: they do not compile on Windows, so they cost
   nothing there, and they carry the invariant I7 symlink coverage.
+- `#[cfg(unix)]` is not one filesystem. A test that writes a genuinely non-UTF-8-named
+  file to disk needs `#[cfg(target_os = "linux")]`, not `#[cfg(unix)]`: Linux (ext4 and
+  friends) stores a filename as an opaque byte string, but macOS's APFS validates it as
+  UTF-8 and refuses to create the file at all (`EILSEQ`) — found when the macOS gate
+  leg failed on the fixture setup itself, not the code under test (audit 2026-09-07
+  remediation, 2026-09-08). The classification logic this exercises has its own
+  synthetic-path test beside it that never touches a filesystem, so it stays proven on
+  every platform regardless.
 - The Rust toolchain is pinned in `rust-toolchain.toml`; do not bypass it. Node and pnpm
   versions are declared in `package.json`.

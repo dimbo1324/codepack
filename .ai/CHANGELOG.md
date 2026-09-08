@@ -8,6 +8,30 @@ Format: date, what changed, why, who decided. Newest first.
 
 ---
 
+### 2026-09-08 — `#[cfg(unix)]` is not one filesystem
+
+**What changed.** `15-command-reference.md`'s Platform notes gain a bullet: a test that
+writes a genuinely non-UTF-8-named file to disk needs `#[cfg(target_os = "linux")]`, not
+`#[cfg(unix)]` — Linux stores a filename as an opaque byte string, but macOS's APFS
+validates it as UTF-8 and refuses to create the file at all.
+
+**Why.** During the 2026-09-07 audit remediation, pushing to CI for the first time in
+that pass turned up a macOS gate failure:
+`codepack-scanner::plan::build::tests::a_real_non_utf8_named_file_on_disk_does_not_break_the_whole_plan`
+panicked with `Os { code: 92, ..., message: "Illegal byte sequence" }` — not in the code
+under test, but in the test's own fixture setup (`fs::write` with a `\xC0\xC1`-named
+path), because macOS's filesystem rejects the name outright. The existing "write the
+platform-independent check" bullet already covered *behavior*; this is the same
+principle applied to *test fixtures that touch a real filesystem*, which is a distinct
+enough failure mode to name concretely so the next agent recognizes it on sight rather
+than re-diagnosing it. Fixed by narrowing the `#[cfg]` to Linux; the classification
+logic itself was already separately proven platform-independent by a synthetic-path
+unit test beside it that builds a `WalkedFile` in memory and never touches a
+filesystem, so no coverage was lost.
+
+**Who decided.** Discovered and fixed autonomously (a concrete example of an existing
+rule, not a new constraint) while finishing the 2026-09-07 audit remediation task.
+
 ### 2026-09-07 — A checked-but-not-enforced boundary, and a check tested one-sided
 
 **What changed.** `04-architecture-boundaries.md` gains a rule under "Boundaries": a
