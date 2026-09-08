@@ -95,28 +95,34 @@ pub fn scan_project_with_options(
         partial_scans.extend(record.partial_scans);
     }
 
-    // `_cached`: computes each key once rather than on every comparison — the other
-    // sorts below still take the `.to_lowercase()`-per-comparison shape this one avoids,
-    // a pre-existing pattern Step 7 (P-9/Q-9/Q-11) revisits deliberately rather than as
-    // a side effect of this change.
+    // `_cached`: computes each key once per element rather than on every comparison —
+    // for 50,000 files, `sort_by`'s comparator shape here was on the order of 1.5
+    // million throwaway `String`s (audit 2026-09-07, P-9/Q-9). `sort_by_cached_key` is
+    // documented as stable, the same as `sort_by` was, so this does not disturb the
+    // insertion-order tie-break this module's own doc comment above already commits to
+    // (invariant I5) — restated here because that is exactly the property a reader
+    // would otherwise have to re-derive on seeing a sort method change.
     partial_scans.sort_by_cached_key(|record| record.display.to_lowercase());
 
-    files.sort_by(|a, b| {
-        confidence_rank(a.severity)
-            .cmp(&confidence_rank(b.severity))
-            .then_with(|| a.display.to_lowercase().cmp(&b.display.to_lowercase()))
+    files.sort_by_cached_key(|record| {
+        (
+            confidence_rank(record.severity),
+            record.display.to_lowercase(),
+        )
     });
-    secrets.sort_by(|a, b| {
-        confidence_rank(&a.confidence)
-            .cmp(&confidence_rank(&b.confidence))
-            .then_with(|| a.display.to_lowercase().cmp(&b.display.to_lowercase()))
-            .then_with(|| a.line_number.cmp(&b.line_number))
+    secrets.sort_by_cached_key(|record| {
+        (
+            confidence_rank(&record.confidence),
+            record.display.to_lowercase(),
+            record.line_number,
+        )
     });
-    risky.sort_by(|a, b| {
-        confidence_rank(&a.severity)
-            .cmp(&confidence_rank(&b.severity))
-            .then_with(|| a.display.to_lowercase().cmp(&b.display.to_lowercase()))
-            .then_with(|| a.line_number.cmp(&b.line_number))
+    risky.sort_by_cached_key(|record| {
+        (
+            confidence_rank(&record.severity),
+            record.display.to_lowercase(),
+            record.line_number,
+        )
     });
 
     let mut findings =

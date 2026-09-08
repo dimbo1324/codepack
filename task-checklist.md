@@ -145,7 +145,16 @@ conflict gets escalated, not guessed past silently.
       poisoning the same way `flush` already did); 2 new tests, verified to fail
       without the fix before committing it
 - [ ] P-3/Q-8 observable WAL fallback in `doctor`; single shared connection in desktop `AppState`
-- [ ] P-9/Q-9/Q-11 `sort_by_cached_key`, formatter PATH lookup cache
+- [x] P-9/Q-9 `codepack-security::scan`'s three `sort_by` calls (files/secrets/risky)
+      converted to `sort_by_cached_key`, stability preserved and restated in comment
+      (invariant I5); `codepack-scanner::walk.rs`'s `compare_like_os_walk` deliberately
+      left alone — it is a `walkdir::sort_by` per-directory-level comparator, a
+      structurally different API with no `sort_by_cached_key` equivalent, and each
+      directory's own child count (not the whole tree's file count) is what actually
+      bounds its cost
+- [x] Q-11 `codepack-sanitize::format::path_lookup::find_on_path` memoized for the life
+      of the process (`OnceLock<Mutex<HashMap<...>>>`), with the caveat documented that
+      a formatter installed mid-run goes unnoticed until restart
 
 ## Step 8 — remaining tests and hygiene
 
