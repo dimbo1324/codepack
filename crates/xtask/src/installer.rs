@@ -237,7 +237,8 @@ fn check_gate_at(root: &Path, expected_version: &str) -> Result<(), String> {
     }
 
     println!(
-        "{INSTALLER_FILE}: version {} matches Cargo.toml, sha256 matches {INFO_FILE} \
+        "{INSTALLER_FILE}: version {} matches Cargo.toml, sha256 matches {INFO_FILE}, \
+         and it was published from that version's own installer \
          (this does not prove it was built from the current commit)",
         info.version
     );
