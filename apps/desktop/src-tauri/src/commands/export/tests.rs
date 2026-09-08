@@ -400,3 +400,118 @@ fn each_s12_command_finds_its_own_file_in_an_extracted_bundle() {
         .is_some()
     );
 }
+
+// --- S-9: the extracted-bundle cache lives in data_dir, not settings_dir ------------
+
+#[test]
+fn extraction_lands_under_data_dir_not_settings_dir() {
+    // `data_dir()` and `settings_dir()` coincide on Windows and macOS by design — the
+    // audit's own words: "on Windows and macOS this is the same place as now; on Linux,
+    // the right one." So the only assertion that holds on every platform is that the
+    // code asks `data_dir()` for this, structurally — not that the two paths differ,
+    // which they do not on this dev machine (or on macOS) at all.
+    let root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(root.path());
+    let archive = root.path().join("bundle.zip");
+
+    let destination = extraction_dir_for(&paths, &archive).unwrap();
+
+    assert!(
+        destination.starts_with(paths.data_dir()),
+        "{}",
+        destination.display()
+    );
+    assert_eq!(
+        extraction_cache_root(&paths),
+        paths.data_dir().join("extracted")
+    );
+}
+
+/// On Windows and macOS, `settings_dir()` and `data_dir()` are the same path, so the
+/// "legacy" and "current" cache roots coincide here — this proves the deletion runs
+/// without error and leaves the location absent, not that a Linux-shaped move from one
+/// distinct directory to another actually happened; that only exists to prove on Linux.
+#[test]
+fn the_pre_s9_cache_location_is_discarded_at_startup() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = isolated_paths(root.path());
+    let legacy = paths.settings_dir().join("extracted").join("stale-entry");
+    std::fs::create_dir_all(&legacy).unwrap();
+    std::fs::write(legacy.join("leftover.txt"), "x").unwrap();
+
+    migrate_and_sweep_extraction_cache(&paths);
+
+    assert!(!paths.settings_dir().join("extracted").exists());
+}
+
+#[test]
+fn a_cache_entry_past_retention_is_removed_by_the_sweep() {
+    let root = tempfile::tempdir().unwrap();
+    let cache_root = root.path().join("extracted");
+    let stale = cache_root.join("old-entry");
+    std::fs::create_dir_all(&stale).unwrap();
+    let file = stale.join("payload.bin");
+    std::fs::write(&file, "x").unwrap();
+    let ancient = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(u64::from(EXTRACTION_CACHE_RETENTION_DAYS + 1) * 86_400);
+    let handle = std::fs::OpenOptions::new().write(true).open(&file).unwrap();
+    handle.set_modified(ancient).unwrap();
+
+    sweep_extraction_cache(&cache_root).unwrap();
+
+    assert!(!stale.exists());
+}
+
+#[test]
+fn a_freshly_used_cache_entry_survives_the_sweep() {
+    let root = tempfile::tempdir().unwrap();
+    let cache_root = root.path().join("extracted");
+    let fresh = cache_root.join("fresh-entry");
+    std::fs::create_dir_all(&fresh).unwrap();
+    std::fs::write(fresh.join("payload.bin"), "x").unwrap();
+
+    sweep_extraction_cache(&cache_root).unwrap();
+
+    assert!(fresh.exists());
+}
+
+#[test]
+fn the_least_recently_used_entries_are_removed_first_once_the_cache_is_full() {
+    let root = tempfile::tempdir().unwrap();
+    let cache_root = root.path().join("extracted");
+    let cap_bytes = EXTRACTION_CACHE_TOTAL_CAP_MB * BYTES_PER_MEBIBYTE;
+    // Two entries, each just over half the cap, so both fitting requires evicting the
+    // older one — the same "half plus half exceeds the whole" shape `LogSink`'s own
+    // cap test uses.
+    let each_size = (cap_bytes / 2) + 1024;
+
+    let older = cache_root.join("older-entry");
+    std::fs::create_dir_all(&older).unwrap();
+    std::fs::write(older.join("payload.bin"), vec![0u8; each_size as usize]).unwrap();
+    let older_time = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    let handle = std::fs::OpenOptions::new()
+        .write(true)
+        .open(older.join("payload.bin"))
+        .unwrap();
+    handle.set_modified(older_time).unwrap();
+
+    let newer = cache_root.join("newer-entry");
+    std::fs::create_dir_all(&newer).unwrap();
+    std::fs::write(newer.join("payload.bin"), vec![0u8; each_size as usize]).unwrap();
+
+    sweep_extraction_cache(&cache_root).unwrap();
+
+    assert!(
+        !older.exists(),
+        "the older entry should have been evicted first"
+    );
+    assert!(newer.exists(), "the newer entry should survive");
+}
+
+#[test]
+fn a_cache_directory_that_has_never_been_opened_sweeps_without_error() {
+    let root = tempfile::tempdir().unwrap();
+    let cache_root = root.path().join("never-created");
+
+    sweep_extraction_cache(&cache_root).unwrap();
+}

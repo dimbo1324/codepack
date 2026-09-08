@@ -113,7 +113,9 @@ conflict gets escalated, not guessed past silently.
       itself specified (cross-checked with `cargo check`/`clippy --target
       x86_64-unknown-linux-gnu`, since this dev machine is Windows; not exercised by a
       live run here — CI's Linux/macOS legs do that)
-- [ ] S-9 extracted bundles moved to `data_dir`, given a ceiling and a retention sweep
+- [x] S-9 extracted bundles moved to `data_dir` (only changes anything on Linux, per
+      the audit's own note that Windows/macOS already coincide), old location deleted
+      at startup, 14-day/1024 MB retention sweep matching the scan cache's own shape
 - [ ] S-10 `cargo auditable` in the packaging step
 - [ ] S-12 weekly scheduled job building `codepack-ai-api`
 - [ ] C-7 release job on tag

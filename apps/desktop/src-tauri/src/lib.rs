@@ -59,6 +59,11 @@ pub fn run() {
     // starting, only leave this one diagnostic path unavailable.
     if let Ok(app_paths) = codepack_core::AppPaths::resolve() {
         codepack_engine::install_panic_hook(app_paths.log_dir());
+        // Audit 2026-09-07, S-9: the extracted-bundle cache gets the same "clean up once
+        // at startup" treatment as the panic hook's own directory resolution — a fixed,
+        // reproducible cache, not user data, so a sweep failure here must not stop the
+        // application any more than a missing log directory would.
+        commands::export::migrate_and_sweep_extraction_cache(&app_paths);
     }
 
     tauri::Builder::default()

@@ -310,6 +310,17 @@ fn extract_validated_bundle(
 
 /// Where a bundle is unpacked for reading.
 ///
+/// The `extracted/` cache's location: the application's own data directory, not the
+/// settings directory (audit 2026-09-07, S-9). `settings_dir()` — `~/.config` on Linux —
+/// is exactly what the database moved *out of* five commits earlier (`layout()`'s own
+/// doc comment: a multi-megabyte file there "lands in the directory people put in a
+/// dotfiles repository or sync between machines"). A distributed bundle is worse: a full
+/// copy of somebody's source tree, hundreds of megabytes, growing every time a new
+/// archive is opened, with nothing that ever cleaned it up.
+fn extraction_cache_root(paths: &codepack_core::AppPaths) -> std::path::PathBuf {
+    paths.data_dir().join("extracted")
+}
+
 /// Under the application's own data directory rather than beside the archive. Writing a
 /// `_extracted` folder next to somebody's file is a liberty a command should not take —
 /// the user never opens that folder by hand, and the archive may sit anywhere. The name
@@ -330,7 +341,7 @@ fn extraction_dir_for(
         let _ = write!(key, "{byte:02x}");
     }
 
-    let destination = paths.settings_dir().join("extracted").join(key);
+    let destination = extraction_cache_root(paths).join(key);
     std::fs::create_dir_all(&destination).map_err(|source| {
         CommandError::new(format!(
             "cannot prepare {}: {source}",
@@ -338,6 +349,111 @@ fn extraction_dir_for(
         ))
     })?;
     Ok(destination)
+}
+
+/// Retention for the `extracted/` cache (audit 2026-09-07, S-9): every entry is
+/// reproducible by re-extracting the archive it came from, so this is a cache, not user
+/// data, and gets the same shape the scan cache already has — a ceiling and a sweep —
+/// rather than growing forever. Hardcoded rather than a `Config` field, matching the
+/// scan cache's own `MAX_ENTRIES`: a user has no reason to tune how long a *cache*
+/// keeps entries around, only whether the feature that fills it works.
+const EXTRACTION_CACHE_RETENTION_DAYS: u32 = 14;
+const EXTRACTION_CACHE_TOTAL_CAP_MB: u64 = 1024;
+const BYTES_PER_MEBIBYTE: u64 = 1024 * 1024;
+
+/// Runs once at application startup: discards the pre-S-9 cache location if it still
+/// exists (its content is reproducible, so deleting is safe and simpler than migrating
+/// a cache), then sweeps the current one. Best-effort throughout — a cache that fails
+/// to clean itself up must not stop the application from starting.
+pub(crate) fn migrate_and_sweep_extraction_cache(paths: &codepack_core::AppPaths) {
+    let legacy = paths.settings_dir().join("extracted");
+    if legacy.is_dir() {
+        let _ = std::fs::remove_dir_all(&legacy);
+    }
+    let _ = sweep_extraction_cache(&extraction_cache_root(paths));
+}
+
+/// One directory's total on-disk size and the newest modification time among the files
+/// inside it — "newest", because [`extract_validated_bundle`] rewrites every file in an
+/// entry each time its bundle is reopened, so the freshest file inside is a truer signal
+/// of "last used" than the entry directory's own inode, which need not change when only
+/// existing files are rewritten in place.
+fn dir_stats(dir: &std::path::Path) -> (u64, std::time::SystemTime) {
+    let mut total_bytes = 0u64;
+    let mut newest = std::time::SystemTime::UNIX_EPOCH;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(read_dir) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in read_dir.flatten() {
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            if metadata.is_dir() {
+                stack.push(entry.path());
+                continue;
+            }
+            total_bytes += metadata.len();
+            if let Ok(modified) = metadata.modified()
+                && modified > newest
+            {
+                newest = modified;
+            }
+        }
+    }
+    (total_bytes, newest)
+}
+
+/// Deletes an entry past [`EXTRACTION_CACHE_RETENTION_DAYS`], then deletes the
+/// least-recently-used remaining entries until the cache is under
+/// [`EXTRACTION_CACHE_TOTAL_CAP_MB`] — the same two-stage shape `codepack_engine`'s
+/// `LogSink::sweep` uses for the activity log. Kept as its own, separately simple
+/// function rather than sharing that one: a log sweep removes name-filtered *files* by
+/// their own mtime, this removes arbitrary *directories* by the newest mtime among the
+/// files recursively inside them, and forcing one abstraction over both would need more
+/// parameters and indirection than either version has on its own (the same
+/// duplication-over-coupling trade `codepack_engine::text_dump`'s own module doc already
+/// makes for a similarly small, differently-shaped pair of helpers).
+fn sweep_extraction_cache(cache_root: &std::path::Path) -> std::io::Result<()> {
+    let Ok(read_dir) = std::fs::read_dir(cache_root) else {
+        // Never opened yet, or the data directory itself is not there — nothing to
+        // sweep, and not a failure either.
+        return Ok(());
+    };
+
+    let mut entries: Vec<(std::path::PathBuf, std::time::SystemTime, u64)> = Vec::new();
+    for entry in read_dir.flatten() {
+        if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            let (size, newest) = dir_stats(&entry.path());
+            entries.push((entry.path(), newest, size));
+        }
+    }
+
+    let now = std::time::SystemTime::now();
+    let retention =
+        std::time::Duration::from_secs(u64::from(EXTRACTION_CACHE_RETENTION_DAYS) * 24 * 60 * 60);
+    entries.retain(|(path, newest, _)| {
+        let age = now.duration_since(*newest).unwrap_or_default();
+        let expired = EXTRACTION_CACHE_RETENTION_DAYS == 0 || age > retention;
+        if expired {
+            let _ = std::fs::remove_dir_all(path);
+        }
+        !expired
+    });
+
+    entries.sort_by_key(|(_, newest, _)| *newest);
+    let cap_bytes = EXTRACTION_CACHE_TOTAL_CAP_MB * BYTES_PER_MEBIBYTE;
+    let mut total: u64 = entries.iter().map(|(_, _, size)| size).sum();
+    let mut index = 0;
+    while total > cap_bytes && index < entries.len() {
+        let (path, _, size) = &entries[index];
+        if std::fs::remove_dir_all(path).is_ok() {
+            total = total.saturating_sub(*size);
+        }
+        index += 1;
+    }
+    Ok(())
 }
 
 /// Finds a bundle file by name, checking the layouts an export can produce.
