@@ -122,8 +122,20 @@ jobs:
       - name: "debian:12 build: install cargo-auditable"
         run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo install cargo-auditable --locked -q'
 
+      # `CARGO_TARGET_DIR=/build`, not the bind-mounted `/repo/target`: see
+      # package-linux.yml's identical step for why — a from-scratch release build of
+      # codepack-cli's own dependency graph alone measured over 2 GiB, verified by
+      # hand, and this workspace's native Tauri build needs much of the same graph
+      # again from a different toolchain path. `/build` disappears with the container
+      # instead of eating into the runner's limited disk before the native build even
+      # starts; only the finished binary crosses back out, via `docker cp`.
       - name: "debian:12 build: cargo auditable build codepack-cli"
-        run: docker exec codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo auditable build --release -p codepack-cli'
+        run: docker exec -e CARGO_TARGET_DIR=/build codepack-cli-glibc-baseline bash -c '. "$HOME/.cargo/env" && cargo auditable build --release -p codepack-cli'
+
+      - name: Copy the built CLI out of the container
+        run: |
+          mkdir -p target/release
+          docker cp codepack-cli-glibc-baseline:/build/release/codepack target/release/codepack
 
       - name: Stop the debian:12 build container
         if: always()
