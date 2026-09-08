@@ -79,9 +79,12 @@ fn into_inner<T>(lock: Mutex<T>) -> T {
 impl FileScanCache for SqliteScanCache {
     fn lookup(&self, key: &str) -> Option<Vec<CachedFinding>> {
         let found = self.entries.get(key)?;
-        if let Ok(mut used) = self.used.lock() {
-            used.insert(key.to_string());
-        }
+        // Audit 2026-09-07, P-5: the same recovery `into_inner` above already applies
+        // to `flush`, applied here too — this was the asymmetry the audit found. `Ok`
+        // silently dropped every mark-as-used call the moment any rayon worker panicked
+        // anywhere in the pass, which then made `prune_scan_cache` delete entries that
+        // genuinely were in use because they were never marked so.
+        lock(&self.used).insert(key.to_string());
         Some(found.clone())
     }
 
@@ -92,8 +95,82 @@ impl FileScanCache for SqliteScanCache {
         let Some(json) = cache::encode(findings) else {
             return;
         };
-        if let Ok(mut pending) = self.pending.lock() {
-            pending.push((key.to_string(), json));
-        }
+        lock(&self.pending).push((key.to_string(), json));
+    }
+}
+
+/// Locks a mutex, treating poisoning as recoverable — the borrowing twin of
+/// [`into_inner`]. A panic on one rayon worker must not silently stop every other
+/// worker's cache writes for the rest of the pass.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cache_with_one_entry() -> (tempfile::TempDir, SqliteScanCache) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = codepack_storage::open(&dir.path().join("codepack.db")).unwrap();
+        let json = cache::encode(&[]).unwrap();
+        codepack_storage::scan_cache::store_scan_cache(
+            &mut conn,
+            &[("planted-key".to_string(), json)],
+            &[],
+        )
+        .unwrap();
+        let cache = SqliteScanCache::load(&conn).unwrap();
+        (dir, cache)
+    }
+
+    /// Audit 2026-09-07, P-5: before this fix, `lookup` on a poisoned `used` mutex
+    /// silently stopped marking keys as used for the rest of the pass — and
+    /// `prune_scan_cache` then deleted entries that genuinely were in use, because
+    /// nothing ever recorded that they were.
+    #[test]
+    fn a_lookup_still_marks_the_key_used_after_the_mutex_is_poisoned() {
+        let (_dir, cache) = cache_with_one_entry();
+        poison_the_field(&cache.used);
+
+        let found = cache.lookup("planted-key");
+        assert!(found.is_some(), "the entry itself must still be served");
+        assert!(
+            lock(&cache.used).contains("planted-key"),
+            "lookup must still record the key as used past a poisoned mutex"
+        );
+    }
+
+    /// Same shape as the lookup test, for the other mutex `store` writes through.
+    #[test]
+    fn a_store_still_records_the_entry_after_the_mutex_is_poisoned() {
+        let (_dir, cache) = cache_with_one_entry();
+        poison_the_field(&cache.pending);
+
+        cache.store("new-key", &[]);
+
+        let pending = lock(&cache.pending);
+        assert!(
+            pending.iter().any(|(key, _)| key == "new-key"),
+            "store must still record the entry past a poisoned mutex: {pending:?}"
+        );
+    }
+
+    /// Poisons `field` in place, on the current process — no leaking, no swapping
+    /// fields, just a panic on a scoped thread that borrows the mutex for exactly as
+    /// long as it needs to poison it. `std::thread::scope` is what makes borrowing
+    /// (rather than `'static`) sound here.
+    fn poison_the_field<T: Send>(field: &Mutex<T>) {
+        std::thread::scope(|scope| {
+            let _ = scope
+                .spawn(|| {
+                    let _guard = field.lock().unwrap();
+                    panic!("planted panic to poison the mutex, matching a rayon worker's own");
+                })
+                .join();
+        });
+        assert!(field.is_poisoned());
     }
 }

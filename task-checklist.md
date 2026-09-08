@@ -141,7 +141,9 @@ conflict gets escalated, not guessed past silently.
 - [ ] T-3/C-3 perf_smoke runs on a schedule
 - [ ] Break perf_smoke's timing down per pipeline step
 - [ ] P-4/Q-7 parallelize copy step if measurement shows it matters, else record why not
-- [ ] P-5 fix scan-cache mutex poisoning asymmetry (one-line fix, do regardless of measurement)
+- [x] P-5 scan-cache mutex poisoning asymmetry fixed (`lookup`/`store` now recover from
+      poisoning the same way `flush` already did); 2 new tests, verified to fail
+      without the fix before committing it
 - [ ] P-3/Q-8 observable WAL fallback in `doctor`; single shared connection in desktop `AppState`
 - [ ] P-9/Q-9/Q-11 `sort_by_cached_key`, formatter PATH lookup cache
 
