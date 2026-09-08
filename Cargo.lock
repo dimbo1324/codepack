@@ -544,7 +544,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-ai"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "tempfile",
@@ -553,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-archive"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "codepack-tokens",
@@ -568,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-cli"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -594,7 +594,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "crossbeam-channel",
  "serde",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-desktop"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-ai",
  "codepack-archive",
@@ -633,7 +633,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-diff"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "git2",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-engine"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-archive",
  "codepack-core",
@@ -669,7 +669,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-reports"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "codepack-diff",
@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-sanitize"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-archive",
  "codepack-core",
@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-scanner"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "codepack-tokens",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-security"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "aho-corasick",
  "codepack-core",
@@ -748,7 +748,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-storage"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "rusqlite",
  "serde",
@@ -759,7 +759,7 @@ dependencies = [
 
 [[package]]
 name = "codepack-tokens"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5601,7 +5601,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "codepack-core",
  "sha2",

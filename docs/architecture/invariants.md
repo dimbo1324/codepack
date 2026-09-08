@@ -67,6 +67,23 @@ written.
 
 **Why.** A tool that logs the secrets it finds becomes a source of leaks itself.
 
+**How it is enforced (strengthened 2026-09-07).** Four mechanisms, because this invariant
+has the most surfaces of any of them and each was broken at least once:
+
+- `crates/xtask/src/report_redaction.rs`, a gate step: raw project content is reachable
+  only through `text::read_text_unredacted`, and every report calling it must be declared
+  there with a sentence saying why what it reads is safe. Adding the call without the
+  entry fails the build.
+- `codepack_engine::LogLine` is constructible only through `LogLine::of`, which redacts —
+  the activity log cannot be written to except through the redactor.
+- The progress channel's `log`/`log_info` closures redact before sending. Until
+  2026-09-07 they did not, and a secret reached the CLI's stderr and the desktop window
+  live, in the clear. Any new consumer of that channel inherits the fix.
+- `crates/codepack-security/tests/i3_no_secret_leak.rs` asserts no serialized `Finding`
+  contains a substring of the original value, and `tests/utf8_boundaries.rs` proves the
+  redactor does not panic — a panic mid-redaction leaves the caller holding the
+  unredacted input.
+
 ## I4. Byte figures are preserved
 
 Size in bytes is reported everywhere the previous version reported it. Tokens are an
@@ -74,6 +91,12 @@ additional metric alongside, never a replacement.
 
 **Why.** A direct owner decision (2026-07-22): bytes are what people read, and what
 tells you the real volume of data.
+
+**How it is enforced.** `codepack-tokens` owns the byte formatting, ported verbatim from
+the previous implementation, and `tests/golden/` compares whole generated artifacts
+against that implementation's real recorded output. A byte figure that changed shape, or
+disappeared in favour of a token count, fails the comparison rather than being noticed by
+a reader.
 
 ## I5. Artifact formats stay backward compatible
 
@@ -84,6 +107,12 @@ Changing one requires bumping `schema_version` and recording the decision.
 **Why.** These artifacts are consumed by other tools and by people; changing a format
 quietly breaks someone else's process.
 
+**How it is enforced.** The same golden comparison in `tests/golden/`, plus every
+artifact writer carrying its own `schema_version`. The version is the deliberate part: a
+format may change, but not silently — the number moves and the decision is recorded in
+`docs/__arch__/open-questions.md`. Changing a field without moving it is what the golden
+test exists to make loud.
+
 ## I6. Cancelling never corrupts state
 
 Every long operation can be interrupted at any moment. A cancelled or failed run does
@@ -91,6 +120,16 @@ not overwrite the snapshot baseline and leaves behind no partial data presented 
 complete.
 
 **Why.** Otherwise the next differential export produces a wrong answer.
+
+**How it is enforced.** Cancellation is checked inside each step's loops rather than only
+between steps, and the archive writers build into a staging file that is moved into place
+only once complete — a cancelled run leaves last week's archive exactly as it found it.
+Proven by `codepack-engine/tests/cancellation.rs`, and in `codepack-archive` by
+`a_cancelled_run_leaves_no_half_written_archive_behind` and
+`a_failed_run_leaves_an_existing_archive_of_the_same_name_untouched`. One limit is known
+and documented rather than hidden: cancelling mid-copy of a single very large archive
+member does not interrupt that member, characterised by
+`tests/cancellation_mid_file.rs`.
 
 ## I7. Walking and extraction are safe
 
@@ -100,6 +139,16 @@ member's target path is validated before anything is written (path-traversal saf
 **Why.** Otherwise a specially crafted project or archive escapes the destination
 directory.
 
+**How it is enforced.** One primitive, `codepack_core::safe_join`, used by every path
+that resolves an outside-supplied path component — archive extraction and, since
+2026-09-07, `codepack init --hook`'s `core.hooksPath`. Symlinks are refused at the walk
+and never packed. `codepack-archive/tests/security.rs` feeds the extractor every
+malicious member shape and asserts nothing is written outside the destination; the
+symlink half is covered by `#[cfg(unix)]` tests that run on the macOS and Linux gate legs.
+Paths are compared with `Path::components`, never by splitting on a separator — a
+backslash is a path separator on Windows only, and that difference had already hidden one
+traversal defect for months (Q21).
+
 ## I8. The core does not depend on the interface
 
 No `codepack-*` crate depends on Tauri or on the frontend; the whole core builds and
@@ -107,6 +156,13 @@ tests headless. Dependencies point strictly downward, and cycles are forbidden.
 
 **Why.** The CLI, automation and testability all rest on this — and mixing the layers is
 what made the previous version Windows-only.
+
+**How it is enforced.** Structurally: `codepack-desktop` is a workspace member that
+depends on the crates, and no crate depends back. `cargo xtask gate` builds and tests the
+whole workspace headless on three runners, so a crate that grew a Tauri dependency would
+fail to build where no webview exists. The dependency direction itself is read
+mechanically by `crates/xtask/src/network_isolation.rs`, which parses every member's
+manifest — the same walk that enforces I1.
 
 ## I9. Detector quality thresholds are never lowered
 
@@ -116,3 +172,10 @@ the test.
 
 **Why.** Secret detection is the product's central value; degrading it quietly is more
 dangerous than a red build.
+
+**How it is enforced.** `crates/codepack-security/tests/corpus.rs` scores every detector
+against a labelled corpus of positives and negatives and asserts the metrics directly, so
+a regression fails the gate with the numbers in the message rather than needing someone
+to read a log. Its own module doc states the rule in the imperative — lowering a threshold
+to make the test pass is forbidden, and a recall drop is a defect to report. The corpus is
+append-only in spirit: cases are added, never removed to make a number look better.

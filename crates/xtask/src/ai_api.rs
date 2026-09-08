@@ -109,4 +109,50 @@ mod against_the_real_repository {
             "crates/codepack-ai-api must stay in workspace.exclude — see Q41"
         );
     }
+
+    /// The version is the one thing the exclusion cannot keep honest by itself.
+    ///
+    /// Every workspace member inherits `version.workspace = true`, so a release bump
+    /// moves all of them at once. This crate spells its version out, because an excluded
+    /// package cannot inherit — and nothing until now compared the two. A release would
+    /// simply leave it a version behind, and the first sign would be a stale number in
+    /// whatever S13 eventually ships. Added during the 2.0.1 release, where it had
+    /// already happened once.
+    #[test]
+    fn the_excluded_crate_carries_the_same_version_as_the_workspace() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("the workspace root is two levels above this crate");
+
+        let version_of = |manifest: toml::Table, table: &str| -> Option<String> {
+            manifest
+                .get(table)
+                .and_then(|section| section.get("package"))
+                .or_else(|| manifest.get(table))
+                .and_then(|package| package.get("version"))
+                .and_then(toml::Value::as_str)
+                .map(str::to_string)
+        };
+
+        let workspace: toml::Table = std::fs::read_to_string(root.join("Cargo.toml"))
+            .expect("root manifest")
+            .parse()
+            .expect("root manifest is valid TOML");
+        let excluded: toml::Table = std::fs::read_to_string(root.join(MANIFEST))
+            .expect("excluded manifest")
+            .parse()
+            .expect("excluded manifest is valid TOML");
+
+        let workspace_version =
+            version_of(workspace, "workspace").expect("[workspace.package] version");
+        let excluded_version = version_of(excluded, "package").expect("[package] version");
+
+        assert_eq!(
+            excluded_version, workspace_version,
+            "codepack-ai-api is version {excluded_version} while the workspace is \
+             {workspace_version}; an excluded package cannot inherit the bump, so it has \
+             to be moved by hand in crates/codepack-ai-api/Cargo.toml"
+        );
+    }
 }

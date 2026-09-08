@@ -9,14 +9,18 @@
 > log and in the internal plan; this file answers "what is built and how does it fit
 > together".
 
-**Last revised:** 2026-09-07 · **Version:** 2.0.0
+**Last revised:** 2026-09-08 · **Version:** 2.0.1
 **Target platforms:** Windows 10/11, macOS and Linux. The 2026-07-26 narrowing to
 Windows was reversed on 2026-09-06; `codepack-core::paths` carries all three layouts
 again and CI runs the gate on all three runners. Packaging followed on the same day:
 `cargo xtask package` produces an NSIS `.exe` on Windows and `.deb`/`.rpm`/`.AppImage`
 on Linux (`tauri.conf.json`'s `bundle.linux`), each with dependencies declared per
-distribution and a `SHA256SUMS.txt` beside it. There is still no macOS bundle
-(stage S14), and none of the produced packages are signed yet.
+distribution and a `SHA256SUMS.txt` beside it. Since 2026-09-08 every Linux package is
+also **installed and run** in clean `ubuntu:24.04`, `debian:12` and `fedora:41`
+containers before it ships, which is what turned "the packages build" into "the packages
+work" — and immediately found that the CLI would not start on Debian 12 at all (see the
+Packaging row below). There is still no macOS bundle (stage S14), and none of the
+produced packages are signed yet.
 
 ## The shape of the system
 
