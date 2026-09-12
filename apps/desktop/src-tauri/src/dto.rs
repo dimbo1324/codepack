@@ -34,6 +34,80 @@ pub struct HandoffResult {
     pub agent_name: String,
 }
 
+// --- AI API path (stage S13, network path) ----------------------------------------
+
+/// What the settings screen needs to decide what to offer.
+///
+/// Carries no key and no way to obtain one: `key_stored` comes from
+/// `codepack_ai_api::keys::has_key`, which answers the question without reading the
+/// secret, so a stored key never crosses the IPC boundary outbound.
+#[derive(Debug, Clone, Serialize)]
+pub struct AiApiStatus {
+    pub provider: String,
+    pub provider_display_name: String,
+    /// Whether the integration is switched on in settings.
+    pub enabled: bool,
+    /// Whether a key is in this machine's credential store.
+    pub key_stored: bool,
+    /// Models this build knows about, most capable first. Advisory — a model released
+    /// later still works, because the field is a free-form string.
+    pub known_models: Vec<AiModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AiModelInfo {
+    pub id: String,
+    pub display_name: String,
+    pub context_tokens: u64,
+}
+
+/// What sending would mean, for the confirmation step.
+#[derive(Debug, Clone, Serialize)]
+pub struct AiSendPlan {
+    pub provider: String,
+    pub model: String,
+    pub context_files: usize,
+    pub context_bytes: u64,
+    /// Bytes as people read them. Formatted here rather than in the frontend so the
+    /// window and the CLI cannot disagree about what 1.5 MB means (invariant I4).
+    pub context_bytes_display: String,
+    pub estimated_tokens: u64,
+    /// `null` means the bundle carries no scan — **not** that it is clean. The screen
+    /// renders that as "not verified"; collapsing it into `0` would be this product
+    /// stating something false about somebody's secrets.
+    pub critical_findings: Option<u64>,
+    /// True when the estimate alone exceeds the model's advertised window.
+    pub exceeds_context: bool,
+    /// Whether anything blocks the send right now, and what.
+    pub refusal: Option<String>,
+    /// True when the only thing blocking it is the critical-findings guard, which the
+    /// user may override explicitly. Kept separate from `refusal` so the screen knows
+    /// whether to offer an override at all — a switched-off integration is not
+    /// overridable from this screen.
+    pub overridable: bool,
+}
+
+/// The answer, once it has come back.
+#[derive(Debug, Clone, Serialize)]
+pub struct AiAnswerResult {
+    pub text: String,
+    pub model: String,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub stopped_early: Option<String>,
+    /// Where the answer was appended inside the bundle.
+    pub answer_file: String,
+}
+
+/// One send, finished or failed. The only event this path emits.
+#[derive(Debug, Clone, Serialize)]
+pub struct AiFinishedEvent {
+    pub run_id: String,
+    pub answer: Option<AiAnswerResult>,
+    /// Already redacted, like every other error that reaches this window.
+    pub error: Option<String>,
+}
+
 // --- Application metadata ---------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]

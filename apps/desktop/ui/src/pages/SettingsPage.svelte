@@ -5,6 +5,9 @@
   // decides what leaves my machine" had no answer on screen. Grouping plus a sentence per
   // control is the whole change in substance; the rest is presentation.
   import {
+    aiApiClearKey,
+    aiApiStatus,
+    aiApiStoreKey,
     applyPreset,
     applyProfile,
     exportGlobalSettings,
@@ -16,7 +19,8 @@
     startWatch,
     stopWatch,
   } from "$lib/api/client";
-  import type { AppInfo } from "$lib/api/types";
+  import type { AiApiStatus, AppInfo } from "$lib/api/types";
+  import Callout from "$lib/components/Callout.svelte";
   import Field from "$lib/components/Field.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import Segmented, { type SegmentOption } from "$lib/components/Segmented.svelte";
@@ -35,6 +39,54 @@
   let selectedPreset = $state("");
   let saving = $state(false);
   let transferring = $state(false);
+
+  // --- The AI API path (stage S13, the network half) --------------------------------
+  //
+  // The key is the only value in this whole screen that is not part of `Config`, and
+  // that is deliberate: settings are a file people export and share with a team
+  // (`codepack settings export`), and a credential in that file would travel with it.
+  // It goes to the OS credential store instead, through a command that returns the fresh
+  // status rather than the value.
+  let apiStatus = $state<AiApiStatus | null>(null);
+  let keyDraft = $state("");
+  let keyBusy = $state(false);
+
+  $effect(() => {
+    void (async () => {
+      try {
+        apiStatus = await aiApiStatus();
+      } catch (error) {
+        reportError("settings.ai.statusFailed", error);
+      }
+    })();
+  });
+
+  async function storeKey(): Promise<void> {
+    keyBusy = true;
+    try {
+      apiStatus = await aiApiStoreKey(keyDraft);
+      // Cleared as soon as it is stored: a key left in a bound input stays in the
+      // webview's memory, and reaches a screenshot of this page.
+      keyDraft = "";
+      pushToast("success", "settings.ai.keyStored");
+    } catch (error) {
+      reportError("settings.ai.keyFailed", error);
+    } finally {
+      keyBusy = false;
+    }
+  }
+
+  async function clearKey(): Promise<void> {
+    keyBusy = true;
+    try {
+      apiStatus = await aiApiClearKey();
+      pushToast("success", "settings.ai.keyCleared");
+    } catch (error) {
+      reportError("settings.ai.keyFailed", error);
+    } finally {
+      keyBusy = false;
+    }
+  }
 
   const diffModes: SegmentOption<string>[] = $derived([
     { value: "all", label: t("settings.diffMode.all"), hint: t("settings.diffMode.hint.all") },
@@ -393,6 +445,67 @@
           {#if saving}<span class="spinner"></span>{/if}
           {t("settings.save")}
         </button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card__header">
+        <h2 class="card__title">{t("settings.group.ai")}</h2>
+        <p class="card__subtitle">{t("settings.group.ai.lede")}</p>
+      </div>
+      <div class="card__body stack">
+        <Switch
+          label={t("settings.ai.enabled")}
+          hint={t("settings.ai.enabled.hint")}
+          checked={config.ai_api_enabled}
+          onchange={(checked) => (config.ai_api_enabled = checked)}
+        />
+
+        {#if config.ai_api_enabled}
+          {#if apiStatus}
+            <Field label={t("settings.ai.model")} hint={t("settings.ai.model.hint")}>
+              <select class="select" bind:value={config.ai_api_model}>
+                <option value="">{t("settings.ai.model.default")}</option>
+                {#each apiStatus.known_models as model (model.id)}
+                  <option value={model.id}>{model.display_name}</option>
+                {/each}
+              </select>
+            </Field>
+
+            <Field label={t("settings.ai.key")} hint={t("settings.ai.key.hint")}>
+              <div class="row row--tight">
+                <input
+                  class="input"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  bind:value={keyDraft}
+                  placeholder={apiStatus.key_stored
+                    ? t("settings.ai.key.stored")
+                    : t("settings.ai.key.placeholder")}
+                />
+                <button
+                  class="btn btn--sm btn--primary"
+                  disabled={keyBusy || keyDraft.trim().length === 0}
+                  onclick={storeKey}
+                >
+                  {t("settings.ai.key.save")}
+                </button>
+                {#if apiStatus.key_stored}
+                  <button class="btn btn--sm" disabled={keyBusy} onclick={clearKey}>
+                    {t("settings.ai.key.clear")}
+                  </button>
+                {/if}
+              </div>
+            </Field>
+          {/if}
+
+          <Field label={t("settings.ai.question")} hint={t("settings.ai.question.hint")}>
+            <input class="input" type="text" bind:value={config.ai_api_question} />
+          </Field>
+
+          <Callout tone="warning">{t("settings.ai.warning")}</Callout>
+        {/if}
       </div>
     </section>
 

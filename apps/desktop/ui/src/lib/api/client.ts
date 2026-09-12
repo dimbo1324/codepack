@@ -12,6 +12,9 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import type {
+  AiApiStatus,
+  AiFinishedEvent,
+  AiSendPlan,
   AppInfo,
   Config,
   ExportFinishedEvent,
@@ -310,6 +313,52 @@ export function prepareHandoff(
   question: string,
 ): Promise<HandoffResult> {
   return invoke("prepare_handoff", { resultPath, agentId, question });
+}
+
+// --- AI API path (stage S13, the network half) ------------------------------------
+
+/** Provider, models, and whether the integration is on and a key is stored.
+ *
+ * Never returns the key. `key_stored` is a boolean because the backend answers the
+ * question without reading the secret. */
+export function aiApiStatus(): Promise<AiApiStatus> {
+  return invoke("ai_api_status");
+}
+
+/** What sending this bundle would mean — files, bytes, estimated tokens, and whether a
+ * guard blocks it. Reads no key and opens no connection, so it is safe to call for a
+ * bundle the user has not decided about. */
+export function aiApiPlan(resultPath: string, model: string | null): Promise<AiSendPlan> {
+  return invoke("ai_api_plan", { resultPath, model });
+}
+
+/** Sends, and resolves with a run id. The answer arrives through `onAiFinished`.
+ *
+ * `overrideCritical` must come from a second, deliberate action: passing it because the
+ * user pressed send would make the critical-findings refusal decorative. */
+export function aiApiAsk(
+  resultPath: string,
+  question: string,
+  model: string | null,
+  overrideCritical: boolean,
+): Promise<string> {
+  return invoke("ai_api_ask", { resultPath, question, model, overrideCritical });
+}
+
+/** Puts a key in the OS credential store and returns the fresh status. The value goes
+ * one way only; nothing in this module can read it back. */
+export function aiApiStoreKey(key: string): Promise<AiApiStatus> {
+  return invoke("ai_api_store_key", { key });
+}
+
+export function aiApiClearKey(): Promise<AiApiStatus> {
+  return invoke("ai_api_clear_key");
+}
+
+export function onAiFinished(
+  handler: (event: AiFinishedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AiFinishedEvent>("ai:finished", (event) => handler(event.payload));
 }
 
 // --- Window chrome ---------------------------------------------------------------

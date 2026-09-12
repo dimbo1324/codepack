@@ -43,6 +43,17 @@ export interface Config {
   ai_handoff_agent: string;
   /** The question a handoff carries when none is typed. */
   ai_handoff_question: string;
+  /** Whether the API path may send anything at all. `false` in a fresh installation,
+   * and that is what makes "no network unless asked" true rather than merely likely. */
+  ai_api_enabled: boolean;
+  /** Which provider the API path sends to. */
+  ai_api_provider: string;
+  /** The model to ask, as the provider spells it. Empty means "the most capable one this
+   * build knows about" — resolved in the backend, because nothing here should carry a
+   * vendor's model list. */
+  ai_api_model: string;
+  /** The question the API path asks when none is typed. */
+  ai_api_question: string;
   /** Replace `<REDACTED>` with a stable per-secret label (`<REDACTED:s1>`). Off by
    * default, and off means every artifact is byte-identical to what it always was. */
   redaction_labels: boolean;
@@ -60,6 +71,66 @@ export interface LocalAgentInfo {
   id: string;
   display_name: string;
   command: string;
+}
+
+/** What the settings screen needs in order to decide what to offer.
+ *
+ * There is no key field and there will not be one: `key_stored` is a boolean because the
+ * backend answers "is a key there" without reading the secret, so a stored key never
+ * crosses this boundary outbound. */
+export interface AiApiStatus {
+  provider: string;
+  provider_display_name: string;
+  enabled: boolean;
+  key_stored: boolean;
+  known_models: AiModelInfo[];
+}
+
+export interface AiModelInfo {
+  id: string;
+  display_name: string;
+  context_tokens: number;
+}
+
+/** What sending would mean, for the confirmation step. */
+export interface AiSendPlan {
+  provider: string;
+  model: string;
+  context_files: number;
+  context_bytes: number;
+  /** Bytes as people read them, formatted in the backend so the window and the CLI
+   * cannot disagree about what a size means (invariant I4). */
+  context_bytes_display: string;
+  estimated_tokens: number;
+  /** `null` means the bundle carries no scan — **not** that it is clean. Render it as
+   * "not verified"; showing zero would state something false about somebody's secrets. */
+  critical_findings: number | null;
+  exceeds_context: boolean;
+  /** Why a send is blocked right now, if it is. */
+  refusal: string | null;
+  /** True when the only thing blocking it is the critical-findings guard, which the user
+   * may override with a second, deliberate action. A switched-off integration is not
+   * overridable from the result page — that is a settings change. */
+  overridable: boolean;
+}
+
+/** The answer, once it has come back. */
+export interface AiAnswerResult {
+  text: string;
+  model: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  stopped_early: string | null;
+  answer_file: string;
+}
+
+/** One send, finished or failed. The only event the API path emits — there is no
+ * progress stream and no cancellation, because a request in flight offers no handle to
+ * interrupt it. */
+export interface AiFinishedEvent {
+  run_id: string;
+  answer: AiAnswerResult | null;
+  error: string | null;
 }
 
 /** What `prepare_handoff` wrote, and how to use it. */

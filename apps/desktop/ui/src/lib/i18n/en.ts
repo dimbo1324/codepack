@@ -57,6 +57,37 @@ export const en = {
   "settings.group.content": "Contents",
   "settings.group.workflow": "While you work",
   "settings.group.transfer": "Share these settings",
+  "settings.group.ai": "Ask a model directly",
+  "settings.group.ai.lede":
+    "Off by default. This is the only part of codepack that uses the network, and only \
+when you ask it a question about a finished bundle.",
+  "settings.ai.enabled": "Allow sending to a provider",
+  "settings.ai.enabled.hint":
+    "While this is off, no part of the application can reach the network — the refusal \
+happens before a bundle is read or a key is touched.",
+  "settings.ai.model": "Model",
+  "settings.ai.model.hint":
+    "Left unset, the most capable model this build knows about is used. A model released \
+after this build still works: the field is a plain string, not a fixed list.",
+  "settings.ai.model.default": "Most capable available",
+  "settings.ai.key": "API key",
+  "settings.ai.key.hint":
+    "Stored in this machine's credential store — Credential Manager, Keychain or Secret \
+Service — and never in the settings file, which is a file you can export and share with \
+your team.",
+  "settings.ai.key.stored": "A key is stored. Type a new one to replace it.",
+  "settings.ai.key.placeholder": "Paste the key",
+  "settings.ai.key.save": "Save the key",
+  "settings.ai.key.clear": "Remove it",
+  "settings.ai.question": "Default question",
+  "settings.ai.question.hint": "Used when you do not type one on the result page.",
+  "settings.ai.warning":
+    "A bundle sent to a provider leaves this machine and is subject to their terms. \
+codepack refuses to send one that carries critical security findings.",
+  "settings.ai.statusFailed": "Could not read the integration's status",
+  "settings.ai.keyStored": "The key is in the credential store",
+  "settings.ai.keyCleared": "The key was removed",
+  "settings.ai.keyFailed": "The credential store refused the operation",
   "settings.transfer.hint":
     "Write these settings to a file so a colleague can import them, and everyone's exports come out comparable. The last-used folder is left out — it names a path on this computer.",
   "settings.transfer.export": "Export to a file…",
@@ -315,6 +346,42 @@ export const en = {
   "result.handoff.copyCommand": "Copy the command",
   "result.handoff.local": "Nothing was sent anywhere. The agent reads the folder itself.",
   "result.handoff.failed": "Could not prepare the handoff",
+
+  "result.ask": "Ask a model about it",
+  "result.ask.lede":
+    "The one thing here that uses the network. The bundle's AI context is sent to the \
+provider you configured, on this action and no other.",
+  "result.ask.disabled":
+    "The API integration is switched off. Nothing here can reach the network until you \
+turn it on in settings.",
+  "result.ask.noKey": "No API key is stored yet. Add one in settings.",
+  "result.ask.openSettings": "Open settings",
+  "result.ask.model": "Model",
+  "result.ask.model.default": "Most capable available",
+  "result.ask.question": "What do you want to know?",
+  "result.ask.questionPlaceholder": "What are the biggest risks in this codebase?",
+  "result.ask.review": "Review what would be sent",
+  "result.ask.plan":
+    "{provider}, {model} — {files} context file(s), {size}, roughly {tokens} tokens.",
+  "result.ask.notVerified":
+    "This bundle carries no security scan, so nothing has checked it for secrets. That \
+is not the same as it being clean.",
+  "result.ask.critical":
+    "This bundle contains {count} critical security finding(s). Re-export with a \
+stricter safety mode, or confirm below that you have checked each one.",
+  "result.ask.tooLarge":
+    "The estimate alone exceeds this model's context window. The provider may truncate \
+the request or refuse it.",
+  "result.ask.override": "I have checked each critical finding and want to send anyway",
+  "result.ask.send": "Send and ask",
+  "result.ask.sending": "Sending…",
+  "result.ask.leaves":
+    "Pressing send transmits the context files listed above to the provider. Nothing \
+else in codepack sends anything anywhere.",
+  "result.ask.stoppedEarly": "The provider stopped early: {reason}",
+  "result.ask.copyAnswer": "Copy the answer",
+  "result.ask.saved": "Appended to {path} in the bundle.",
+  "result.ask.failed": "Could not ask the provider",
 
   "history.title": "History",
   "history.lede":

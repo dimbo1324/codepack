@@ -58,10 +58,14 @@ jobs:
       # even reaches the deny check. Windows (WebView2) and macOS (Xcode Command Line
       # Tools, preinstalled on the runner image) need nothing extra.
       #
-      # `libdbus-1-dev` is kept although the crate that most obviously wanted it —
-      # `keyring`, via Secret Service — left the workspace with Q41. GTK pulls D-Bus in
-      # regardless, and dropping a package from this list on the strength of an untested
-      # guess is how a green build becomes a red one on somebody else's machine.
+      # `libdbus-1-dev` was kept when `keyring` left the workspace with Q41, on the
+      # grounds that GTK pulls D-Bus in regardless and dropping a package on an untested
+      # guess is how a green build goes red on somebody else's machine. `keyring` came
+      # back on 2026-09-12 with S13's API path, which vindicates having kept it — and no
+      # package had to be added, because `keyring` 4.2's Linux backend is
+      # `zbus-secret-service-keyring-store`: pure-Rust D-Bus, not the libsecret C library,
+      # so there are no headers to install. D-Bus is a *runtime* need, and
+      # `install-and-run-linux` already starts one.
       - name: Install Tauri Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |

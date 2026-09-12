@@ -6,8 +6,14 @@
   // always writes a manifest and always archives what it collected. Saying so plainly
   // matters more than hiding it: an incomplete bundle that looks complete is the one
   // outcome a tool about safe handoff must never produce.
+  import { onMount } from "svelte";
+
   import {
+    aiApiAsk,
+    aiApiPlan,
+    aiApiStatus,
     listLocalAgents,
+    onAiFinished,
     openDashboard,
     openOnboardingGuide,
     openProjectOverview,
@@ -15,7 +21,13 @@
     openReviewChecklist,
     prepareHandoff,
   } from "$lib/api/client";
-  import type { HandoffResult, LocalAgentInfo } from "$lib/api/types";
+  import type {
+    AiAnswerResult,
+    AiApiStatus,
+    AiSendPlan,
+    HandoffResult,
+    LocalAgentInfo,
+  } from "$lib/api/types";
   import Callout from "$lib/components/Callout.svelte";
   import EmptyState from "$lib/components/EmptyState.svelte";
   import Icon, { type IconName } from "$lib/components/Icon.svelte";
@@ -107,6 +119,78 @@
     } finally {
       preparing = false;
     }
+  }
+
+  // --- Ask a provider (stage S13, the network half) ---------------------------------
+  //
+  // The only place in this application that uses the network, and it takes three
+  // deliberate steps to get there: the integration has to be on in settings, a key has
+  // to be stored, and the plan has to be looked at before the send button does anything.
+  // A bundle carrying critical findings is refused outright, and the override is a
+  // separate checkbox rather than a consequence of pressing send.
+  let apiStatus = $state<AiApiStatus | null>(null);
+  let apiPlan = $state<AiSendPlan | null>(null);
+  let apiQuestion = $state("");
+  let apiModel = $state("");
+  let apiOverride = $state(false);
+  let sending = $state(false);
+  let answer = $state<AiAnswerResult | null>(null);
+
+  /** The send this page is waiting on, so a late event from an earlier one cannot
+   * overwrite a newer answer — the same run-id filter `SterileCopyPage` applies for the
+   * same reason. */
+  let apiRunId = $state("");
+
+  onMount(() => {
+    let unlistenFinished: (() => void) | undefined;
+    (async () => {
+      try {
+        apiStatus = await aiApiStatus();
+      } catch {
+        // Not a toast. This runs on page load, and a credential store that cannot be
+        // reached is a reason to leave the card out rather than to interrupt somebody
+        // reading their export results.
+        apiStatus = null;
+      }
+      unlistenFinished = await onAiFinished((event) => {
+        if (event.run_id !== apiRunId) return;
+        sending = false;
+        if (event.answer) {
+          answer = event.answer;
+          return;
+        }
+        if (event.error) pushToast("danger", "result.ask.failed", { detail: event.error });
+      });
+    })();
+    return () => unlistenFinished?.();
+  });
+
+  /** Loads the plan, which is also how the card learns whether a guard blocks the send.
+   * Called when the user opens the card rather than on page load: it extracts the bundle
+   * to read `AI_CONTEXT/`, which is work nobody asked for until they look. */
+  async function loadPlan(path: string): Promise<void> {
+    try {
+      apiPlan = await aiApiPlan(path, apiModel || null);
+    } catch (error) {
+      reportError("result.ask.failed", error);
+    }
+  }
+
+  async function send(path: string): Promise<void> {
+    sending = true;
+    answer = null;
+    try {
+      apiRunId = await aiApiAsk(path, apiQuestion, apiModel || null, apiOverride);
+    } catch (error) {
+      sending = false;
+      reportError("result.ask.failed", error);
+    }
+  }
+
+  async function copyAnswer(): Promise<void> {
+    if (!answer) return;
+    const copied = await copyText(answer.text);
+    pushToast(copied ? "success" : "danger", copied ? "common.copied" : "common.copyFailed");
   }
 
   async function copyCommand(): Promise<void> {
@@ -224,8 +308,8 @@
             <p class="card__subtitle">{t("result.handoff.lede")}</p>
           </div>
         </div>
-        <div class="card__body handoff">
-          <div class="handoff__controls">
+        <div class="card__body panel">
+          <div class="panel__controls">
             <label class="field">
               <span class="field__label">{t("result.handoff.agent")}</span>
               <select class="input" bind:value={selectedAgent}>
@@ -254,9 +338,9 @@
           </div>
 
           {#if handoff}
-            <div class="handoff__result">
+            <div class="panel__result">
               <p class="text-sm">{t("result.handoff.ready")}</p>
-              <pre class="handoff__command selectable">cd "{handoff.working_dir}"
+              <pre class="panel__output selectable">cd "{handoff.working_dir}"
 {handoff.command}</pre>
               <div class="row row--tight">
                 <button class="btn btn--sm" onclick={copyCommand}>
@@ -269,6 +353,118 @@
           {/if}
         </div>
       </section>
+
+      {#if apiStatus}
+        <section class="card">
+          <div class="card__header">
+            <div>
+              <h2 class="card__title">{t("result.ask")}</h2>
+              <p class="card__subtitle">{t("result.ask.lede")}</p>
+            </div>
+          </div>
+          <div class="card__body panel">
+            {#if !apiStatus.enabled}
+              <Callout tone="info">{t("result.ask.disabled")}</Callout>
+              <button class="btn btn--sm" onclick={() => goTo("settings")}>
+                {t("result.ask.openSettings")}
+              </button>
+            {:else if !apiStatus.key_stored}
+              <Callout tone="warning">{t("result.ask.noKey")}</Callout>
+              <button class="btn btn--sm" onclick={() => goTo("settings")}>
+                {t("result.ask.openSettings")}
+              </button>
+            {:else}
+              <div class="panel__controls">
+                <label class="field">
+                  <span class="field__label">{t("result.ask.model")}</span>
+                  <select class="input" bind:value={apiModel}>
+                    <option value="">{t("result.ask.model.default")}</option>
+                    {#each apiStatus.known_models as model (model.id)}
+                      <option value={model.id}>{model.display_name}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="field field--grow">
+                  <span class="field__label">{t("result.ask.question")}</span>
+                  <input
+                    class="input"
+                    type="text"
+                    bind:value={apiQuestion}
+                    placeholder={t("result.ask.questionPlaceholder")}
+                  />
+                </label>
+                <button class="btn btn--sm" onclick={() => loadPlan(path)}>
+                  {t("result.ask.review")}
+                </button>
+              </div>
+
+              {#if apiPlan}
+                <div class="panel__result">
+                  <p class="text-sm">
+                    {t("result.ask.plan", {
+                      provider: apiPlan.provider,
+                      model: apiPlan.model,
+                      files: formatCount(apiPlan.context_files, language.current),
+                      size: apiPlan.context_bytes_display,
+                      tokens: formatCount(apiPlan.estimated_tokens, language.current),
+                    })}
+                  </p>
+
+                  {#if apiPlan.critical_findings === null}
+                    <Callout tone="warning">{t("result.ask.notVerified")}</Callout>
+                  {:else if apiPlan.critical_findings > 0}
+                    <Callout tone="danger">{t("result.ask.critical", { count: apiPlan.critical_findings })}</Callout>
+                  {/if}
+
+                  {#if apiPlan.exceeds_context}
+                    <Callout tone="warning">{t("result.ask.tooLarge")}</Callout>
+                  {/if}
+
+                  {#if apiPlan.refusal && !apiPlan.overridable}
+                    <Callout tone="danger">{apiPlan.refusal}</Callout>
+                  {:else}
+                    {#if apiPlan.overridable}
+                      <label class="row row--tight text-sm">
+                        <input type="checkbox" bind:checked={apiOverride} />
+                        {t("result.ask.override")}
+                      </label>
+                    {/if}
+                    <div class="row row--tight">
+                      <button
+                        class="btn btn--primary"
+                        disabled={sending || (apiPlan.overridable && !apiOverride)}
+                        onclick={() => send(path)}
+                      >
+                        <Icon name="external" size={14} />
+                        {sending ? t("result.ask.sending") : t("result.ask.send")}
+                      </button>
+                    </div>
+                  {/if}
+                  <p class="text-muted text-xs">{t("result.ask.leaves")}</p>
+                </div>
+              {/if}
+
+              {#if answer}
+                <div class="panel__result">
+                  {#if answer.stopped_early}
+                    <Callout tone="warning">{t("result.ask.stoppedEarly", { reason: answer.stopped_early })}</Callout>
+                  {/if}
+                  <pre class="panel__output selectable">{answer.text}</pre>
+                  <div class="row row--tight">
+                    <button class="btn btn--sm" onclick={copyAnswer}>
+                      <Icon name="copy" size={13} />
+                      {t("result.ask.copyAnswer")}
+                    </button>
+                  </div>
+                  <p class="text-muted text-xs">
+                    {t("result.ask.saved", { path: baseName(answer.answer_file) })}
+                  </p>
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </section>
+      {/if}
 
       <section class="card">
         <div class="card__header">
@@ -369,13 +565,15 @@
     word-break: break-all;
   }
 
-  .handoff {
+  /* Shared by both S13 cards — the local handoff and the API ask. Named for what it
+     is rather than for whichever card was written first. */
+  .panel {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
   }
 
-  .handoff__controls {
+  .panel__controls {
     display: flex;
     align-items: flex-end;
     gap: var(--space-4);
@@ -399,7 +597,7 @@
     font-size: var(--text-xs);
   }
 
-  .handoff__result {
+  .panel__result {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -407,7 +605,7 @@
     border-top: 1px solid var(--border);
   }
 
-  .handoff__command {
+  .panel__output {
     padding: var(--space-4);
     border-radius: var(--radius-md);
     background: var(--surface-sunken, var(--surface-hover));
