@@ -413,7 +413,9 @@
                   {#if apiPlan.critical_findings === null}
                     <Callout tone="warning">{t("result.ask.notVerified")}</Callout>
                   {:else if apiPlan.critical_findings > 0}
-                    <Callout tone="danger">{t("result.ask.critical", { count: apiPlan.critical_findings })}</Callout>
+                    <Callout tone="danger"
+                      >{t("result.ask.critical", { count: apiPlan.critical_findings })}</Callout
+                    >
                   {/if}
 
                   {#if apiPlan.exceeds_context}
@@ -447,7 +449,9 @@
               {#if answer}
                 <div class="panel__result">
                   {#if answer.stopped_early}
-                    <Callout tone="warning">{t("result.ask.stoppedEarly", { reason: answer.stopped_early })}</Callout>
+                    <Callout tone="warning"
+                      >{t("result.ask.stoppedEarly", { reason: answer.stopped_early })}</Callout
+                    >
                   {/if}
                   <pre class="panel__output selectable">{answer.text}</pre>
                   <div class="row row--tight">

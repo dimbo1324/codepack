@@ -114,14 +114,7 @@ pub(crate) fn run(args: &AskArgs, format: Format) -> Result<Outcome> {
     })?;
 
     let model = resolve_model(args, &config, provider.as_ref())?;
-    let question = args
-        .question
-        .clone()
-        .filter(|text| !text.trim().is_empty())
-        .or_else(|| {
-            Some(config.ai_api_question.clone()).filter(|text| !text.trim().is_empty())
-        })
-        .unwrap_or_else(|| DEFAULT_QUESTION.to_string());
+    let question = resolve_question(args.question.as_deref(), &config.ai_api_question);
 
     let opened = bundle::open_bundle(&args.bundle)?;
     let plan = codepack_ai_api::plan::build_plan(&opened.directory, provider.as_ref(), &model)
@@ -182,6 +175,20 @@ pub(crate) fn run(args: &AskArgs, format: Format) -> Result<Outcome> {
     });
     emit(&report, &plan, format)?;
     Ok(Outcome::Success)
+}
+
+/// The question to ask: the flag, then the stored one, then a general-purpose default.
+///
+/// Blank is not a choice at either level. Somebody who clears the setting, or passes
+/// `-q ""` to see what happens, gets the default rather than an empty question — a
+/// provider asked nothing answers about nothing, at full token price.
+fn resolve_question(flag: Option<&str>, stored: &str) -> String {
+    for candidate in [flag.unwrap_or_default(), stored] {
+        if !candidate.trim().is_empty() {
+            return candidate.to_string();
+        }
+    }
+    DEFAULT_QUESTION.to_string()
 }
 
 /// The model to ask: the flag, then the setting, then the provider's most capable known
@@ -284,6 +291,15 @@ fn print_human(report: &AskReport, plan: &SendPlan) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_blank_question_falls_through_to_the_default_at_either_level() {
+        assert_eq!(resolve_question(Some("why?"), "stored"), "why?");
+        assert_eq!(resolve_question(Some("   "), "stored"), "stored");
+        assert_eq!(resolve_question(None, "stored"), "stored");
+        assert_eq!(resolve_question(None, ""), DEFAULT_QUESTION);
+        assert_eq!(resolve_question(Some(""), "  "), DEFAULT_QUESTION);
+    }
 
     #[test]
     fn a_critical_finding_exits_with_the_findings_code_not_the_failure_code() {

@@ -355,9 +355,7 @@ export function aiApiClearKey(): Promise<AiApiStatus> {
   return invoke("ai_api_clear_key");
 }
 
-export function onAiFinished(
-  handler: (event: AiFinishedEvent) => void,
-): Promise<UnlistenFn> {
+export function onAiFinished(handler: (event: AiFinishedEvent) => void): Promise<UnlistenFn> {
   return listen<AiFinishedEvent>("ai:finished", (event) => handler(event.payload));
 }
 

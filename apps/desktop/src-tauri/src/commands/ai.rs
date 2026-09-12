@@ -204,10 +204,7 @@ pub fn ai_api_ask(
     let model = resolve_model(model.as_deref(), &config, provider.as_ref())?;
     let enabled = config.ai_api_enabled;
 
-    let run_id = format!("ai-{:x}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|since| since.as_nanos())
-        .unwrap_or_default());
+    let run_id = new_run_id();
     let thread_run_id = run_id.clone();
 
     std::thread::spawn(move || {
@@ -283,6 +280,19 @@ pub fn ai_api_clear_key() -> CommandResult<AiApiStatus> {
 
     codepack_ai_api::keys::clear_key(&provider_id).map_err(CommandError::new)?;
     status_for(&config)
+}
+
+/// An id for one send, unique enough to tell two of them apart.
+///
+/// Not `AppState::runs`, which the export and sterile-copy runs use: that registry exists
+/// to carry a cancellation token, and this path has nothing to cancel. Registering a run
+/// nobody can stop would put a token in a table for the sole purpose of never being read.
+fn new_run_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_nanos())
+        .unwrap_or_default();
+    format!("ai-{nanos:x}")
 }
 
 /// The model to ask: what the screen chose, then the setting, then the provider's most
