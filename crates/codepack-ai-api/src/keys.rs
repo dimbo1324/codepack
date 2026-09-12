@@ -120,8 +120,49 @@ mod tests {
         format!("codepack-test-do-not-use-{}-{case}", std::process::id())
     }
 
+    /// Whether this machine has a credential store at all.
+    ///
+    /// A headless Linux CI container has none: no D-Bus session for Secret Service to
+    /// answer on, so `Entry::new` reports "No default store has been set" and *every*
+    /// operation fails with [`AiError::KeyStore`] rather than with the outcome being
+    /// asserted.
+    ///
+    /// The two tests that consult this are about **distinguishing** a missing key from a
+    /// broken store, and about clearing a key that is not there. Both distinctions only
+    /// exist where a store does; where one does not, the premise is absent and asserting
+    /// anyway would be asserting about the container, not about this code. So they skip
+    /// — and say so on stderr, because a test that quietly does nothing is worse than one
+    /// that fails.
+    ///
+    /// This is the judgement `a_stored_key_round_trips_and_can_be_removed` has made since
+    /// the module was written; it now uses this helper too, so there is one convention
+    /// instead of two. What changed on 2026-09-12 is not the tests' honesty but where
+    /// they run: `codepack-ai-api` rejoined the workspace, so `cargo test --workspace`
+    /// began building it on all three CI legs for the first time. Windows and macOS have
+    /// a store and do exercise every assertion below — the coverage is real, it is just
+    /// not universal.
+    fn store_available() -> bool {
+        !matches!(
+            load_key(&test_provider("store-availability")),
+            Err(AiError::KeyStore { .. })
+        )
+    }
+
+    /// Skips the calling test when there is no store, reporting it rather than passing
+    /// silently.
+    fn require_store(test: &str) -> bool {
+        if store_available() {
+            return true;
+        }
+        eprintln!("{test}: skipped — this machine has no usable credential store");
+        false
+    }
+
     #[test]
     fn a_missing_key_is_reported_as_missing_rather_than_as_a_store_failure() {
+        if !require_store("a_missing_key_is_reported_as_missing_rather_than_as_a_store_failure") {
+            return;
+        }
         let provider = test_provider("missing");
         let _ = clear_key(&provider);
 
@@ -137,6 +178,9 @@ mod tests {
 
     #[test]
     fn clearing_a_key_that_is_not_there_succeeds() {
+        if !require_store("clearing_a_key_that_is_not_there_succeeds") {
+            return;
+        }
         // Asking for a state the store is already in is success, not an error.
         assert!(clear_key(&test_provider("clear-absent")).is_ok());
     }
@@ -146,6 +190,9 @@ mod tests {
         // Skipped rather than failed where no credential store is reachable (a headless
         // CI container). A test that cannot run is not a test that failed, and pretending
         // otherwise would make the gate lie.
+        if !require_store("a_stored_key_round_trips_and_can_be_removed") {
+            return;
+        }
         let provider = test_provider("round-trip");
         if store_key(&provider, "test-value").is_err() {
             return;
