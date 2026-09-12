@@ -1,237 +1,100 @@
 # Task Checklist
 
-**Task:** Finish stage S13's API path — give it a command and a screen. The domain layer
-(`codepack-ai-api`: `ask`, the key store, the plan and its guards, the Anthropic client)
-has been complete and tested since 2026-07-27 and reachable by nobody. This task makes it
-reachable from both front ends.
+**Task:** Make the desktop window's zoom changeable from the window itself, and make the
+application fit whatever monitor it opens on. Owner's words: "сейчас всё большое и
+нагромождённое".
 
 **Date:** 2026-09-12
-**Branch:** `feat/s13-api-path-command-and-screen`
+**Branch:** `feat/desktop-zoom-and-monitor-fit`
 
-Owner instruction, 2026-09-12: «добей S13 — API-путь получает команду и экран».
+Branched off `feat/s13-api-path-command-and-screen` rather than `main`, deliberately: that
+branch is finished and gate-green but not merged, and it edits `SettingsPage.svelte` and
+`ResultPage.svelte`, which this task edits too. Building on top avoids a conflict nobody
+gains from. The rules permit building on an unmerged branch and forbid only rewriting one.
 
-## The decision this task rests on
+## What is actually wrong — measured, not guessed
 
-Finishing S13 requires a workspace member to depend on `codepack-ai-api`, which the
-`network isolation` gate step refuses by design and which invariant I1 forbids outright
-since 2026-09-06 (Q41). That is an invariant change, and the rules put it to the owner.
+The owner's monitor is **1920×1200 physical**, and Windows reports the desktop as
+**1280×800 logical** — display scaling is **150%**. The working area, minus the taskbar,
+is **1280×752**.
 
-**Owner decision, 2026-09-12: the API path ships in the release build.** The crate returns
-to the workspace, both front ends depend on it, and I1 goes back to its original wording —
-one named exception, only on an explicit user action. Two options were declined: a
-cargo feature off by default (S13 would be finished for nobody who downloads the
-installer) and a separate `codepack-ask` binary (no screen, and process-spawning from the
-webview breaks the two-front-ends-over-one-engine shape).
+Against that, three things are wrong at once:
 
-**What that costs, named before the work started:** `ureq` and `keyring` return to the
-product, to `Cargo.lock` and to `cargo deny`'s graph; `keyring` is compiled on every
-platform again; the Linux CI and packaging legs need `libsecret-1-dev`. This reverses the
-build-level benefit of Q41 while keeping its code-level one (the transport still lives in
-exactly one crate, and the gate still refuses it to every other).
+1. **The default window is 1100×760** (`tauri.conf.json`), and 760 is *taller than the 752
+   available*. The window does not fit the screen it opens on, out of the box, before
+   anything else is considered.
+2. **The layout is designed for more width than exists.** `--layout-sidebar: 232px` plus
+   `--layout-content-max: 1080px` wants 1312 logical px; the screen has 1280 and the
+   window is given 1100. The sidebar collapses to a rail only below 1000px, so at this
+   size the full sidebar stays and the content is squeezed throughout. That is the
+   "crowded".
+3. **Everything renders at 1.5×.** A 13px font is 19.5 physical pixels. That is the
+   "large" — and it is the operating system's scaling, not a font choice, which is why
+   the type scale being modest on paper does not help.
 
-> **The `libsecret-1-dev` half of that prediction was wrong, and checking beat guessing.**
-> `keyring` 4.2's Linux backend is `zbus-secret-service-keyring-store` — pure-Rust D-Bus,
-> not the libsecret C library — so no header package is needed, and `libdbus-1-dev` was
-> already installed. Read out of the crate's own lockfile rather than assumed.
+Zoom already exists (`Config::ui_zoom`, `set_ui_zoom`, a Settings control, range 0.7–1.5)
+and **already solves most of this**: at 0.7 the CSS viewport becomes roughly 1828×1074,
+which is roomy. What is missing is that nothing tells the user it exists, there is no
+keyboard route to it, and the default is 1.0 regardless of the monitor. So this task is
+largely about *reaching* a mechanism that is already there — plus making the window fit.
 
-## The constraint that dominated this task, and how it ended
+## What this task will not do
 
-For most of this task **this machine had no Rust toolchain** — no `cargo`, no `rustup`, no
-`pnpm`, no `gh`, no `target/`. The work was written, statically reviewed, and pushed for CI
-to compile, which found three real problems (recorded below). CI then hit a wall of its
-own: its logs and artifacts need authentication this session did not have, so the `format`
-and `clippy` sections could only be read as section names.
-
-**Owner instruction, 2026-09-12: install the stack on this machine.** S13 was blocked on
-exactly that, so it was done immediately rather than afterwards: rustup with the pinned
-toolchain 1.97.1, Visual Studio 2022 Build Tools (VC workload — the MSVC linker CI also
-uses), pnpm 9.12.0 through corepack, and `cargo-deny`. `cargo xtask doctor` now reports
-every tool present, and rustup put `.cargo/bin` in the persistent user PATH.
-
-**`cargo xtask gate` is green: 11/11 sections, 275.8s.** Every `-` below that was waiting
-on a toolchain is a `+` now, with per-section timings in
-`target/gate-logs/latest/00-summary.txt`.
+- **No redesign and no new type scale.** The px-absolute token sizes are a recorded
+  decision with a stated reason: a second relative layer would compound with the native
+  webview zoom. Zoom is the right lever, and adding a second is how two levers start
+  fighting each other.
+- **No change to the 0.7–1.5 range.** 0.7 is already ample on this monitor. Widening a
+  normalisation bound deserves its own decision, and this task does not need it.
 
 ## Step 0 — preparation
 
-- [+] Orientation ritual: git state, ROADMAP, overview, previous checklist, open questions
-- [+] Previous checklist confirmed closed (2.0.1 polish, every item marked)
-- [+] Branch off up-to-date `main` (`git pull --ff-only` confirmed already current)
-- [+] This checklist committed **before** the work started (commit `92466f5`)
+- [ ] Orientation: the previous task's checklist is complete and its gate was green
+- [ ] Measure the real environment rather than guess (done above)
+- [ ] Branch, and this checklist committed **before** the work
 
-## Step 1 — the crate returns to the workspace
+## Step 1 — the window fits the monitor it opens on
 
-- [+] `workspace.exclude` entry removed from the root `Cargo.toml`
-- [+] `codepack-ai-api` inherits `version`/`edition`/`rust-version`/`lints` from the
-      workspace; the comment explaining the duplication went with the duplication
-- [+] `ureq` and `keyring` declared in `[workspace.dependencies]`, both decision comments
-      moved there verbatim rather than dropped
-- [+] The crate's own `Cargo.lock` deleted — a member resolves through the workspace's
-- [+] `cargo deny check` passes with both back in the graph — licences and advisories
-      both clean. This was the largest open question in the task, and the answer is yes
-- [+] Workspace `Cargo.lock` regenerated by cargo: 545 lines added — `ureq`, `keyring`
-      and their trees, plus `codepack-ai-api` itself as a member
+- [ ] At startup the shell reads the current monitor and shrinks the window to fit,
+      treating the configured size as a maximum rather than a demand
+- [ ] Re-centred afterwards, because a window resized from its top-left corner drifts
+- [ ] A monitor smaller than `minWidth`/`minHeight` does not produce an unusable window:
+      the minimum wins, and the window is allowed to exceed a very small screen rather
+      than collapse below what the layout can render
+- [ ] Unit tests on the fitting arithmetic, which is where an off-by-a-taskbar lives
 
-## Step 2 — the gate learns the one exception
+## Step 2 — a zoom the user can reach
 
-- [+] `network_isolation` permits `codepack-ai-api` to declare a client, and only it
-- [+] Second rule added, which is the stricter half: only `codepack-cli` and
-      `codepack-desktop` may depend on that crate, so no transport can sit under the
-      export pipeline where no user action gates it
-- [+] Tests rewritten around the new rule: a front end may depend, a domain crate may not,
-      the exception may declare a client, and any *other* crate declaring one still fails
-- [+] Found and fixed a test that was passing for the wrong reason:
-      `every_listed_client_is_detected` wrote no root manifest, so `check` failed during
-      member discovery before reading a single dependency — the assertion would have held
-      for an empty denylist
-- [+] The real workspace passes its own check — the gate's `network isolation` section
-      is green with the crate back in and both rules in force
+- [ ] `Ctrl` `+` / `Ctrl` `-` / `Ctrl` `0` anywhere in the window
+- [ ] `Ctrl` + mouse wheel, which is what people reach for first
+- [ ] Both apply immediately **and persist**, so the next launch opens the same way
+- [ ] The shortcuts do not fire while the user is typing in a text field
+- [ ] A zoom readout in the status bar with two buttons, so the feature is discoverable
+      without knowing the shortcut
+- [ ] EN and RU strings
 
-## Step 3 — retire what existed only because of the exclusion
+## Step 3 — a first-run default that suits the monitor
 
-- [+] `cargo xtask ai-api` removed — usage line, dispatch arm, module, and the separate
-      `format (ai-api)` sections in both `gate` and `fmt`
-- [+] The version-drift test went with it: `version.workspace = true` makes drift
-      inexpressible rather than merely unlikely
-- [+] `.github/workflows/ai-api-weekly.yml` deleted — the gate covers the crate now
-- [+] `clean-project`'s sweep of `crates/codepack-ai-api/target/` and its note removed;
-      that directory only existed because the crate built outside the workspace
-- [+] `.ai/project/10-project-map.md`, `12-domain-rules.md`, `15-command-reference.md`
-      updated; `.ai/CHANGELOG.md` entry written
-- [+] `AGENTS.md` regenerated. It was written by a Python transcription of
-      `xtask::sync_agents` while no toolchain existed — proved faithful first by
-      reproducing the committed file byte for byte from unchanged modules — and the
-      gate's `agents sync` section has since confirmed it against the real generator
+- [ ] `Config::ui_zoom_auto`, default `true`: derive the zoom from the monitor until the
+      user adjusts it, and then leave it alone
+- [ ] Adjusting zoom by any route sets it `false` — an explicit choice must not be
+      overwritten on the next launch
+- [ ] The derivation is a stated rule rather than a magic number: the largest zoom at
+      which the designed layout still fits the work area, clamped to the existing range
+- [ ] Tests for the derivation, including the monitor this was found on (1280×800)
 
-## Step 4 — configuration
+## Step 4 — verification
 
-- [+] Four fields: `ai_api_enabled` (false), `ai_api_provider`, `ai_api_model` (empty means
-      "the most capable this build knows"), `ai_api_question`
-- [+] `normalized_ai_api_provider` falls back like every other string field; the model is
-      deliberately *not* a set, so a model released after this build still works (Q2)
-- [+] The key is **not** a field and cannot be: settings are a file people export and share
-- [+] The JSON contract test lists all four new keys, so the count assertion still holds
-- [+] A drift guard in `codepack-ai-api` asserts its provider list and core's
-      `AI_API_PROVIDERS` name the same providers — the same shape `codepack-ai` already
-      uses for the local-agent list
-- [+] Those tests run and pass. Two needed a fix: clippy's
-      `field_reassign_with_default` fires on `Config::default()` at a binding site, and
-      the neighbouring tests dodge it through a local `config()` helper — mine do too now
+- [ ] `cargo xtask gate` green
+- [ ] **The application actually run**, not merely compiled: the window fits, the
+      shortcuts work, the readout updates, and the setting survives a restart
+- [ ] Checked at more than one window size, since "adapts to different monitors" is the
+      requirement and one size proves nothing
 
-## Step 5 — the command
+## Step 5 — completion
 
-- [+] `codepack ask <bundle>`: plan, guard, send, answer appended to `AI_ANSWER.md`
-- [+] `codepack key set|status|clear`, mirroring the `settings` subcommand shape
-- [+] **The key is read from stdin, never from a flag** — `ps` and shell history are
-      neither of them somewhere this program can clean up after itself
-- [+] Terminal echo is *not* suppressed and the prompt says so, rather than implying
-      otherwise: hiding it needs `unsafe` FFI (forbidden workspace-wide) or a crate for
-      one prompt. The masked field is on the desktop screen, which is the front end for
-      typing
-- [+] No `key show` command, and no report struct has a field a key could occupy — a test
-      pins the serialized shape of each
-- [+] `--json` carries `schema_version` and the `command` discriminator; machine output
-      stays on stdout alone
-- [+] Exit codes: a critical-findings refusal is **3** (the code that already means
-      "worked, found critical secrets"), a switched-off integration or transport failure
-      is **1**. Unit tests assert the mapping
-- [+] `--dry-run` prints the plan, works with the integration off, and reads no key
-- [+] Completions and the man page pick the new commands up automatically — both generate
-      from the clap `Cli`, so there was no list to forget to update
-- [+] `open_bundle` extracted to `commands::bundle` with its tests, so `handoff` and `ask`
-      cannot drift about what counts as a bundle
-- [+] Six integration tests added against the real binary: dry run, the default refusal,
-      exit 3 on critical findings, `null`-not-`0` for an unscanned bundle, an unknown
-      provider, and `key status` never carrying a key
-- [+] Those tests run and pass, compiled binary and all
-
-## Step 6 — the screen
-
-- [+] Five Tauri commands: status, plan, ask, store-key, clear-key
-- [+] The key crosses the IPC boundary inbound only; the screen renders from a
-      `key_stored` boolean that `has_key` answers without reading the secret, and a test
-      pins the serialized shape so a field cannot be added for convenience
-- [+] The key input is cleared the moment the key is stored — a value left in a bound
-      input stays in the webview's memory and reaches a screenshot
-- [+] The send runs on a background thread and emits one run-id-filtered `ai:finished`
-      event, mirroring `sanitize`. The window does not block
-- [+] The bundle goes through `ValidatedResultPath` like every other bundle command
-- [+] Settings section: switch, model, masked key field, default question, a warning
-- [+] Ask card on the result page, with the plan shown before anything leaves
-- [+] `None` is rendered "not verified", never as a reassuring zero — on both front ends
-- [+] Critical findings refuse; the override is its own checkbox that must be ticked
-      before the send button enables
-- [+] EN and RU strings for everything, verified by script: 413 keys each, no drift, no
-      duplicates, and every key used on either page exists
-- [+] The `handoff__*` CSS block, now serving both S13 cards, renamed `panel__*` so the
-      names stop lying
-- [+] `pnpm typecheck`/`lint`/`format` and the Rust tests all pass — the gate's
-      `frontend` section is green (35.3s), so the Svelte and TypeScript changes
-      type-check and lint as well as format
-
-## Step 7 — CI and packaging
-
-- [+] No system package needed after all — see the note at the top. The CI comment that
-      explained *keeping* `libdbus-1-dev` in July now records that it was the right call
-- [-] `install-and-run-linux` still installs and runs on all three distributions. **Not
-      verified here**: it is a Linux-only CI job and this is a Windows machine. Nothing in
-      this task touches packaging, so the risk is low — but low is not verified
-
-## Step 8 — verification
-
-- [+] **`cargo xtask gate` fully green locally: 11/11 sections.** format, clippy,
-      tests, deny, ignored advisories, frontend, dev scripts, agents sync, report
-      redaction, network isolation, installer artifact
-- [+] What could be checked without one, was:
-      - the `scripts/` suite, which is Python and is part of the full gate: **78 tests
-        pass**, so removing the `clean.json` entry broke nothing
-      - `clean.json` still parses
-      - `AGENTS.md` regeneration, via a Python transcription of `xtask::sync_agents`
-        that was **first proved to reproduce the committed file byte for byte** from
-        unchanged modules — that proof is why its output for the edited modules is
-        trustworthy. It also caught the budget: 30.0 KiB with **32 bytes** of headroom
-      - i18n parity and every translation key used on the two pages
-      - Svelte `{#if}`/`{#each}` and `<section>` balance on both edited pages
-      - the provider's model list is non-empty and most-capable-first, which is what the
-        model fallback and its test depend on
-- [+] The new command's own integration tests run the compiled binary against real
-      bundles: a dry run, the default refusal, exit 3 on critical findings, `null` for an
-      unscanned bundle, an unknown provider, and `key status`
-- [-] **No live request to a provider**, exactly as the plan said. It needs a real API key,
-      which this session does not have and must not handle. The network leg remains proven
-      by response parsing and tests, not by an exchange — the same honest gap S13 has
-      carried since 2026-07-27
-
-## Step 9 — completion
-
-- [+] `docs/__arch__/ROADMAP.md`: S13's `**Status.**` says "сделано" for the first time,
-      with the missing live request named in the same line; §1 status column updated
-- [+] `docs/architecture/invariants.md`: I1 rewritten — the restored exception, both rules
-      that now enforce it, and why the second one is the stricter half
-- [+] `docs/architecture/overview.md`: crate row, network-isolation row, both front-end
-      sections, fourteen commands, the weekly workflow row deleted, and the known-debt list
-      updated — one item closed, two opened (no live request, no cancellation)
-- [+] `docs/__arch__/open-questions.md`: the owner decision with all three options and why
-      two were declined; Q41 amended rather than contradicted
-- [+] `README.md`: an "Ask a model directly" section, the command table, and the privacy
-      guarantee restated — it claimed no crate here reaches the network, which is no
-      longer true as written
-- [+] `CHANGELOG.md`: an Unreleased entry written for someone using codepack
-- [+] Checklist filled with `+`/`-`
-- [+] Final report
-
-## What this task did not do
-
-- **It is compiled, linted, tested and gated now** — but only on Windows. The three-OS
-  legs are CI's job, and the last CI run predates the local fixes, so a push is what
-  confirms Linux and macOS. What this task learned the hard way is that "written and
-  reviewed" and "compiled" are different claims; the first was all this session could
-  make for several hours, and it said so
-- **No live provider request.** By design and by necessity
-- **No cancellation of a send.** `ureq` gives no handle to interrupt a request in flight,
-  so neither front end offers one, rather than offering a button that lies
-- **No version bump and no release.** Not asked for; the branch is not merged and nothing
-  was pushed
-- **`AGENTS.md` is 32 bytes under its hard limit.** Q22 has warned since July. The next
-  module edit has to shrink something or mark a module `tier: extended` first — this task
-  had to trim its own two sentences twice to fit
+- [ ] `docs/architecture/overview.md` if the shape changed
+- [ ] `README.md` if what a user can do changed
+- [ ] `CHANGELOG.md` entry
+- [ ] Checklist filled with `+`/`-`
+- [ ] Final report
