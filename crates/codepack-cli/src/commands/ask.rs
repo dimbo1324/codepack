@@ -32,7 +32,7 @@
 
 use serde::Serialize;
 
-use codepack_ai_api::{Refusal, SendPlan};
+use codepack_ai_api::Refusal;
 
 use crate::cli::AskArgs;
 use crate::commands::bundle;
@@ -138,7 +138,7 @@ pub(crate) fn run(args: &AskArgs, format: Format) -> Result<Outcome> {
     };
 
     if args.dry_run {
-        emit(&report, &plan, format)?;
+        emit(&report, format)?;
         return Ok(Outcome::Success);
     }
 
@@ -147,7 +147,7 @@ pub(crate) fn run(args: &AskArgs, format: Format) -> Result<Outcome> {
     // that actually gates the network call.
     if let Err(refusal) = plan.check(config.ai_api_enabled, args.override_critical) {
         report.refused = Some(refusal.to_string());
-        emit(&report, &plan, format)?;
+        emit(&report, format)?;
         return Ok(outcome_for(&refusal));
     }
 
@@ -173,7 +173,7 @@ pub(crate) fn run(args: &AskArgs, format: Format) -> Result<Outcome> {
             .display()
             .to_string(),
     });
-    emit(&report, &plan, format)?;
+    emit(&report, format)?;
     Ok(Outcome::Success)
 }
 
@@ -233,16 +233,16 @@ fn outcome_for(refusal: &Refusal) -> Outcome {
     }
 }
 
-fn emit(report: &AskReport, plan: &SendPlan, format: Format) -> Result<()> {
+fn emit(report: &AskReport, format: Format) -> Result<()> {
     if format.is_json() {
         output::emit_json("ask", report)
     } else {
-        print_human(report, plan);
+        print_human(report);
         Ok(())
     }
 }
 
-fn print_human(report: &AskReport, plan: &SendPlan) {
+fn print_human(report: &AskReport) {
     output::line(format!("Provider: {}", report.provider));
     output::line(format!("Model:    {}", report.model));
     output::line(format!(
@@ -261,7 +261,7 @@ fn print_human(report: &AskReport, plan: &SendPlan) {
         Some(0) => output::line("Scanner:  checked, no critical findings"),
         Some(count) => output::line(format!("Scanner:  {count} critical finding(s)")),
     }
-    if plan.exceeds_context() {
+    if report.exceeds_context {
         output::line(
             "Warning:  the estimate alone exceeds this model's context window; the \
              provider may truncate or refuse",
