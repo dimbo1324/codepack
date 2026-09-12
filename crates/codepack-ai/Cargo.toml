@@ -10,10 +10,12 @@ description = "Stage S13's offline half: a prompt file and a command for a codin
 [lints]
 workspace = true
 
-# No features. The `api` feature that used to live here is now the separate,
-# workspace-excluded `codepack-ai-api` crate: a feature can be switched off by a
-# dependent but not by `cargo test --workspace`, which compiles a member with its own
-# defaults on every platform (owner decision 2026-09-06, Q41).
+# No features. The `api` feature that used to live here is the separate
+# `codepack-ai-api` crate: a feature can be switched off by a dependent but not by
+# `cargo test --workspace`, which compiles a member with its own defaults on every
+# platform, so the split is a crate boundary rather than a feature flag (owner decision
+# 2026-09-06, Q41). That crate rejoined the workspace on 2026-09-12, when the API path
+# got a command and a screen, but the boundary is still the right shape and stayed.
 
 [dependencies]
 codepack-core.workspace = true

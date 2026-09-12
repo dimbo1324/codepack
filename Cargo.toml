@@ -1,12 +1,13 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "apps/desktop/src-tauri"]
-# Stage S13's API path. In the repository, not in the product build: `members` is a glob,
-# so the exclusion has to be explicit. A workspace member is compiled with its own default
-# features by `cargo test --workspace` on every platform — which is how `keyring` (Secret
-# Service on Linux) came to obstruct builds for code no binary could reach. Owner decision
-# 2026-09-06, Q41. Built and linted by `cargo xtask ai-api`.
-exclude = ["crates/codepack-ai-api"]
+# `codepack-ai-api` — stage S13's API path — used to be excluded here (Q41, 2026-09-06),
+# because it carried `ureq` and `keyring` for code no user could reach, and a member is
+# compiled on every platform whether or not a binary reaches it. Owner decision 2026-09-12
+# finished the stage instead: the path now has a command (`codepack ask`) and a screen, so
+# the crate is in the product, gated like every other member, and the cost it was excluded
+# to avoid is a cost the feature actually buys something with. Invariant I1's one named
+# exception is back, and `network isolation` enforces that it is the only one.
 
 [workspace.package]
 version = "2.0.1"
@@ -140,13 +141,47 @@ tauri-plugin-single-instance = "2"
 # S11: watch mode (BLUEPRINT §A.10). Cross-platform filesystem notifications with no
 # network capability; the same crate `cargo watch` and `rust-analyzer` use.
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
-# S13 (codepack-ai): the only crate in this workspace allowed to reach the network,
-# and only on an explicit user action (invariant I1). `cargo xtask gate` fails if any
-# other crate declares an HTTP client.
-#
-# The offline handoff, and nothing else — the API path moved to the excluded
-# `codepack-ai-api` crate (Q41), so there is no longer a feature to switch off here.
+# S13, the offline half: the handoff to a coding agent already on this machine. No
+# transport, no credential store, nothing to switch off.
 codepack-ai = { path = "crates/codepack-ai" }
+# S13, the API half, and **the only crate in this workspace permitted to reach the
+# network** — invariant I1's single named exception, exercised only on an explicit user
+# action. `cargo xtask gate`'s `network isolation` step fails if any other crate declares
+# an HTTP client, and fails if any crate but the two front ends depends on this one.
+codepack-ai-api = { path = "crates/codepack-ai-api" }
+# The two dependencies that make `codepack-ai-api` the exception. They live here rather
+# than in that crate's own manifest so the decisions are read where every other
+# dependency decision is read — and so `ureq`'s version is pinned in one place.
+#
+# S13: chosen over `reqwest` deliberately. This workspace has no async runtime — the
+# engine parallelises with rayon and the desktop runs exports on plain threads — and
+# `reqwest` would pull tokio in for a handful of request/response round trips. `ureq`
+# is blocking and MIT/Apache-2.0. Same reasoning that rejected `directories` in S1 and
+# `tiktoken-rs` in S6.
+#
+# The platform's own TLS (SChannel on Windows) rather than rustls with a bundled root
+# list. Two reasons, and the second is why no rustls variant was taken:
+#   1. A desktop tool runs behind corporate TLS-inspecting proxies whose CA lives in the
+#      OS trust store and in no bundle. The OS stack is the one that works there.
+#   2. Every rustls path here drags in a Mozilla root list — `webpki-roots` or
+#      `webpki-root-certs`, both CDLA-Permissive-2.0, which is outside this project's
+#      allowed licence set. Using the OS trust store avoids widening the licence policy
+#      for what is a certificate list rather than code.
+# No OpenSSL is involved on Windows; `native-tls` binds to SChannel there.
+ureq = { version = "3", default-features = false, features = [
+  "native-tls-no-default",
+  "json",
+  "gzip",
+] }
+# S13: OS-native credential storage, named by BLUEPRINT §D.4. The API key must never
+# reach a settings file, so this is not optional infrastructure.
+# Default features are the per-platform native stores (Credential Manager, Keychain,
+# Secret Service) — exactly the three BLUEPRINT §D.4 names, so nothing to narrow here.
+#
+# On Linux this needs Secret Service, so the gate and packaging legs install
+# `libsecret-1-dev`. That build cost is what Q41 removed and what owner decision
+# 2026-09-12 accepted back, the feature now being reachable.
+keyring = "4"
 # 2026-07-28 (codepack-sanitize, "Sterile copy" — docs/__arch__/open-questions.md):
 # real-grammar comment stripping, chosen explicitly over regex by the owner. `tree-sitter`
 # itself and every Batch 1 grammar below are maintained under the `tree-sitter`/

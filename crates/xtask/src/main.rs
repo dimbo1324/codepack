@@ -5,7 +5,6 @@
 // A task runner is expected to write to stdout; the workspace lint targets libraries.
 #![allow(clippy::print_stdout)]
 
-mod ai_api;
 mod frontend;
 mod gate_report;
 mod golden;
@@ -42,7 +41,6 @@ Commands:
   install-hooks           Install the formatting pre-commit hook
   package                 Build the platform's installer(s) (NSIS on Windows; deb/rpm/AppImage on Linux)
   golden                  Regenerate golden references by running legacy (needs Python)
-  ai-api                  Format, lint and test codepack-ai-api, which the gate cannot see
   doctor                  Read-only environment diagnostics
 ";
 
@@ -285,21 +283,6 @@ fn gate(root: &Path, quick: bool) -> Result<(), String> {
     }
 
     run_step!("format", "cargo", &["fmt", "--all", "--check"]);
-    // `--all` covers workspace members; `codepack-ai-api` is excluded, so it needs its
-    // own invocation. Formatting compiles nothing, so this costs none of what the
-    // exclusion bought — and without it the one crate nobody builds routinely would be
-    // the one crate whose formatting nobody checks.
-    run_step!(
-        "format (ai-api)",
-        "cargo",
-        &[
-            "fmt",
-            "--manifest-path",
-            "crates/codepack-ai-api/Cargo.toml",
-            "--",
-            "--check",
-        ]
-    );
     run_step!(
         "clippy",
         "cargo",
@@ -402,18 +385,6 @@ fn main() -> ExitCode {
         "gate" => gate(&root, has("--quick")),
         "fmt" => step(&root, "format", "cargo", &["fmt", "--all"])
             .and_then(|()| {
-                step(
-                    &root,
-                    "format (ai-api)",
-                    "cargo",
-                    &[
-                        "fmt",
-                        "--manifest-path",
-                        "crates/codepack-ai-api/Cargo.toml",
-                    ],
-                )
-            })
-            .and_then(|()| {
                 println!("\n=== frontend format ===");
                 if frontend::dependencies_installed(&root) {
                     frontend::format_write(&root)
@@ -443,7 +414,6 @@ fn main() -> ExitCode {
         "install-hooks" => hooks::install(&root).map_err(|error| format!("install-hooks: {error}")),
         "package" => frontend::package(&root).map_err(|error| format!("package: {error}")),
         "golden" => golden::run(&root).map_err(|error| format!("golden: {error}")),
-        "ai-api" => ai_api::check(&root),
         "doctor" => {
             doctor(&root);
             Ok(())

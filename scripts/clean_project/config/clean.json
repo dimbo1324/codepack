@@ -26,13 +26,11 @@
     "apps/desktop/ui/dist/",
     "apps/desktop/src-tauri/target/",
     "apps/desktop/src-tauri/gen/",
-    "crates/codepack-ai-api/target/",
     "__pycache__/",
     ".pytest_cache/",
     ".ruff_cache/",
     ".mypy_cache/"
   ],
-  "_ai_api_target_note": "codepack-ai-api is excluded from the workspace (Q41), so `cargo xtask ai-api` builds it into a target directory of its own that the workspace's own `target/` entry never covers. Measured at 770 MB on a machine that had run that command once — invisible to this script until 2026-09-08, because nothing else in the repository builds outside the workspace.",
   "_artifacts_note": "Regenerable output. Removing these costs only rebuild time, which is why 'artifacts' scope is the safe scope. Anything untracked and not listed here is reported as 'other' instead, because the script cannot know whether it is junk or work in progress.",
 
   "remove_empty_dirs": true,

@@ -76,7 +76,8 @@ pub(crate) struct GateReport {
     sections: Vec<SectionRecord>,
 }
 
-/// A section name as a file-name fragment: `"format (ai-api)"` becomes `"format-ai-api"`,
+/// A section name as a file-name fragment: a name such as `"format (ai-api)"` becomes
+/// `"format-ai-api"`,
 /// not `"format--ai-api-"` — collapsed and trimmed so a name that already used dashes
 /// (most of them do) does not visibly double them up.
 fn slug(name: &str) -> String {

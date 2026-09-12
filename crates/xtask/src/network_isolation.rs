@@ -1,4 +1,5 @@
-//! Enforces invariant I1: `codepack-ai` is the only crate allowed to reach the network.
+//! Enforces invariant I1: `codepack-ai-api` is the only crate allowed to reach the
+//! network, and only the two front ends may depend on it.
 //!
 //! The invariant already existed as a written rule. A rule everyone has to remember is
 //! a rule that eventually gets forgotten by whoever adds a dependency in a hurry, and
@@ -13,13 +14,27 @@
 
 use std::path::Path;
 
-/// The crate that holds S13's HTTP client, and which no workspace member may depend on.
+/// The crate that holds S13's HTTP client and the OS credential store — invariant I1's
+/// single named exception.
 ///
-/// It is not a workspace member: the root manifest excludes it (owner decision
-/// 2026-09-06, Q41). A member that took it as a path dependency would pull `ureq` and
-/// `keyring` straight back into the product, which is the one way to undo the exclusion
-/// without touching `NETWORK_CRATES`.
-const EXCLUDED_API_CRATE: &str = "codepack-ai-api";
+/// It was outside the workspace entirely between 2026-09-06 and 2026-09-12 (Q41), which
+/// let this check state something stronger than the invariant ever did: no exception at
+/// all. Owner decision 2026-09-12 finished the stage instead of deleting it, so the
+/// exception is back — but it is *named*, and the two rules below are what keep "named"
+/// from decaying into "wherever somebody needed a request".
+const API_CRATE: &str = "codepack-ai-api";
+
+/// The crates allowed to depend on [`API_CRATE`].
+///
+/// The front ends, and nothing else. This is the half of the rule that matters most now
+/// that the transport is back in the product: a client reachable from `codepack-engine`
+/// or any domain crate would sit *underneath* the pipeline, where every export passes
+/// through it and no user action gates it. Keeping it above the engine is what makes
+/// "only on an explicit user action" a property of the dependency graph rather than a
+/// promise in a doc comment.
+///
+/// Adding a name here is an owner decision, not a build fix.
+const ALLOWED_API_DEPENDENTS: &[&str] = &["codepack-cli", "codepack-desktop"];
 
 /// Dependencies that can perform network I/O.
 ///
@@ -58,32 +73,40 @@ pub(crate) fn check(root: &Path) -> Result<(), String> {
         };
 
         for dependency in declared_dependencies(&text) {
-            if NETWORK_CRATES.contains(&dependency.as_str()) {
+            // The exception declares its client openly; that is what being the exception
+            // means. Every other crate is held to the rule as it always was.
+            if NETWORK_CRATES.contains(&dependency.as_str()) && package != API_CRATE {
                 offenders.push(format!("{package} depends on {dependency}"));
             }
-            // The other way back in. `codepack-ai-api` declares the client itself, so a
-            // member depending on it inherits one without naming any crate from the list
-            // above.
-            if dependency == EXCLUDED_API_CRATE {
+            // The second half of the rule: who may reach the exception. A crate that
+            // takes `codepack-ai-api` inherits a transport without naming any client, so
+            // this is the one shape the denylist above cannot see.
+            if dependency == API_CRATE && !ALLOWED_API_DEPENDENTS.contains(&package.as_str()) {
                 offenders.push(format!(
-                    "{package} depends on {EXCLUDED_API_CRATE}, which carries the HTTP \
-                     client and the credential store"
+                    "{package} depends on {API_CRATE}, which carries the HTTP client and \
+                     the credential store — only {} may",
+                    ALLOWED_API_DEPENDENTS.join(" and ")
                 ));
             }
         }
     }
 
     if offenders.is_empty() {
-        println!("network isolation ok: no workspace crate may reach the network (invariant I1).");
+        println!(
+            "network isolation ok: {API_CRATE} is the only crate that may reach the \
+             network, and only {} depend on it (invariant I1).",
+            ALLOWED_API_DEPENDENTS.join(" and ")
+        );
         return Ok(());
     }
 
     Err(format!(
-        "invariant I1 violated — a workspace crate declares a network client:\n  {}\n\n\
-         All analysis is local, and since Q41 the one exception lives outside the \
-         workspace entirely. If a new stage genuinely needs the network, that is an owner \
-         decision recorded in docs/__arch__/open-questions.md, not a dependency added in \
-         passing.",
+        "invariant I1 violated:\n  {}\n\n\
+         All analysis is local. The one exception is {API_CRATE} — stage S13's API path, \
+         exercised only on an explicit user action — and the front ends are the only \
+         crates that may reach it, so no export can carry a request underneath itself. \
+         If a new stage genuinely needs the network, that is an owner decision recorded \
+         in docs/__arch__/open-questions.md, not a dependency added in passing.",
         offenders.join("\n  ")
     ))
 }
@@ -277,22 +300,75 @@ mod tests {
     }
 
     #[test]
-    fn a_member_depending_on_the_excluded_api_crate_is_rejected() {
-        // The one way back in that names no crate from `NETWORK_CRATES`:
-        // `codepack-ai-api` declares `ureq` and `keyring` itself, so a member that takes
-        // it as a path dependency inherits both and the exclusion has been undone
-        // (owner decision 2026-09-06, Q41).
-        let root = scratch_workspace("depends-on-api-crate");
+    fn a_front_end_may_depend_on_the_api_crate() {
+        // Owner decision 2026-09-12: S13's API path ships, so the front ends reach it.
+        // This was a refusal until that date, and the test that asserted the refusal is
+        // what this replaces — the rule changed, so the test changed with it rather than
+        // being left to fail.
+        let root = scratch_workspace("front-end-may-depend");
         write_bare_root_manifest(&root);
         write_crate(
             &root,
             "codepack-cli",
-            "[dependencies]\ncodepack-ai-api = { path = \"../codepack-ai-api\" }\n",
+            "[dependencies]
+codepack-ai-api = { workspace = true }
+",
+        );
+        write_crate(
+            &root,
+            "codepack-desktop",
+            "[dependencies]
+codepack-ai-api = { workspace = true }
+",
+        );
+
+        assert!(check(&root).is_ok(), "{:?}", check(&root));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_domain_crate_may_not_depend_on_the_api_crate() {
+        // The half of the rule that still refuses. A transport reachable from the engine
+        // would sit underneath every export, where no user action gates it — which is
+        // the thing "only on an explicit user action" is supposed to mean.
+        let root = scratch_workspace("engine-may-not-depend");
+        write_bare_root_manifest(&root);
+        write_crate(
+            &root,
+            "codepack-engine",
+            "[dependencies]
+codepack-ai-api = { workspace = true }
+",
         );
 
         let error = check(&root).unwrap_err();
-        assert!(error.contains("codepack-ai-api"), "{error}");
+        assert!(error.contains("codepack-engine depends on codepack-ai-api"), "{error}");
         assert!(error.contains("credential store"), "{error}");
+        assert!(
+            error.contains("codepack-cli and codepack-desktop"),
+            "the message must name who may: {error}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_api_crate_itself_may_declare_the_client() {
+        // Being the exception is the whole point; a check that refused it would refuse
+        // the product.
+        let root = scratch_workspace("exception-declares-client");
+        write_bare_root_manifest(&root);
+        write_crate(
+            &root,
+            "codepack-ai-api",
+            "[dependencies]
+ureq = { workspace = true }
+keyring = { workspace = true }
+",
+        );
+
+        assert!(check(&root).is_ok(), "{:?}", check(&root));
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -408,18 +484,30 @@ windows-sys = "0.61"
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// There is no longer an allowed crate. Every member is held to the same rule, which
-    /// is what the exclusion bought — and a test that still granted an exemption would
-    /// quietly permit exactly the regression Q41 removed.
+    /// One crate is exempt and the exemption is not transferable. The previous version
+    /// of this test asserted that *no* member was exempt, which was true while the API
+    /// path lived outside the workspace; the risk it was guarding against is now this
+    /// one — a second crate quietly taking the same liberty because the first one has it.
     #[test]
-    fn no_member_is_exempt_not_even_the_ai_crate() {
-        let root = scratch_workspace("no-exemption");
+    fn only_the_api_crate_may_declare_a_client() {
+        let root = scratch_workspace("one-exemption-only");
         write_bare_root_manifest(&root);
-        write_crate(&root, "codepack-ai", "[dependencies]\nureq = \"3\"\n");
-        write_crate(&root, "codepack-core", "[dependencies]\nserde = \"1\"\n");
+        write_crate(&root, "codepack-ai-api", "[dependencies]
+ureq = \"3\"
+");
+        write_crate(&root, "codepack-ai", "[dependencies]
+ureq = \"3\"
+");
+        write_crate(&root, "codepack-core", "[dependencies]
+serde = \"1\"
+");
 
         let error = check(&root).unwrap_err();
         assert!(error.contains("codepack-ai depends on ureq"), "{error}");
+        assert!(
+            !error.contains("codepack-ai-api depends on ureq"),
+            "the exception must not be reported as an offender: {error}"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -496,14 +584,24 @@ ureq = \"3\"
     #[test]
     fn every_listed_client_is_detected() {
         // A denylist that silently stopped matching an entry would be worse than none.
+        //
+        // This wrote no root manifest until 2026-09-12, so `workspace_manifests` failed
+        // and `check` returned `Err` before reading a single dependency: the assertion
+        // held for every entry in the list, and would have held just as well for an
+        // empty or misspelled one. Found while rewriting the rule around it.
         for client in NETWORK_CRATES {
             let root = scratch_workspace(client);
+            write_bare_root_manifest(&root);
             write_crate(
                 &root,
                 "codepack-core",
                 &format!("[dependencies]\n{client} = \"1\"\n"),
             );
-            assert!(check(&root).is_err(), "{client} was not detected");
+            let error = check(&root).unwrap_err();
+            assert!(
+                error.contains(&format!("codepack-core depends on {client}")),
+                "{client} was not detected: {error}"
+            );
             let _ = std::fs::remove_dir_all(&root);
         }
     }
@@ -628,6 +726,7 @@ git2 = "0.19"
             "codepack-core",
             "codepack-security",
             "codepack-desktop",
+            "codepack-ai-api",
             "xtask",
         ] {
             assert!(

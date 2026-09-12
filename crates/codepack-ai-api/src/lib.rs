@@ -1,11 +1,13 @@
 //! Stage S13's API path: ask a provider a question about a bundle.
 //!
-//! **Outside the product workspace, on purpose.** The root `Cargo.toml` excludes this
-//! package, so `cargo build`, `cargo test --workspace` and `cargo deny` never see it and
-//! neither `ureq` nor `keyring` reaches the product's `Cargo.lock`. It is still a real
-//! crate in this repository, built and linted by `cargo xtask ai-api`.
+//! **The one crate in this workspace that may reach the network** — invariant I1's single
+//! named exception, and the only place `ureq` and `keyring` are declared. The
+//! `network isolation` step of `cargo xtask gate` fails if any other crate declares a
+//! client, and fails if anything but `codepack-cli` or `codepack-desktop` depends on this
+//! one: a transport reachable from the engine would sit underneath every export, where no
+//! user action gates it.
 //!
-//! ## Why it was moved out
+//! ## How it got here
 //!
 //! It used to be the `api` feature of `codepack-ai`, on by default. Both front ends took
 //! that crate with `default-features = false`, so no binary linked a transport — but
@@ -13,22 +15,21 @@
 //! by `cargo test --workspace`. So `keyring` and `ureq` were built on every platform, for
 //! code no user could reach. On Linux `keyring` wants a Secret Service backend, which
 //! made a dead code path into a live obstacle to building on anything but Windows
-//! (audit 2026-09-05 No. 26; owner decision 2026-09-06, Q41).
+//! (audit 2026-09-05 No. 26; owner decision 2026-09-06, Q41). The feature became this
+//! crate, and the crate was excluded from the workspace.
 //!
-//! ## What this means for invariant I1
+//! Being excluded also meant not being built by the gate — preserved, not maintained, as
+//! this comment used to say. Owner decision 2026-09-12 resolved that the other way:
+//! rather than keep a dead path alive, finish the stage. It now has a command
+//! (`codepack ask`, `codepack key`) and a screen, so the crate is back in the workspace,
+//! and the build cost the exclusion avoided is a cost the feature buys something with.
 //!
-//! I1 says analysis is local and no crate reaches the network, with S13 as the single
-//! named exception. With this package outside the workspace, **the exception is no longer
-//! inside the product at all**: the `network isolation` gate step now allows *no*
-//! workspace crate a network client, rather than allowing one. That is a stronger
-//! statement than the invariant used to make, and the registry says so.
+//! ## What the exception is worth
 //!
-//! ## What it costs
-//!
-//! `cargo xtask gate` does not build this crate, so it does not rot on its own — it rots
-//! quietly unless somebody runs `cargo xtask ai-api`. That command exists for exactly
-//! this reason and is named in `.ai/project/11-commands.md`. Finishing S13 means giving
-//! this path a command and a screen; until then it is preserved, not maintained.
+//! Nothing here runs on its own. A send happens because a user asked for one, on a bundle
+//! they already exported, after [`plan::SendPlan::check`] has agreed — and that guard runs
+//! *before* the key is read, so a refused send is not even observed by the credential
+//! store, let alone by a provider.
 
 pub mod keys;
 pub mod plan;
