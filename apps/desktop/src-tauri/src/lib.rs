@@ -40,6 +40,7 @@ pub mod dto;
 pub mod error;
 pub mod state;
 pub mod tree;
+mod window_fit;
 
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
@@ -89,6 +90,13 @@ pub fn run() {
             if let Err(error) = install_tray(app.handle()) {
                 eprintln!("codepack: tray icon was not created: {error}");
             }
+
+            // A configured window size is an intent, not a measurement of the screen it
+            // opens on: 1100x760 does not fit a 1280x752 work area, which is what 150%
+            // scaling on a 1920x1200 panel produces. Best-effort — a window at the
+            // configured size is a nuisance, and refusing to start over one would be
+            // worse.
+            let _ = window_fit::fit_main_window(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -122,6 +130,8 @@ pub fn run() {
             commands::export::open_review_checklist,
             commands::ai::list_local_agents,
             commands::ai::prepare_handoff,
+            commands::window::startup_zoom,
+            commands::window::save_ui_zoom,
             commands::ai::ai_api_status,
             commands::ai::ai_api_plan,
             commands::ai::ai_api_ask,

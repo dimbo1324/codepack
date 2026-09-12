@@ -43,6 +43,11 @@ export interface Config {
   ai_handoff_agent: string;
   /** The question a handoff carries when none is typed. */
   ai_handoff_question: string;
+  /** Whether `ui_zoom` is derived from the monitor rather than chosen. True by default:
+   * the shell works out a factor from the work area each launch, so a different monitor
+   * adapts instead of keeping one that suited the old one. Changing the zoom by any route
+   * turns this off for good. */
+  ui_zoom_auto: boolean;
   /** Whether the API path may send anything at all. `false` in a fresh installation,
    * and that is what makes "no network unless asked" true rather than merely likely. */
   ai_api_enabled: boolean;

@@ -15,7 +15,6 @@
     pickSettingsDestination,
     pickSettingsSource,
     saveGlobalSettings,
-    setUiZoom,
     startWatch,
     stopWatch,
   } from "$lib/api/client";
@@ -29,6 +28,7 @@
   import { setLanguage, t } from "$lib/i18n/index.svelte";
   import { pushToast, reportError } from "$lib/stores/toasts.svelte";
   import { setThemePreference, type ThemePreference } from "$lib/theme/index.svelte";
+  import { ZOOM_MAX, ZOOM_MIN, resetZoom, setZoom, zoom } from "$lib/stores/zoom.svelte";
   import { goTo, wizard } from "$lib/stores/wizard.svelte";
 
   interface Props {
@@ -208,9 +208,23 @@
   function onZoom(factor: number): void {
     if (!wizard.sessionConfig) return;
     wizard.sessionConfig.ui_zoom = factor;
-    // Applied live rather than on save: a scale you cannot see until you restart is a
-    // setting you cannot choose. The slider used to change nothing at all.
-    void setUiZoom(factor).catch((error: unknown) => reportError("settings.applyFailed", error));
+    // An explicit choice, so it stops following the monitor.
+    wizard.sessionConfig.ui_zoom_auto = false;
+    // Through the store, which applies, persists and keeps the status-bar readout in
+    // agreement. Applied live rather than on save: a scale you cannot see until you
+    // restart is a setting you cannot choose.
+    void setZoom(factor).catch((error: unknown) => reportError("settings.applyFailed", error));
+  }
+
+  /** Hands the zoom back to the monitor, which is also what `Ctrl 0` does. */
+  function onZoomAuto(): void {
+    void resetZoom()
+      .then(() => {
+        if (!wizard.sessionConfig) return;
+        wizard.sessionConfig.ui_zoom = zoom.current;
+        wizard.sessionConfig.ui_zoom_auto = true;
+      })
+      .catch((error: unknown) => reportError("settings.applyFailed", error));
   }
 
   /** Watch mode is a running background task, not a stored flag — the previous UI wrote
@@ -417,20 +431,28 @@
 
         <Field label={t("settings.uiZoom")} hint={t("settings.uiZoom.hint")}>
           <div class="zoom">
+            <!-- The bounds come from the store, which restates `Config`'s own range.
+                 They used to be min="0.75" max="2" — neither end matched the 0.7–1.5 the
+                 backend clamps to, so the most useful setting on a small screen was
+                 unreachable by the slider while 200% displayed a window that was at
+                 150%. -->
             <input
               type="range"
-              min="0.75"
-              max="2"
+              min={ZOOM_MIN}
+              max={ZOOM_MAX}
               step="0.05"
-              value={config.ui_zoom}
+              value={zoom.current}
               oninput={(event) => onZoom(Number(event.currentTarget.value))}
             />
-            <span class="zoom__value num">{Math.round(config.ui_zoom * 100)}%</span>
-            <button class="btn btn--sm" onclick={() => onZoom(1)} disabled={config.ui_zoom === 1}>
-              {t("settings.uiZoom.reset")}
+            <span class="zoom__value num">{Math.round(zoom.current * 100)}%</span>
+            <button class="btn btn--sm" onclick={onZoomAuto} disabled={zoom.auto}>
+              {t("settings.uiZoom.auto")}
             </button>
           </div>
         </Field>
+        {#if zoom.auto}
+          <p class="text-muted text-xs">{t("settings.uiZoom.autoNow")}</p>
+        {/if}
 
         <Switch
           label={t("settings.logVerbose")}

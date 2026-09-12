@@ -107,6 +107,18 @@ pub struct Config {
     /// consumer anyway.
     pub disclose_absolute_paths: bool,
     pub ui_zoom: f64,
+    /// Whether [`Config::ui_zoom`] is derived from the monitor rather than chosen.
+    ///
+    /// `true` by default, and it means "work it out each launch": the desktop shell reads
+    /// the monitor's work area and picks the largest zoom at which the designed layout
+    /// fits, never zooming in. Plugging in a different monitor therefore adapts on the
+    /// next launch rather than keeping a factor that suited the old one.
+    ///
+    /// Changing the zoom by any route — the settings control, the keyboard, the status
+    /// bar — writes the factor to `ui_zoom` and sets this to `false`. After that the
+    /// stored value is used verbatim and the monitor is never consulted again, because an
+    /// explicit choice that gets recomputed on the next launch is not a choice.
+    pub ui_zoom_auto: bool,
     pub language: String,
     pub prompt_goals: Vec<String>,
     /// How many export runs to keep per project (`codepack-storage`'s retention).
@@ -229,6 +241,7 @@ impl Default for Config {
             watch_clipboard_auto_update: false,
             disclose_absolute_paths: false,
             ui_zoom: DEFAULT_UI_ZOOM,
+            ui_zoom_auto: true,
             language: DEFAULT_LANGUAGE.to_string(),
             prompt_goals: default_prompt_goals(),
             history_keep_last_n: 50,

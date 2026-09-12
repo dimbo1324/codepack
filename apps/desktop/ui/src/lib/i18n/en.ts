@@ -29,6 +29,11 @@ export const en = {
 
   "status.local": "Everything is analysed on this machine.",
   "status.version": "Version {version}",
+  "status.zoom.in": "Zoom in (Ctrl +)",
+  "status.zoom.out": "Zoom out (Ctrl -)",
+  "status.zoom.reset": "Match this monitor (Ctrl 0)",
+  "status.zoom.auto": "Matched to this monitor. Ctrl + / Ctrl - to change it.",
+  "status.zoom.autoMark": "auto",
   "status.watchOn": "Watching for changes",
   "status.exporting": "Export in progress",
 
@@ -143,7 +148,11 @@ codepack refuses to send one that carries critical security findings.",
   "settings.language": "Language",
   "settings.uiZoom": "Interface scale",
   "settings.uiZoom.hint": "Applies immediately to the whole window.",
-  "settings.uiZoom.reset": "Reset to 100%",
+  "settings.uiZoom.auto": "Match the monitor",
+  "settings.uiZoom.autoNow":
+    "Currently matched to this monitor, and recalculated each launch — so a different \
+screen adapts instead of keeping a scale that suited this one. Moving the slider, or \
+Ctrl + / Ctrl -, makes it your choice instead.",
   "settings.logVerbose": "Verbose activity log",
   "settings.logVerbose.hint":
     "Keeps DEBUG-level lines in the log files under codepack's log directory, not just warnings and errors.",

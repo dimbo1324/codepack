@@ -30,6 +30,11 @@ export const ru: Record<TranslationKey, string> = {
 
   "status.local": "Весь анализ выполняется на этом компьютере.",
   "status.version": "Версия {version}",
+  "status.zoom.in": "Крупнее (Ctrl +)",
+  "status.zoom.out": "Мельче (Ctrl -)",
+  "status.zoom.reset": "Под этот монитор (Ctrl 0)",
+  "status.zoom.auto": "Подобран под этот монитор. Ctrl + / Ctrl - чтобы изменить.",
+  "status.zoom.autoMark": "авто",
   "status.watchOn": "Слежение за изменениями",
   "status.exporting": "Идёт экспорт",
 
@@ -145,7 +150,11 @@ Secret Service — и никогда в файле настроек, котор�
   "settings.language": "Язык",
   "settings.uiZoom": "Масштаб интерфейса",
   "settings.uiZoom.hint": "Применяется сразу ко всему окну.",
-  "settings.uiZoom.reset": "Вернуть 100%",
+  "settings.uiZoom.auto": "Под монитор",
+  "settings.uiZoom.autoNow":
+    "Сейчас подобран под этот монитор и пересчитывается при каждом запуске — другой \
+экран подстроится сам, вместо того чтобы сохранять масштаб, подходивший этому. Сдвиньте \
+ползунок или нажмите Ctrl + / Ctrl -, и выбор станет вашим.",
   "settings.logVerbose": "Подробный журнал работы",
   "settings.logVerbose.hint":
     "Сохраняет в файлах журнала (в каталоге логов codepack) строки уровня DEBUG, а не только предупреждения и ошибки.",

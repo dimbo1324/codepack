@@ -364,3 +364,20 @@ export function onAiFinished(handler: (event: AiFinishedEvent) => void): Promise
 export function setUiZoom(factor: number): Promise<void> {
   return invoke("set_ui_zoom", { factor });
 }
+
+/** The zoom this launch should open at: the stored factor if the user has chosen one,
+ * otherwise one derived from the monitor's work area. Computes only — `setUiZoom` stays
+ * the single thing that changes the window. */
+export function startupZoom(): Promise<number> {
+  return invoke("startup_zoom");
+}
+
+/** Writes the zoom to the settings file so it survives a restart.
+ *
+ * `auto` is true only for the reset, which asks for the monitor to be followed again.
+ * Separate from `setUiZoom` because startup applies a factor without recording it as a
+ * choice — persisting a derived value would turn "follow my monitor" into a fixed
+ * number. */
+export function saveUiZoom(factor: number, auto = false): Promise<void> {
+  return invoke("save_ui_zoom", { factor, auto });
+}

@@ -33,6 +33,52 @@ pub fn set_ui_zoom(app: tauri::AppHandle, factor: f64) -> CommandResult<()> {
         .map_err(CommandError::new)
 }
 
+/// The zoom this launch should open at.
+///
+/// Two answers, and which one you get is `Config::ui_zoom_auto`:
+///
+/// * `false` — the user has chosen a zoom, so the stored factor is used verbatim. Nothing
+///   here looks at the monitor, because a choice that gets recomputed on the next launch
+///   is not a choice.
+/// * `true` (the default) — derive it from the monitor's work area, every launch. That is
+///   what makes moving to a different monitor adapt rather than keep a factor that suited
+///   the old one, and it is why nothing is persisted on this path.
+///
+/// Computes rather than applies: `set_ui_zoom` remains the only thing that touches the
+/// webview, so there is one place where the zoom actually changes.
+#[tauri::command]
+pub fn startup_zoom(app: tauri::AppHandle) -> CommandResult<f64> {
+    let paths = codepack_core::AppPaths::resolve()?;
+    let config = codepack_core::config::load(&paths);
+    if !config.ui_zoom_auto {
+        return Ok(config.normalized_ui_zoom());
+    }
+    Ok(crate::window_fit::monitor_zoom(&app).unwrap_or(codepack_core::config::DEFAULT_UI_ZOOM))
+}
+
+/// Writes the zoom to the settings file, so it survives a restart.
+///
+/// Separate from [`set_ui_zoom`], which only touches the webview, because startup applies
+/// a factor without recording it: the derived one is not a decision the user made, and
+/// persisting it would quietly convert "follow my monitor" into "stay at 87% forever",
+/// including after they plug in a bigger screen.
+///
+/// `auto` is `false` for every user-initiated change and `true` only for the reset, which
+/// is the one route that asks for the monitor to be followed again.
+///
+/// Writes only these two fields, read-modify-write on the stored file — not the session's
+/// configuration. The settings page holds unsaved edits until the user presses save, and
+/// a zoom change must not smuggle those into the file behind their back.
+#[tauri::command]
+pub fn save_ui_zoom(factor: f64, auto: bool) -> CommandResult<()> {
+    let paths = codepack_core::AppPaths::resolve()?;
+    let mut config = codepack_core::config::load(&paths);
+    config.ui_zoom = clamp_zoom(factor);
+    config.ui_zoom_auto = auto;
+    codepack_core::config::save(&paths, &config)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

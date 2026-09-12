@@ -9,7 +9,6 @@
     onWatchChanged,
     onWatchDegraded,
     onWindowDragDrop,
-    setUiZoom,
   } from "$lib/api/client";
   import type { AppInfo } from "$lib/api/types";
   import { openProjectAt } from "$lib/actions/project.svelte";
@@ -22,6 +21,7 @@
   import { errorMessage, pushToast } from "$lib/stores/toasts.svelte";
   import { initTheme } from "$lib/theme/index.svelte";
   import { receiveExportEvent, wizard } from "$lib/stores/wizard.svelte";
+  import { initZoom, resetZoom, zoomIn, zoomOut, zoomShortcut } from "$lib/stores/zoom.svelte";
   import { copyText } from "$lib/util/clipboard";
   import { formatWatchSummary } from "$lib/util/watchSummary";
 
@@ -49,13 +49,39 @@
         setLanguage(settings.language);
         initTheme(settings.theme);
         // The stored zoom was never applied at startup, so a user who set 150% got 100%
-        // back on every launch. Failing here must not stop the app from opening.
-        void setUiZoom(settings.ui_zoom).catch(() => undefined);
+        // back on every launch. Since 2026-09-12 this also derives a factor from the
+        // monitor when the user has not chosen one — see `stores/zoom.svelte`. Failing
+        // here must not stop the app from opening.
+        void initZoom().catch(() => undefined);
       } catch (error) {
         // `errorMessage`, not `String(error)`: every command rejects with
         // `CommandError { message }`, which stringifies to "[object Object]".
         startupError = errorMessage(error);
       }
+
+      // Zoom from the keyboard and the wheel, at the root because they apply to the
+      // whole window rather than to whatever page is showing. `Ctrl` and the wheel is
+      // what people reach for first; the shortcuts are what they reach for second.
+      const onKeyDown = (event: KeyboardEvent) => {
+        const action = zoomShortcut(event);
+        if (!action) return;
+        event.preventDefault();
+        const run = action === "in" ? zoomIn : action === "out" ? zoomOut : resetZoom;
+        void run().catch(() => undefined);
+      };
+      const onWheel = (event: WheelEvent) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        if (event.deltaY === 0) return;
+        // The webview zooms on `Ctrl`+wheel by itself, which would fight this store and
+        // leave the readout wrong; this takes the gesture over rather than adding to it.
+        event.preventDefault();
+        void (event.deltaY < 0 ? zoomIn() : zoomOut()).catch(() => undefined);
+      };
+      window.addEventListener("keydown", onKeyDown);
+      // Not passive: the handler calls `preventDefault` to stop the webview's own zoom.
+      window.addEventListener("wheel", onWheel, { passive: false });
+      unlisteners.push(() => window.removeEventListener("keydown", onKeyDown));
+      unlisteners.push(() => window.removeEventListener("wheel", onWheel));
 
       // Registered once, at the root, so progress keeps accumulating in the Export
       // page's buffer even if the user is looking at a different step while an

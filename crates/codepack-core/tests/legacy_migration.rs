@@ -155,6 +155,9 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         // Added 2026-09-12 with S13's API path. Defaults to `false`, which is what keeps
         // a fresh installation unable to reach the network at all.
         "ai_api_enabled",
+        // Added 2026-09-12 with monitor-aware zoom. `true` means "derive from the
+        // monitor each launch"; changing the zoom by hand turns it off for good.
+        "ui_zoom_auto",
         // Added 2026-09-06 (audit No. 21). Same reasoning as the others: a new field with
         // a `#[serde(default)]`, and its default is today's behaviour, so an old settings
         // file loads unchanged and every existing artifact keeps the value it had.
