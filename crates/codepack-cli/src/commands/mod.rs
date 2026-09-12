@@ -1,5 +1,7 @@
 //! One module per command, plus the setup they share.
 
+pub(crate) mod ask;
+pub(crate) mod bundle;
 pub(crate) mod completions;
 pub(crate) mod doctor;
 pub(crate) mod explain;
@@ -7,6 +9,7 @@ pub(crate) mod export;
 pub(crate) mod handoff;
 pub(crate) mod history;
 pub(crate) mod init;
+pub(crate) mod key;
 pub(crate) mod manpage;
 pub(crate) mod preview;
 pub(crate) mod sanitize;

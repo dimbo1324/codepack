@@ -34,6 +34,19 @@ pub const IMPLEMENTED_ARCHIVE_FORMATS: &[&str] = &["zip", "7z"];
 pub const LOCAL_AI_AGENTS: &[&str] = &["claude-code", "codex"];
 pub const DEFAULT_LOCAL_AI_AGENT: &str = "claude-code";
 
+/// Providers the API path can send to (stage S13's network path).
+///
+/// Here for the same reason as [`LOCAL_AI_AGENTS`], and with the same guard: `Config`
+/// normalizes the stored value, and the dependency direction is `ai-api → core`. What a
+/// provider *is* — its display name, its models, its request shape — belongs to
+/// `codepack-ai-api::providers`, where a test asserts the two lists name the same
+/// providers so a setting cannot resolve to nothing.
+///
+/// One entry today. The list exists so that adding a second provider is a line here and
+/// a module there, rather than a search for every place a vendor was assumed.
+pub const AI_API_PROVIDERS: &[&str] = &["anthropic"];
+pub const DEFAULT_AI_API_PROVIDER: &str = "anthropic";
+
 pub const THEMES: &[&str] = &["system", "light", "dark"];
 pub const DEFAULT_THEME: &str = "system";
 

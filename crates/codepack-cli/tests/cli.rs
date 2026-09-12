@@ -54,6 +54,31 @@ impl Sandbox {
     }
 
     fn run(&self, args: &[&str]) -> Output {
+        self.command(args).output().unwrap()
+    }
+
+    /// Runs the binary with something on stdin. `key set` reads its key from there and
+    /// from nowhere else, so testing it at all requires this.
+    fn run_with_stdin(&self, args: &[&str], input: &str) -> Output {
+        use std::io::Write;
+
+        let mut child = self
+            .command(args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    }
+
+    fn command(&self, args: &[&str]) -> Command {
         let mut command = Command::new(binary());
         command
             .args(args)
@@ -62,7 +87,29 @@ impl Sandbox {
             .env("LOCALAPPDATA", self.home.path())
             .env("USERPROFILE", self.home.path())
             .env("XDG_CONFIG_HOME", self.home.path());
-        command.output().unwrap()
+        command
+    }
+
+    /// Switches the API path on, through the same two commands a user would use.
+    ///
+    /// Deliberately not by writing the settings file at a computed path: that path is
+    /// platform-specific, and a test that hard-codes it stops testing the product the
+    /// day the layout changes. `settings export` then `settings import` is the supported
+    /// round trip, so this also keeps that pair honest.
+    fn enable_api_path(&self) -> &Self {
+        let file = self.home.path().join("settings-under-test.json");
+        let path = file.display().to_string();
+        let exported = self.run(&["settings", "export", &path]);
+        assert_eq!(exported.status.code(), Some(0), "{}", stderr(&exported));
+
+        let raw = std::fs::read_to_string(&file).unwrap();
+        let mut settings: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        settings["ai_api_enabled"] = serde_json::Value::Bool(true);
+        std::fs::write(&file, serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+
+        let imported = self.run(&["settings", "import", &path]);
+        assert_eq!(imported.status.code(), Some(0), "{}", stderr(&imported));
+        self
     }
 
     fn project(&self) -> &Path {
@@ -159,6 +206,7 @@ fn every_command_emits_a_versioned_envelope() {
             vec!["--json", "explain", "src/main.py", project.as_str()],
             "explain",
         ),
+        (vec!["--json", "key", "status"], "key"),
     ] {
         let output = sandbox.run(&args);
         let parsed = json(&output);
@@ -1724,6 +1772,158 @@ fn handoff_writes_the_briefing_and_prints_the_command_without_sending_anything()
     assert_eq!(report["extracted"], false);
     let briefing = std::fs::read_to_string(report["handoff_file"].as_str().unwrap()).unwrap();
     assert!(briefing.contains("review the export pipeline"));
+}
+
+/// A bundle shaped like an export, with just the parts the API path reads.
+///
+/// A real `codepack export` would do, and takes seconds; what `ask` actually consumes is
+/// `AI_CONTEXT/` plus optionally `06_security_scan.json`, so building those directly
+/// keeps each test about one thing.
+fn bundle_with_context(sandbox: &Sandbox, name: &str, scan_json: Option<&str>) -> String {
+    let bundle = sandbox.out().join(name);
+    std::fs::create_dir_all(bundle.join("AI_CONTEXT")).unwrap();
+    std::fs::write(
+        bundle.join("AI_CONTEXT").join("00_overview.md"),
+        "# Overview\n\nA demo project.\n",
+    )
+    .unwrap();
+    if let Some(json) = scan_json {
+        std::fs::write(bundle.join("06_security_scan.json"), json).unwrap();
+    }
+    bundle.display().to_string()
+}
+
+#[test]
+fn ask_dry_run_describes_the_send_without_sending_or_reading_a_key() {
+    // The point of `--dry-run`: it works with the integration switched off, because it
+    // is not a send. If this ever needed a key or a network call to answer, the flag
+    // would be useless for the thing people want it for — looking first.
+    let sandbox = Sandbox::new();
+    let bundle = bundle_with_context(&sandbox, "dry", Some(r#"{"findings":[]}"#));
+
+    let output = sandbox.run(&["--json", "ask", &bundle, "--dry-run"]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert_eq!(report["command"], "ask");
+    assert_eq!(report["dry_run"], true);
+    assert_eq!(report["provider"], "anthropic");
+    assert_eq!(report["context_files"], 1);
+    assert_eq!(report["critical_findings"], 0);
+    assert!(
+        report.get("answer").is_none(),
+        "a dry run must not carry an answer: {report}"
+    );
+}
+
+#[test]
+fn ask_is_refused_by_default_because_the_integration_is_switched_off() {
+    // The guarantee behind invariant I1 on a fresh installation: the door exists and is
+    // shut. Nothing here can reach the network, and the refusal says why rather than
+    // failing obscurely.
+    let sandbox = Sandbox::new();
+    let bundle = bundle_with_context(&sandbox, "off", Some(r#"{"findings":[]}"#));
+
+    let output = sandbox.run(&["--json", "ask", &bundle]);
+    assert_eq!(code(&output), 1, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert!(
+        report["refused"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("switched off"),
+        "{report}"
+    );
+    assert!(report.get("answer").is_none(), "{report}");
+}
+
+#[test]
+fn ask_on_a_bundle_with_critical_findings_exits_three_and_sends_nothing() {
+    // Code 3 is "the command worked and found critical secrets", which is exactly this
+    // situation — and the send is refused before a key is read, so the credential store
+    // does not even observe the attempt.
+    let sandbox = Sandbox::new();
+    sandbox.enable_api_path();
+    let bundle = bundle_with_context(
+        &sandbox,
+        "critical",
+        Some(r#"{"findings":[{"severity":"critical"},{"severity":"low"}]}"#),
+    );
+
+    let output = sandbox.run(&["--json", "ask", &bundle]);
+    assert_eq!(code(&output), 3, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert_eq!(report["critical_findings"], 1);
+    assert!(
+        report["refused"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("critical"),
+        "{report}"
+    );
+    assert!(report.get("answer").is_none(), "{report}");
+}
+
+#[test]
+fn ask_reports_an_unscanned_bundle_as_unverified_rather_than_as_clean() {
+    // `null`, not `0`. A consumer that saw zero would treat a bundle nothing has checked
+    // as one that came back clean, which is the single most useful lie this report could
+    // tell.
+    let sandbox = Sandbox::new();
+    let bundle = bundle_with_context(&sandbox, "unscanned", None);
+
+    let output = sandbox.run(&["--json", "ask", &bundle, "--dry-run"]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+    assert!(json(&output)["critical_findings"].is_null());
+
+    let human = sandbox.run(&["ask", &bundle, "--dry-run"]);
+    assert!(stdout(&human).contains("not verified"), "{}", stdout(&human));
+}
+
+#[test]
+fn ask_names_the_available_providers_when_asked_for_one_that_does_not_exist() {
+    let sandbox = Sandbox::new();
+    let bundle = bundle_with_context(&sandbox, "unknown-provider", None);
+
+    let output = sandbox.run(&["ask", &bundle, "--provider", "not-a-vendor", "--dry-run"]);
+    assert_eq!(code(&output), 1);
+    assert!(stderr(&output).contains("anthropic"), "{}", stderr(&output));
+}
+
+#[test]
+fn key_status_says_whether_a_key_is_there_and_never_prints_one() {
+    // Read-only, and safe in a headless container: `has_key` reports a credential store
+    // it cannot reach as "no key", because a store that does not work cannot hold one.
+    let sandbox = Sandbox::new();
+
+    let output = sandbox.run(&["--json", "key", "status"]);
+    assert_eq!(code(&output), 0, "stderr:\n{}", stderr(&output));
+
+    let report = json(&output);
+    assert_eq!(report["action"], "status");
+    assert_eq!(report["provider"], "anthropic");
+    assert!(report["stored"].is_boolean());
+    let keys: Vec<&str> = report
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert!(
+        !keys.iter().any(|key| key.contains("key") && *key != "key"),
+        "no field may carry the credential: {keys:?}"
+    );
+}
+
+#[test]
+fn key_set_refuses_an_empty_stdin_rather_than_storing_nothing() {
+    // Storing an empty string would make `status` report a key that cannot work.
+    let sandbox = Sandbox::new();
+    let output = sandbox.run_with_stdin(&["key", "set"], "\n");
+    assert_eq!(code(&output), 1);
+    assert!(stderr(&output).contains("stdin"), "{}", stderr(&output));
 }
 
 #[test]

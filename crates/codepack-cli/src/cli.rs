@@ -59,6 +59,11 @@ pub(crate) enum Command {
     Explain(ExplainArgs),
     /// Prepare an already-exported bundle for a coding agent running on this machine.
     Handoff(HandoffArgs),
+    /// Ask a provider about an already-exported bundle. **The only command that uses
+    /// the network**, and only with the integration switched on in settings.
+    Ask(AskArgs),
+    /// Store, check or remove the API key in this machine's credential store.
+    Key(KeyArgs),
     /// Set this project up to use codepack: install the pre-commit hook.
     Init(InitArgs),
     /// Move this machine's settings to or from a file, so a team can share one
@@ -119,6 +124,62 @@ pub(crate) struct HandoffArgs {
     /// then to a general-purpose one.
     #[arg(long, value_name = "TEXT")]
     pub question: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct AskArgs {
+    /// The bundle to ask about: a `.zip`, an archive-set directory, or an extracted
+    /// folder. Which one it is gets decided by looking at it, not by a flag.
+    pub bundle: PathBuf,
+
+    /// What to ask. Falls back to the stored question, then to a general-purpose one.
+    #[arg(long, short = 'q', value_name = "TEXT")]
+    pub question: Option<String>,
+
+    /// The model to ask, exactly as the provider spells it. Falls back to the stored
+    /// model, then to the most capable one this build knows about.
+    #[arg(long, value_name = "ID")]
+    pub model: Option<String>,
+
+    /// Which provider to send to. Falls back to the configured one.
+    #[arg(long, value_name = "ID")]
+    pub provider: Option<String>,
+
+    /// Describe what a send would include and stop. Nothing leaves the machine, no key
+    /// is read, and the integration does not even have to be switched on.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Send even though the bundle carries critical security findings.
+    ///
+    /// A separate flag rather than a prompt, and never implied: the refusal exists
+    /// because sending a bundle this product has already flagged would make the scanner
+    /// decorative. Overriding it is a decision somebody types out.
+    #[arg(long)]
+    pub override_critical: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct KeyArgs {
+    #[command(subcommand)]
+    pub command: KeyCommand,
+
+    /// Which provider the key belongs to. Falls back to the configured one.
+    #[arg(long, value_name = "ID", global = true)]
+    pub provider: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum KeyCommand {
+    /// Read a key from stdin and put it in the OS credential store.
+    ///
+    /// Stdin, never a flag: an argument is visible in `ps` and lands in shell history,
+    /// and a credential that reaches either has leaked.
+    Set,
+    /// Say whether a key is stored. Never prints the key.
+    Status,
+    /// Remove the stored key.
+    Clear,
 }
 
 #[derive(Debug, Args)]

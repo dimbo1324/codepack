@@ -68,6 +68,8 @@ fn main() -> std::process::ExitCode {
         Command::Verify(args) => commands::verify::run(&args, format),
         Command::Explain(args) => commands::explain::run(&args, format),
         Command::Handoff(args) => commands::handoff::run(&args, format),
+        Command::Ask(args) => commands::ask::run(&args, format),
+        Command::Key(args) => commands::key::run(&args, format),
         Command::Init(args) => commands::init::run(&args, format),
         Command::Settings(args) => commands::settings_file::run(&args, format),
         Command::Mcp => mcp::run(),

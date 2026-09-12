@@ -26,6 +26,11 @@ keyring = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# For one test only: that this crate's provider list and `Config`'s valid-value set name
+# the same providers. The crate itself needs nothing from core — `ask` takes every
+# decision as an argument — so this stays a dev-dependency rather than becoming a real
+# one for the sake of a guard.
+codepack-core = { workspace = true }
 
 [lints]
 workspace = true

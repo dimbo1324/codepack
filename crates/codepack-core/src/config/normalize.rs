@@ -8,10 +8,10 @@
 
 use super::Config;
 use super::valid_sets::{
-    ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
-    DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME,
-    DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES, LOCAL_AI_AGENTS, SAFE_EXPORT_MODES, THEMES,
-    resolve_diff_export_mode_alias,
+    AI_API_PROVIDERS, ARCHIVE_FORMATS, DEFAULT_AI_API_PROVIDER, DEFAULT_ARCHIVE_FORMAT,
+    DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE, DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT,
+    DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES, LANGUAGES,
+    LOCAL_AI_AGENTS, SAFE_EXPORT_MODES, THEMES, resolve_diff_export_mode_alias,
 };
 
 pub const UI_ZOOM_MIN: f64 = 0.7;
@@ -72,6 +72,20 @@ impl Config {
             &self.ai_handoff_agent
         } else {
             DEFAULT_LOCAL_AI_AGENT
+        }
+    }
+
+    /// Falls back to the default provider for anything unrecognised.
+    ///
+    /// Unlike the model beside it, this one *is* a set: a provider is a module in this
+    /// build or it does not exist, so an unknown id could only ever fail. Falling back
+    /// rather than failing is what every other string field here does — and the send
+    /// still shows the user which provider it resolved to before anything leaves.
+    pub fn normalized_ai_api_provider(&self) -> &str {
+        if AI_API_PROVIDERS.contains(&self.ai_api_provider.as_str()) {
+            &self.ai_api_provider
+        } else {
+            DEFAULT_AI_API_PROVIDER
         }
     }
 
@@ -141,6 +155,28 @@ mod tests {
         let mut cfg = config();
         cfg.ai_handoff_agent = "some-agent-that-shipped-later".to_string();
         assert_eq!(cfg.normalized_ai_handoff_agent(), DEFAULT_LOCAL_AI_AGENT);
+    }
+
+    #[test]
+    fn ai_api_provider_passes_through_a_known_provider() {
+        let mut cfg = Config::default();
+        cfg.ai_api_provider = "anthropic".to_string();
+        assert_eq!(cfg.normalized_ai_api_provider(), "anthropic");
+    }
+
+    #[test]
+    fn ai_api_provider_falls_back_for_an_unknown_one() {
+        let mut cfg = Config::default();
+        cfg.ai_api_provider = "a-vendor-that-shipped-later".to_string();
+        assert_eq!(cfg.normalized_ai_api_provider(), DEFAULT_AI_API_PROVIDER);
+    }
+
+    #[test]
+    fn the_api_path_is_off_until_it_is_turned_on() {
+        // Not a preference. `SendPlan::check` refuses on this field before a bundle is
+        // read or a key is touched, so a fresh installation cannot reach the network at
+        // all — which is what invariant I1 promises about a default install.
+        assert!(!Config::default().ai_api_enabled);
     }
 
     #[test]

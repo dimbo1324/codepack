@@ -27,10 +27,14 @@ codepack-storage.workspace = true
 codepack-tokens.workspace = true
 # `verify` reuses S8's traversal-safe extraction rather than opening archives itself.
 codepack-archive.workspace = true
-# `handoff` writes the file a local agent reads. `default-features = false` on purpose:
-# that path needs no HTTP client and no credential store, and this binary must not link
-# a transport it can never reach (invariant I1, checked by `cargo xtask gate`).
+# `handoff` writes the file a local agent reads. No transport and no credential store:
+# that half of S13 needs neither.
 codepack-ai.workspace = true
+# `ask` and `key` — S13's API path, and the reason this binary is one of exactly two
+# permitted to link a transport at all (invariant I1, enforced by `network isolation` in
+# `cargo xtask gate`). Nothing here reaches the network unless a user runs `codepack
+# ask` on a bundle with the integration switched on.
+codepack-ai-api.workspace = true
 # `scan --staged` reads staged blob content out of the index. Same read-only, no-network
 # feature set the rest of the workspace already pins.
 git2.workspace = true

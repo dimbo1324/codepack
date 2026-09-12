@@ -52,4 +52,22 @@ mod tests {
             assert!(resolve(provider.id()).is_ok(), "{}", provider.id());
         }
     }
+
+    #[test]
+    fn the_providers_here_are_exactly_the_ones_config_will_accept() {
+        // The ids are duplicated on purpose: `Config` must normalize the stored value
+        // and cannot depend on this crate (the dependency points `ai-api → core`). A
+        // split like that is only safe while something fails when it drifts — a setting
+        // naming a provider this build does not implement would resolve to nothing.
+        //
+        // The same guard `codepack-ai::handoff` keeps over the local-agent list, for the
+        // same reason and in the same shape.
+        let here: Vec<&str> = all().iter().map(|provider| provider.id()).collect();
+        assert_eq!(
+            here,
+            codepack_core::config::AI_API_PROVIDERS.to_vec(),
+            "providers here and Config's AI_API_PROVIDERS have drifted"
+        );
+        assert!(resolve(codepack_core::config::DEFAULT_AI_API_PROVIDER).is_ok());
+    }
 }

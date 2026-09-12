@@ -23,10 +23,10 @@ pub use normalize::{DEFAULT_UI_ZOOM, UI_ZOOM_MAX, UI_ZOOM_MIN};
 pub use presets::{AiPreset, ai_presets};
 pub use project::{PROJECT_CONFIG_FILE_NAME, ProjectConfig, ProjectConfigError};
 pub use valid_sets::{
-    ARCHIVE_FORMATS, DEFAULT_ARCHIVE_FORMAT, DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE,
-    DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT, DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME,
-    DIFF_EXPORT_MODES, EXPORT_PROFILES, IMPLEMENTED_ARCHIVE_FORMATS, LANGUAGES, LOCAL_AI_AGENTS,
-    SAFE_EXPORT_MODES, THEMES,
+    AI_API_PROVIDERS, ARCHIVE_FORMATS, DEFAULT_AI_API_PROVIDER, DEFAULT_ARCHIVE_FORMAT,
+    DEFAULT_DIFF_EXPORT_MODE, DEFAULT_EXPORT_PROFILE, DEFAULT_LANGUAGE, DEFAULT_LOCAL_AI_AGENT,
+    DEFAULT_SAFE_EXPORT_MODE, DEFAULT_THEME, DIFF_EXPORT_MODES, EXPORT_PROFILES,
+    IMPLEMENTED_ARCHIVE_FORMATS, LANGUAGES, LOCAL_AI_AGENTS, SAFE_EXPORT_MODES, THEMES,
 };
 
 use serde::{Deserialize, Serialize};
@@ -124,6 +124,27 @@ pub struct Config {
     /// Stored because people reuse the same prompt across exports; empty means the
     /// handoff's own general-purpose default is used.
     pub ai_handoff_question: String,
+    /// Whether the API path — stage S13's network half — may send anything at all.
+    ///
+    /// `false`, and this is the one default in this struct that is a guarantee rather
+    /// than a preference: it is what makes "no network unless the user asked" true of a
+    /// fresh installation rather than merely likely. `SendPlan::check` reads it first and
+    /// refuses with `Refusal::Disabled` before a bundle is read or a key is touched, so
+    /// leaving it off is not a UI convention — it is a closed door below the interface.
+    pub ai_api_enabled: bool,
+    /// Which provider the API path sends to. One of [`valid_sets::AI_API_PROVIDERS`].
+    pub ai_api_provider: String,
+    /// The model to ask, exactly as the provider spells it.
+    ///
+    /// A free-form string, not a set: a provider ships models far more often than this
+    /// product ships releases, and validating against a baked-in list would make the
+    /// newest model the one thing a user cannot select (owner decision 2026-07-27, Q2).
+    /// Empty means "the most capable model this build knows about for that provider",
+    /// resolved where the provider is known — `codepack-core` names no vendor's models.
+    pub ai_api_model: String,
+    /// The question the API path asks when the user does not type a new one. Same
+    /// reasoning as [`Config::ai_handoff_question`]: people reuse one prompt.
+    pub ai_api_question: String,
     /// Replace redacted secrets with a stable per-secret label (`<REDACTED:s1>`) rather
     /// than a single indistinguishable placeholder.
     ///
@@ -214,6 +235,10 @@ impl Default for Config {
             token_budget: 0,
             ai_handoff_agent: DEFAULT_LOCAL_AI_AGENT.to_string(),
             ai_handoff_question: String::new(),
+            ai_api_enabled: false,
+            ai_api_provider: DEFAULT_AI_API_PROVIDER.to_string(),
+            ai_api_model: String::new(),
+            ai_api_question: String::new(),
             redaction_labels: false,
             strict_token_checksums: false,
             artifact_language: DEFAULT_ARTIFACT_LANGUAGE.to_string(),

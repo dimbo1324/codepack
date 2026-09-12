@@ -133,6 +133,13 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         // Added 2026-09-05 with the artifact-language setting. Same reasoning: a new
         // field with a `#[serde(default)]`, so an old settings file loads unchanged.
         "artifact_language",
+        // Added 2026-09-12, finishing S13's API path. Same reasoning again — and worth
+        // noting that the key which would have been the dangerous one to add here, the
+        // API key itself, is not a field at all: it lives only in the OS credential
+        // store, because a settings file is a file people share.
+        "ai_api_provider",
+        "ai_api_model",
+        "ai_api_question",
     ];
     let bool_fields = [
         "text_file_size_limit_enabled",
@@ -145,6 +152,9 @@ fn json_shape_contains_all_expected_keys_with_expected_types() {
         "watch_clipboard_auto_update",
         "redaction_labels",
         "strict_token_checksums",
+        // Added 2026-09-12 with S13's API path. Defaults to `false`, which is what keeps
+        // a fresh installation unable to reach the network at all.
+        "ai_api_enabled",
         // Added 2026-09-06 (audit No. 21). Same reasoning as the others: a new field with
         // a `#[serde(default)]`, and its default is today's behaviour, so an old settings
         // file loads unchanged and every existing artifact keeps the value it had.
