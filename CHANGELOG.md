@@ -35,6 +35,25 @@ verified**, which is not the same as clean.
 Answers are appended to `AI_ANSWER.md` inside the bundle, so a second question does not
 destroy the first answer.
 
+### The window fits your screen, and you can zoom it
+
+The app used to open at a fixed 1100×760 regardless of the display it opened on. On a
+1920×1200 panel at 150% scaling — a 1280×752 work area — that window was **taller than
+the space available**, and the layout was squeezed from the first pixel. It now measures
+the monitor and treats the configured size as a ceiling, centred inside the usable area
+rather than under your taskbar.
+
+The interface scale adapts too. On a small or heavily scaled display it starts zoomed out
+instead of cramped, recalculated each launch, so plugging in a bigger monitor adapts
+rather than keeping a scale that suited the laptop. It only ever scales *down* on its own:
+enlarging would override the display scaling you chose in your operating system.
+
+And zoom is finally reachable — `Ctrl` `+`, `Ctrl` `-`, `Ctrl` with the mouse wheel, and a
+readout with two buttons in the status bar. `Ctrl` `0` hands the scale back to the monitor.
+Anything you set is remembered. The slider in Settings also works properly now: its range
+was 75–200% while the application only accepts 70–150%, so the most useful setting on a
+small screen could not be reached at all, and 200% displayed a window that was at 150%.
+
 ### Still true, and still worth saying
 
 Everything else in codepack remains local. Exactly one crate in the whole project is

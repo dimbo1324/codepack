@@ -372,6 +372,12 @@ export function startupZoom(): Promise<number> {
   return invoke("startup_zoom");
 }
 
+/** What this monitor suggests, ignoring the stored choice. `Ctrl 0` uses this rather than
+ * `startupZoom`, which would return the very factor being discarded. */
+export function monitorZoom(): Promise<number> {
+  return invoke("monitor_zoom");
+}
+
 /** Writes the zoom to the settings file so it survives a restart.
  *
  * `auto` is true only for the reset, which asks for the monitor to be followed again.

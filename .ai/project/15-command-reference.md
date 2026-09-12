@@ -37,9 +37,22 @@ it like any other crate.
 (`apps/desktop/src-tauri`) sits **beside** the frontend (`apps/desktop/ui`) rather than
 under it, so from `ui` the config is a sibling and the CLI aborts with "couldn't
 recognize the current folder as a Tauri project" — which is why the once-documented
-`pnpm --filter @codepack/ui exec tauri dev` never worked at all. Both `desktop:*` scripts
-run from `apps/desktop`, and the CLI is a workspace-root dev dependency so it resolves
-there.
+`pnpm --filter @codepack/ui exec tauri dev` never worked at all.
+
+**Both `desktop:*` scripts were still broken after that fix, and for a second reason
+(found 2026-09-12, the first time this session tried to run the app).** They were
+`pnpm --dir apps/desktop exec tauri dev`, and `apps/desktop` has no `package.json` —
+`pnpm-workspace.yaml` lists only `apps/desktop/ui` — so pnpm cannot treat it as a project
+and fails before the CLI is reached at all: `Cannot read properties of undefined (reading
+'…/apps/desktop')`. They are now `cd apps/desktop && tauri dev`, which works because a
+pnpm script already has the workspace root's `node_modules/.bin` on its PATH, and `cd`
+means the same thing in cmd.exe and in sh.
+
+The lesson worth keeping: this command had been documented, corrected once, and still did
+not run. A command nobody executes is a command nobody knows is broken — which is the same
+shape as the `LIMIT 0` bug in audit S-2 and the vacuous `every_listed_client_is_detected`
+test, and it is why `cargo xtask doctor` reporting a tool as present is not the same as
+the tool having been used.
 
 `cargo xtask package` (or the `build-installer` script) produces an NSIS installer on
 Windows and `.deb`/`.rpm`/`.AppImage` on Linux under `target/release/bundle/`, each with

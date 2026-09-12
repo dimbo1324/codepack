@@ -8,8 +8,8 @@
   "scripts": {
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "desktop:dev": "pnpm --dir apps/desktop exec tauri dev",
-    "desktop:build": "pnpm --dir apps/desktop exec tauri build"
+    "desktop:dev": "cd apps/desktop && tauri dev",
+    "desktop:build": "cd apps/desktop && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",

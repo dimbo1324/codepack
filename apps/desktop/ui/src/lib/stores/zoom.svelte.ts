@@ -17,7 +17,7 @@
 // "follow my monitor" into "stay at 87% forever", including after they plug in a bigger
 // screen.
 
-import { saveUiZoom, setUiZoom, startupZoom } from "$lib/api/client";
+import { monitorZoom, saveUiZoom, setUiZoom, startupZoom } from "$lib/api/client";
 
 /** The range `Config::ui_zoom` is clamped to, restated from `codepack_core::config`. The
  *  backend clamps again, so this is for the interface's own arithmetic — a disabled
@@ -55,10 +55,20 @@ function clamp(factor: number): number {
 }
 
 /** The next multiple of `STEP` in the given direction, so stepping lands on round values
- *  even when the starting point is a derived one. */
+ *  even when the starting point is a derived one.
+ *
+ *  **In integer hundredths, not in floats.** `factor / STEP` is exact for most values and
+ *  not for all: `1.2 / 0.05` is `23.999999999999996`, so `Math.floor(…) + 1` lands back on
+ *  24 and stepping up returns the number it started from. Found by running the app —
+ *  zooming out worked and zooming in silently did nothing — and it affected six values in
+ *  the permitted range, including 0.70, which is exactly where somebody on a small screen
+ *  would be sitting when they pressed the key. */
 function stepFrom(factor: number, direction: 1 | -1): number {
-  const grid = direction === 1 ? Math.floor(factor / STEP) + 1 : Math.ceil(factor / STEP) - 1;
-  return clamp(grid * STEP);
+  const cents = Math.round(factor * 100);
+  const stepCents = Math.round(STEP * 100);
+  const grid =
+    direction === 1 ? Math.floor(cents / stepCents) + 1 : Math.ceil(cents / stepCents) - 1;
+  return clamp((grid * stepCents) / 100);
 }
 
 /** Applies a factor to the window, and remembers it as the user's choice.
@@ -91,7 +101,11 @@ export function zoomOut(): Promise<void> {
  *  both the reset and the adaptation, and it is the only route that turns `auto` back
  *  on. */
 export async function resetZoom(): Promise<void> {
-  const derived = clamp(await startupZoom());
+  // `monitorZoom`, not `startupZoom`: the latter honours `ui_zoom_auto`, so once the user
+  // has chosen a factor it returns that stored choice — and this route would have been
+  // unable to get back to the monitor's own suggestion, which is the only thing it exists
+  // to do. Found while verifying the shortcuts against the running app.
+  const derived = clamp(await monitorZoom());
   await setUiZoom(derived);
   zoom.current = derived;
   zoom.auto = true;

@@ -102,7 +102,12 @@ result, so the model can read the reason and correct itself; JSON-RPC errors are
 for protocol faults.
 
 **`apps/desktop`** — the Tauri shell (`codepack-desktop`) and a Svelte 5 + TypeScript
-frontend. The webview holds **no filesystem permission**: every file operation is a
+frontend. The window fits the monitor it opens on (`window_fit`): the configured
+1100×760 is a ceiling rather than a demand, reduced to the work area — which
+`Monitor::work_area` reports, so no taskbar is guessed at — and centred inside it. The
+interface scale is derived from the same measurement each launch until the user chooses
+one, and reachable from the keyboard, the wheel and the status bar rather than only from
+Settings. The webview holds **no filesystem permission**: every file operation is a
 `#[tauri::command]`, and the frontend's only route to the backend is one typed client
 module. The content security policy admits no remote sources, so the webview itself still
 reaches nothing. Exports run on a background thread with a run id and can be cancelled.

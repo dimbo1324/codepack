@@ -56,6 +56,25 @@ pub(crate) fn fit(
     )
 }
 
+/// [`fit`], in the coordinate system `set_size` actually uses.
+///
+/// `frame` is the window's chrome — `outer_size` minus `inner_size` — so the work area is
+/// reduced by it before the comparison and the result is an **inner** size ready to pass
+/// to `set_size`. Keeping this in its own function is what makes the inner/outer mix-up
+/// testable without a window; see [`fit_main_window`] for the bug that made it necessary.
+pub(crate) fn fit_inner(
+    configured_inner: LogicalSize<f64>,
+    work_area: LogicalSize<f64>,
+    frame: LogicalSize<f64>,
+    minimum_inner: LogicalSize<f64>,
+) -> LogicalSize<f64> {
+    let available = LogicalSize::new(
+        (work_area.width - frame.width).max(0.0),
+        (work_area.height - frame.height).max(0.0),
+    );
+    fit(configured_inner, available, minimum_inner)
+}
+
 /// The zoom a first run should use on a monitor this size, or `None` to leave the default
 /// alone.
 ///
@@ -97,9 +116,24 @@ fn round_to_hundredth(factor: f64) -> f64 {
 
 /// Applies [`fit`] to the real window, then re-centres it.
 ///
-/// Best-effort throughout: every failure here leaves the window at its configured size,
-/// which is what it did before this function existed. A window that is the wrong size is
-/// a nuisance; refusing to start over one would be worse.
+/// ## Inner and outer sizes are not the same number, and mixing them is a real bug
+///
+/// `set_size` sets the window's **inner** size — the webview area — while `outer_size`
+/// reports the whole window including its title bar and borders. The first version of
+/// this function read the outer size and wrote it back as the inner one, which added the
+/// frame on every launch: asked for 752, the window came out 789 tall against a 752 work
+/// area, still not fitting and now for a reason of this code's own making. It was found
+/// by measuring the running window rather than by reading the code, which is the only way
+/// it *could* have been found.
+///
+/// So the frame is measured (`outer - inner`) and the arithmetic happens in one
+/// coordinate system: the work area is reduced by the frame, [`fit`] works entirely in
+/// inner sizes, and the centring uses the outer size because that is what occupies the
+/// screen.
+///
+/// Best-effort throughout: every failure leaves the window at its configured size, which
+/// is what it did before this function existed. A window that is the wrong size is a
+/// nuisance; refusing to start over one would be worse.
 pub(crate) fn fit_main_window(app: &tauri::AppHandle) -> Option<()> {
     let window = app.get_webview_window("main")?;
     let monitor = window.current_monitor().ok().flatten()?;
@@ -114,18 +148,24 @@ pub(crate) fn fit_main_window(app: &tauri::AppHandle) -> Option<()> {
         f64::from(area.size.height) / scale,
     );
 
-    let configured: LogicalSize<f64> = window.outer_size().ok()?.to_logical(scale);
+    let outer: LogicalSize<f64> = window.outer_size().ok()?.to_logical(scale);
+    let inner: LogicalSize<f64> = window.inner_size().ok()?.to_logical(scale);
+    let frame = LogicalSize::new(
+        (outer.width - inner.width).max(0.0),
+        (outer.height - inner.height).max(0.0),
+    );
+
     let minimum = LogicalSize::new(MIN_WIDTH, MIN_HEIGHT);
-    let target = fit(configured, work_area, minimum);
+    let target = fit_inner(inner, work_area, frame, minimum);
 
     // Only touch the window when the numbers actually differ: `set_size` on a window that
     // already has that size still generates a resize event, and the frontend listens for
     // those.
-    if (target.width - configured.width).abs() >= 1.0
-        || (target.height - configured.height).abs() >= 1.0
-    {
+    if (target.width - inner.width).abs() >= 1.0 || (target.height - inner.height).abs() >= 1.0 {
         window.set_size(target).ok()?;
-        centre_in(&window, area.position, area.size, target, scale);
+        let target_outer =
+            LogicalSize::new(target.width + frame.width, target.height + frame.height);
+        centre_in(&window, area.position, area.size, target_outer, scale);
     }
     Some(())
 }
@@ -270,6 +310,54 @@ mod tests {
         // renders a collapsed layout the user cannot fix.
         let fitted = fit(size(1100.0, 760.0), size(800.0, 480.0), size(880.0, 600.0));
         assert_eq!((fitted.width, fitted.height), (880.0, 600.0));
+    }
+
+    /// The bug the running window found, in the numbers it found it with.
+    ///
+    /// `set_size` takes an inner size; `outer_size` reports an outer one. Writing the
+    /// second into the first added the frame every launch — asked for 752, measured 789
+    /// against a 752 work area. This asserts the *outer* window ends up inside the work
+    /// area, which is the thing "fits the screen" actually means.
+    #[test]
+    fn the_frame_is_accounted_for_so_the_outer_window_fits() {
+        let frame = size(29.0, 37.0); // measured on the window this was found on
+        let work = size(1280.0, 752.0);
+
+        let inner = fit_inner(size(1100.0, 760.0), work, frame, size(880.0, 600.0));
+
+        assert_eq!((inner.width, inner.height), (1100.0, 715.0));
+        let outer = (inner.width + frame.width, inner.height + frame.height);
+        assert_eq!(outer, (1129.0, 752.0));
+        assert!(
+            outer.1 <= work.height,
+            "the outer window must fit: {outer:?}"
+        );
+    }
+
+    #[test]
+    fn a_frameless_window_is_unaffected_by_the_frame_arithmetic() {
+        // A borderless window (or a platform reporting no chrome) must not be shrunk by
+        // a frame it does not have.
+        let inner = fit_inner(
+            size(1100.0, 760.0),
+            size(1280.0, 752.0),
+            size(0.0, 0.0),
+            size(880.0, 600.0),
+        );
+        assert_eq!((inner.width, inner.height), (1100.0, 752.0));
+    }
+
+    #[test]
+    fn a_frame_larger_than_the_work_area_still_yields_a_usable_window() {
+        // Nonsense input — a frame taller than the screen — must land on the minimum
+        // rather than on zero or a negative size.
+        let inner = fit_inner(
+            size(1100.0, 760.0),
+            size(400.0, 300.0),
+            size(900.0, 900.0),
+            size(880.0, 600.0),
+        );
+        assert_eq!((inner.width, inner.height), (880.0, 600.0));
     }
 
     #[test]

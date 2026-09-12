@@ -56,6 +56,20 @@ pub fn startup_zoom(app: tauri::AppHandle) -> CommandResult<f64> {
     Ok(crate::window_fit::monitor_zoom(&app).unwrap_or(codepack_core::config::DEFAULT_UI_ZOOM))
 }
 
+/// What this monitor suggests, ignoring what the user has stored.
+///
+/// Distinct from [`startup_zoom`], which honours `ui_zoom_auto` and therefore returns the
+/// stored choice once one exists. `Ctrl 0` needs the other answer: it asks to go back to
+/// following the monitor, and asking `startup_zoom` would have handed it the very factor
+/// it is trying to discard.
+///
+/// Falls back to the default when the monitor cannot be read or has room for the designed
+/// layout — the same meaning `suggested_zoom` gives `None`.
+#[tauri::command]
+pub fn monitor_zoom(app: tauri::AppHandle) -> f64 {
+    crate::window_fit::monitor_zoom(&app).unwrap_or(codepack_core::config::DEFAULT_UI_ZOOM)
+}
+
 /// Writes the zoom to the settings file, so it survives a restart.
 ///
 /// Separate from [`set_ui_zoom`], which only touches the webview, because startup applies

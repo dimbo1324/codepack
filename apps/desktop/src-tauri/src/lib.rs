@@ -131,6 +131,7 @@ pub fn run() {
             commands::ai::list_local_agents,
             commands::ai::prepare_handoff,
             commands::window::startup_zoom,
+            commands::window::monitor_zoom,
             commands::window::save_ui_zoom,
             commands::ai::ai_api_status,
             commands::ai::ai_api_plan,

@@ -43,6 +43,13 @@ Two ways to use it, both over the same engine — neither is a wrapper around th
 what goes in and what stays out, a results panel, run history, folder watching, light and
 dark themes, English and Russian interfaces switchable without a restart, and a tray icon.
 
+It opens at a size your monitor can actually show, and picks its interface scale to suit
+it — on a small or heavily scaled display that means starting zoomed out rather than
+cramped. Change it with `Ctrl` `+`, `Ctrl` `-`, `Ctrl` and the mouse wheel, or the readout
+in the status bar; `Ctrl` `0` hands it back to the monitor. Whatever you choose is
+remembered, and a different monitor is measured afresh rather than inheriting a scale that
+suited the old one.
+
 **Command line** — the `codepack` binary. Fourteen commands plus the MCP server, a stable
 exit-code contract, and `--json` on everything.
 
