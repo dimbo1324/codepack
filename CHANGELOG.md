@@ -5,6 +5,49 @@ Releases of codepack. Newest first. Dates are the day the version was tagged.
 This file is for people who use codepack. The rule-system changelog for the AI assistants
 that build it is a separate file, `.ai/CHANGELOG.md`.
 
+## Unreleased
+
+### Ask a model about a bundle
+
+codepack can now send a finished bundle's AI context to a provider and bring the answer
+back, from the command line (`codepack ask`) or from the desktop app's Result page. This
+completes the half of the AI integration that has existed in the code, untouchable, since
+July.
+
+**It is off until you switch it on.** On a fresh installation nothing here can open a
+connection: the refusal happens before your bundle is read and before your key is touched.
+
+Your API key goes in your operating system's credential store — Credential Manager,
+Keychain or Secret Service — and never in the settings file, which is a file you can
+export and hand to a colleague. `codepack key set` reads the key from stdin rather than
+from a flag, because an argument is visible to every other process on the machine and
+lands in your shell history; piping from a password manager (`pass show anthropic |
+codepack key set`) is the shape it is built for. The desktop app has a masked field for
+typing one instead. There is no command that prints a stored key.
+
+**A bundle with critical security findings is refused.** Sending one would make the
+scanner decorative. Overriding that is a flag you type (`--override-critical`) or a
+checkbox you tick, never a consequence of pressing send. `codepack ask --dry-run` shows
+exactly what would be sent — how many files, how large, roughly how many tokens, and what
+the scan found — and sends nothing; a bundle nothing has scanned is reported as **not
+verified**, which is not the same as clean.
+
+Answers are appended to `AI_ANSWER.md` inside the bundle, so a second question does not
+destroy the first answer.
+
+### Still true, and still worth saying
+
+Everything else in codepack remains local. Exactly one crate in the whole project is
+allowed to reach the network, only the two front ends may even reach that crate, and the
+quality gate fails the build if either rule is broken — so no export can carry a request
+underneath itself.
+
+### Not done
+
+No live request to a provider has been made by anyone building this: the network leg is
+covered by tests and response parsing, not by a real exchange. A send in progress cannot
+be cancelled.
+
 ## 2.0.1 — 2026-09-08
 
 A correctness and durability release. Nothing you do with codepack changes; what changes

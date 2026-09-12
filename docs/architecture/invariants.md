@@ -13,25 +13,48 @@ other crate is a violation.
 **Why.** The product handles other people's source code and secrets. Trusting it rests
 entirely on the data not going anywhere.
 
-**How it is enforced (since 2026-07-27, strengthened 2026-09-06).** This stopped being
-text and became a mechanism: the `network isolation` step of `cargo xtask gate` reads
-every crate manifest and fails if an HTTP client is declared. The reason is the shape of
-the failure — a crate that gains an HTTP client behaves identically until the day it makes
-a request, so "someone will catch it in review" does not work here. Same approach as the
-webview's isolation: not a convention, a mechanism
+**How it is enforced (since 2026-07-27; rewritten 2026-09-06 and 2026-09-12).** This
+stopped being text and became a mechanism: the `network isolation` step of
+`cargo xtask gate` reads every crate manifest and fails if an HTTP client is declared. The
+reason is the shape of the failure — a crate that gains an HTTP client behaves identically
+until the day it makes a request, so "someone will catch it in review" does not work here.
+Same approach as the webview's isolation: not a convention, a mechanism
 (`crates/xtask/src/network_isolation.rs`).
 
-Since 2026-09-06 the check allows **no** exception rather than one. S13's API path moved
-to `codepack-ai-api`, a crate this repository contains but the workspace excludes, so the
-transport is not in the product at all — not in a binary, not in `Cargo.lock`, not in
-`cargo deny`'s graph. The check also refuses a member that depends on that crate, which is
-the one way to bring the client back without naming any client. Owner decision 2026-09-06,
-Q41; the reason was cross-platform rather than tidiness (`keyring` wants Secret Service on
-Linux and was compiled there for code no user could reach).
+Between 2026-09-06 and 2026-09-12 the check allowed **no** exception at all, which was a
+stronger statement than this invariant makes. That was possible only because S13's API
+path was unreachable: it had moved to `codepack-ai-api`, a crate the workspace excluded,
+so the transport was in no binary, no `Cargo.lock` and no `cargo deny` graph (owner
+decision 2026-09-06, Q41 — the reason was cross-platform rather than tidiness, since
+`keyring` wants Secret Service on Linux and was compiled there for code no user could
+reach).
+
+**Owner decision 2026-09-12 finished the stage instead of keeping a dead path alive**, so
+the exception named in the first paragraph is real again — and the check now enforces two
+things rather than one:
+
+- `codepack-ai-api` is the only crate that may declare a network client. Every other
+  member is refused exactly as before.
+- Only `codepack-cli` and `codepack-desktop` may depend on it. This is the half that
+  matters now that the transport is back in the product: a client reachable from
+  `codepack-engine` or a domain crate would sit *underneath* the pipeline, where every
+  export passes through it and no user action gates it. Keeping it above the engine is
+  what makes "only on an explicit user action" a property of the dependency graph instead
+  of a promise in a doc comment.
+
+Adding a name to that permitted list is an owner decision, not a build fix. Three further
+gates sit in front of an actual request, and the first one is why a fresh installation
+still reaches no network at all: `Config::ai_api_enabled` is `false` by default, a bundle
+must be one the installation itself produced, and a bundle carrying critical findings is
+refused unless the user explicitly overrides. All three run in
+`codepack_ai_api::plan::SendPlan::check`, *before* the key is read — so a refused send is
+not observed by the credential store, let alone by a provider.
 
 The checker subtracts `workspace.exclude` from the member globs, as cargo does. It did not,
-and the first thing the exclusion produced was the check reporting the product in violation
-because of a crate the product does not build.
+and the first thing the 2026-09-06 exclusion produced was the check reporting the product
+in violation because of a crate the product did not build. That code stays, exclusion or
+no exclusion: a checker whose idea of membership differs from cargo's is wrong in both
+directions.
 
 ## I2. The source is immutable
 

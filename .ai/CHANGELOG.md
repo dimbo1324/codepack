@@ -6,6 +6,31 @@ History of changes to the AI assistant rule system (`.ai/`, `CLAUDE.md`, `AGENTS
 
 Format: date, what changed, why, who decided. Newest first.
 
+## 2026-09-12 — S13 finished, so I1's exception is real again
+
+**Changed.** `project/10-project-map.md` and `project/12-domain-rules.md` restate the
+network rule: `codepack-ai-api` may reach the network, only the two front ends may depend
+on it, and only on an explicit user action. `project/15-command-reference.md` records that
+`cargo xtask ai-api` and `ai-api-weekly.yml` are gone. `AGENTS.md` regenerated.
+
+**Why.** Finishing stage S13 required a workspace member to depend on the crate carrying
+the HTTP client, which the `network isolation` gate step refused by design. The modules
+said "no exception since Q41", which stopped being true the moment the owner decided the
+API path should ship.
+
+**Effect.** The rules describe the mechanism as it now is: one named crate with a client,
+one named pair of crates allowed to reach it. The second half is new and is the stricter
+part — it keeps a transport from sitting under the export pipeline, where no user action
+would gate it. Adding a name to the permitted list is an owner decision, not a build fix.
+
+**Note on the budget.** `AGENTS.md` came out at 30.0 KiB with 32 bytes of headroom under
+the hard limit. Q22 has warned about this since July; the next module edit will very
+likely have to shrink something or mark a module `tier: extended` first.
+
+**Decided by.** Owner, 2026-09-12 (recorded in `docs/__arch__/open-questions.md`).
+
+---
+
 ---
 
 ### 2026-09-08 — `#[cfg(unix)]` is not one filesystem

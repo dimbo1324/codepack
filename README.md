@@ -21,6 +21,7 @@ Everything runs **locally**. Nothing is uploaded, ever.
 - [Archive formats](#archive-formats)
 - [Sterile copy](#sterile-copy)
 - [Hand a bundle to a local agent](#hand-a-bundle-to-a-local-agent)
+- [Ask a model directly](#ask-a-model-directly)
 - [Let an agent ask for itself (MCP)](#let-an-agent-ask-for-itself-mcp)
 - [Scanning git history](#scanning-git-history)
 - [Labelled redaction](#labelled-redaction)
@@ -42,7 +43,7 @@ Two ways to use it, both over the same engine — neither is a wrapper around th
 what goes in and what stays out, a results panel, run history, folder watching, light and
 dark themes, English and Russian interfaces switchable without a restart, and a tray icon.
 
-**Command line** — the `codepack` binary. Twelve commands plus the MCP server, a stable
+**Command line** — the `codepack` binary. Fourteen commands plus the MCP server, a stable
 exit-code contract, and `--json` on everything.
 
 **MCP server** — `codepack mcp`, for a coding agent rather than a person. Same engine,
@@ -182,6 +183,8 @@ success, because "it was excluded, here is why" is the explanation working.
 | `explain <file>` | Why one file did or did not make it into the export |
 | `sanitize` | Sterile copy: code with comments stripped and reformatted, optionally archived |
 | `handoff <bundle>` | Point a coding agent on this machine at a finished bundle |
+| `ask <bundle>` | Ask a model about a bundle. **The only command that uses the network**, and only when you have switched the integration on |
+| `key set\|status\|clear` | The API key, in your OS credential store. Read from stdin, never from a flag |
 | `init --hook` | Install the pre-commit hook into this project |
 | `mcp` | Serve the Model Context Protocol on stdin/stdout, for a coding agent |
 | `history` | Previous runs |
@@ -284,9 +287,48 @@ that the snapshot is partial by design — and prints the command to run there. 
 unpacked beside itself first, because an agent cannot read a project inside an archive.
 The desktop app offers the same thing on the Result page.
 
-Nothing is sent anywhere and nothing is launched. The binary contains **no HTTP client at
-all**: the crate that can reach the network is compiled without it, and the quality gate
-fails the build if that ever changes.
+Nothing is sent anywhere and nothing is launched. This command cannot reach the network at
+all — that is `ask`, below, and it is a separate, deliberate act.
+
+## Ask a model directly
+
+The other half of the same idea, for when the model is not on your machine. Off by
+default: until you switch it on, nothing in codepack can open a connection.
+
+```bash
+codepack key set                 # reads the key from stdin, never from a flag
+codepack ask ../out/myproject.zip --dry-run
+codepack ask ../out/myproject.zip -q "What are the biggest risks here?"
+```
+
+`--dry-run` prints exactly what a send would include — how many context files, how large,
+roughly how many tokens, and what the security scan found — and sends nothing. Run it
+first. The answer from a real send is appended to `AI_ANSWER.md` inside the bundle, so it
+outlives the terminal.
+
+Three things have to be true before anything leaves:
+
+- The integration is switched on (`ai_api_enabled`, off in a fresh installation).
+- A key is in your OS credential store — Credential Manager, Keychain or Secret Service.
+  Never in the settings file, which is a file you can export and share with your team.
+- The bundle carries no critical security findings. If it does, the send is **refused**,
+  and `--override-critical` is a separate flag you type out rather than a prompt you click
+  through. The exit code for that refusal is `3`: the command worked, and what it found is
+  why nothing was sent.
+
+The key is read from stdin because an argument is visible to every other process on your
+machine and lands in your shell history, and neither is something codepack can clean up
+afterwards. Piping from a password manager is the intended shape:
+
+```bash
+pass show anthropic | codepack key set
+```
+
+In a terminal it will prompt instead — and tell you plainly that it cannot hide what you
+type. The desktop app's settings screen has a masked field for that.
+
+The desktop app offers the same flow on the Result page, with the send plan shown before
+the button does anything.
 
 ## Let an agent ask for itself (MCP)
 
@@ -467,9 +509,11 @@ directory replaced by `<home>` in every line first.
 
 These are held by tests, not by promises in this file:
 
-- **Privacy is absolute.** **No** crate in this workspace reaches the network — not even
-  the AI integration, whose HTTP client lives in a package excluded from the build. A
-  quality-gate step reads every manifest and fails the build otherwise.
+- **Privacy is absolute, with one door you open yourself.** Exactly one crate may reach
+  the network — the `ask` command's — and only the two front ends may even depend on it, so
+  no export can carry a request underneath itself. A quality-gate step reads every manifest
+  and fails the build if either rule is broken. On a fresh installation the door is shut:
+  `ask` refuses before it reads your bundle or touches your key.
 - **The source is immutable.** An export never writes inside the folder it reads — refused
   by the engine both front ends go through, before anything is created on disk.
 - **Secrets never reach what codepack writes.** Not a report, a log, the history, the

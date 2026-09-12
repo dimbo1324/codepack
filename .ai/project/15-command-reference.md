@@ -89,16 +89,14 @@ cargo-deny`, not a toolchain component; CI uses `taiki-e/install-action`).
 it because the references are committed. Run it when legacy's own output *should* change
 — never to make a failing comparison pass.
 
-`cargo xtask ai-api` formats, lints and tests `codepack-ai-api` — the S13 API path, which
-`workspace.exclude` keeps out of the product build (owner decision 2026-09-06, Q41, so
-that `keyring` and `ureq` are not compiled on every platform for code no binary reaches).
-**The gate does not run it**, which is the cost of the exclusion: this crate is preserved,
-not maintained. Run it when touching that crate, and before finishing stage S13. Its
-formatting *is* covered by `cargo xtask fmt` and by the gate's format step, because
-formatting compiles nothing. `.github/workflows/ai-api-weekly.yml` (audit 2026-09-07,
-S-12) runs the full `cargo xtask ai-api` on a Monday schedule regardless — insurance
-against the crate quietly stopping to compile for six months before anyone notices,
-without slowing down a single push.
+`cargo xtask ai-api` and `.github/workflows/ai-api-weekly.yml` are **gone** (2026-09-12).
+Both existed only because `workspace.exclude` kept `codepack-ai-api` out of the product
+build (Q41), so the gate could not see it and it was preserved rather than maintained.
+Owner decision 2026-09-12 finished stage S13 instead: the API path has a command
+(`codepack ask`, `codepack key`) and a screen, the crate is an ordinary workspace member,
+and `cargo xtask gate` formats, lints and tests it on every push like any other. The
+version-drift test that compared its hand-written version against the workspace's went
+with them — it inherits `version.workspace = true` now, so drift is not expressible.
 
 ## Reading a red CI run
 

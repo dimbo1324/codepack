@@ -9,7 +9,7 @@
 > log and in the internal plan; this file answers "what is built and how does it fit
 > together".
 
-**Last revised:** 2026-09-08 · **Version:** 2.0.1
+**Last revised:** 2026-09-12 · **Version:** 2.0.1
 **Target platforms:** Windows 10/11, macOS and Linux. The 2026-07-26 narrowing to
 Windows was reversed on 2026-09-06; `codepack-core::paths` carries all three layouts
 again and CI runs the gate on all three runners. Packaging followed on the same day:
@@ -61,16 +61,19 @@ question appear. No `codepack-*` crate knows about Tauri or the frontend
 | `codepack-sanitize` | The "sterile copy": comments stripped with real tree-sitter parsers (never regex) and code reformatted by whichever formatter is found on `PATH`. Reuses the scanner's file selection, the security crate's safety filter and its redaction — never a second, less guarded path out of the project. Optionally packs the result into one archive. |
 | `codepack-engine` | The orchestrator: plan → copy → structure → git → text dump → analytics → manifest → archive. Cancellation is checked inside each step's loops, not only between steps. The only place `codepack_security::scan_project` is called in the pipeline. |
 | `codepack-ai` | Stage S13's offline half, and the only part either front end uses: a prompt file and a command for a coding agent already on the machine. No transport, no credential store, no features. |
-| `codepack-ai-api` | Stage S13's API path — `ask`, the key store, the Anthropic client. In the repository, **excluded from the workspace**, so `ureq` and `keyring` reach no binary, no `Cargo.lock` and no `cargo deny` graph. Built and linted by `cargo xtask ai-api`, which the gate does not run. Still unreachable by a user; see "Known debt". |
+| `codepack-ai-api` | Stage S13's API path — `ask`, the key store, the Anthropic client behind the vendor-neutral `AiProvider` trait. **The one crate permitted to reach the network** (invariant I1), and the only place `ureq` and `keyring` are declared. It was outside the workspace from 2026-09-06 until 2026-09-12, when the owner chose to finish the stage rather than keep an unreachable path alive; it is now an ordinary member, gated like every other, and reachable from `codepack-cli` (`ask`, `key`) and the desktop's result and settings screens. |
 | `xtask` | The task runner and quality gate. |
 
 ## The two front ends
 
-**`codepack-cli`** — the `codepack` binary. Twelve commands: `export`, `preview`, `scan`,
+**`codepack-cli`** — the `codepack` binary. Fourteen commands: `export`, `preview`, `scan`,
 `history`, `doctor`, `sanitize`, `completions`, `verify`, `explain`, `handoff` (points a
-local coding agent at a bundle), `init --hook` (installs the pre-commit hook into the
-user's own project), `settings export|import` (moves one configuration between machines,
-so a team's exports come out comparable — Q42). `scan` reads three different file sets — the working tree, the git
+local coding agent at a bundle), `ask` (asks a provider about a bundle — the one command
+that uses the network), `key set|status|clear` (the API key, read from stdin and never
+from a flag, because an argument is visible in `ps` and lands in shell history),
+`init --hook` (installs the pre-commit hook into the user's own project),
+`settings export|import` (moves one configuration between machines, so a team's exports
+come out comparable — Q42). `scan` reads three different file sets — the working tree, the git
 index (`--staged`), or every distinct version in the history (`--history`) — writes SARIF
 with `--sarif`, and gates on `--fail-on <severity>`, defaulting to `critical` so the
 published exit-code contract is unchanged. Its published
@@ -101,9 +104,17 @@ for protocol faults.
 **`apps/desktop`** — the Tauri shell (`codepack-desktop`) and a Svelte 5 + TypeScript
 frontend. The webview holds **no filesystem permission**: every file operation is a
 `#[tauri::command]`, and the frontend's only route to the backend is one typed client
-module. The content security policy admits no remote sources, so invariant I1 is held at
-the webview level rather than by convention. Exports run on a background thread with a
-run id and can be cancelled.
+module. The content security policy admits no remote sources, so the webview itself still
+reaches nothing. Exports run on a background thread with a run id and can be cancelled.
+
+Since 2026-09-12 it also carries S13's API path: a settings section (switch, model, and a
+masked key field that writes to the OS credential store) and an ask card on the result
+page, which shows the send plan before anything leaves and refuses a bundle with critical
+findings unless the user ticks an override. The key crosses the IPC boundary inbound only
+— the screen renders from a `key_stored` boolean that `keys::has_key` answers without
+reading the secret. A send runs on a background thread and emits one run-id-filtered
+`ai:finished` event; there is no cancellation, because `ureq` offers no handle to
+interrupt a request in flight.
 
 ## Supporting parts
 
@@ -114,11 +125,10 @@ run id and can be cancelled.
 | Quality gate (`cargo xtask gate`) | Eleven sections: format, clippy with warnings denied, tests, `cargo deny`, ignored-advisory review, frontend format/typecheck/lint, the `scripts/` suite, agent-rule sync, report redaction, network isolation, and the installer artifact (audit 2026-09-07, D-1). Runs every section rather than stopping at the first failure, reporting all of them together (audit 2026-09-07, G-2); `xtask::gate_report` writes a timestamped summary, per-command logs, and a JUnit XML for `tests` under `target/gate-logs/<timestamp>/`, refreshes a `target/gate-logs/latest/` copy, keeps the last 20 runs, and — under CI — appends the summary to `$GITHUB_STEP_SUMMARY`. |
 | Report redaction | A gate step, like network isolation: raw project file content is reachable only through `text::read_text_unredacted`, and every report that calls it must be declared with a reason in `crates/xtask/src/report_redaction.rs`. The rule used to be "remember to call `redact_line`", and it had already been broken. |
 | Machine paths in artifacts | `Config::disclose_absolute_paths`, off by default since 2026-09-06 (Q40). With it off, `source_root` and `copied_root` carry the project's name rather than a path, in all nine places that write them — `PROJECT_PROFILE.json`, `manifest.json`, `28_export_plan.json`, `00_project_profile.json` and five reports. `ReportContext::disclosed_source_root` is the one accessor — `05_git_deep.txt` needed it twice, and the second call site was found only when both Unix runners failed on it, since libgit2 renders even a Windows path with forward slashes and the bundle-wide test searched two spellings; the export plan is set by the engine, since `codepack-scanner` has no business knowing a disclosure policy. No `schema_version` moved: the key and type are unchanged, and an absolute path from another machine was never resolvable by a consumer. |
-| Network isolation | A gate step, not a convention: it reads every workspace manifest and fails if any crate declares an HTTP client, or depends on the excluded `codepack-ai-api`. Since 2026-09-06 there is no permitted exception inside the workspace at all. |
+| Network isolation | A gate step, not a convention: it reads every workspace manifest and enforces both halves of invariant I1 — `codepack-ai-api` is the only crate that may declare an HTTP client, and only `codepack-cli` and `codepack-desktop` may depend on it. The second half is what keeps a transport from sitting underneath the export pipeline, where no user action would gate it. Adding a name to the permitted list is an owner decision. |
 | GitHub Action (`action.yml`) | A composite action running `scan` on a runner and emitting SARIF. Builds from source: there are no signed release binaries yet. |
 | Dev scripts (`dev_tools_scripts_runner.py`, `scripts/`) | The cross-platform door to routine jobs — quality gate, formatting, dev run, installer, doctor, hooks, clean, selftest. |
 | CI (`.github/workflows/ci.yml`) | The `gate` job only, three independent legs — `ubuntu-latest`, `macos-latest`, `windows-latest` — since 2026-09-06. A failing gate emits workflow annotations naming the section and every failing test, because a step's log needs admin rights on the repository and an annotation does not. `permissions: contents: read` at workflow level (audit 2026-09-07, C-2); every third-party action is pinned to a commit SHA with its version as a comment, not a moving tag, with Dependabot (`.github/dependabot.yml`) keeping the pins current, and every `actions/checkout` sets `persist-credentials: false` since no job here pushes (audit 2026-09-07, S-4). Linux packaging validation (`package-linux`, `install-and-run-linux`) moved to its own path-filtered `package-linux.yml` (audit 2026-09-07, C-6): a full release build of the desktop app was 6:28 of a 7:14 run, on every push to any branch, whether or not anything packaging-related had changed. |
-| `ai-api-weekly.yml` | Builds, lints and tests the workspace-excluded `codepack-ai-api` (Q41) on a Monday schedule, since `cargo xtask gate` never touches it (audit 2026-09-07, S-12) — insurance against six months of silent rot, at no cost to a push. |
 | `perf-smoke-weekly.yml` | Runs `codepack-engine`'s `#[ignore]`-gated `perf_smoke` test (5,000 vs. 50,000 files, checking scaling rather than one absolute number) on a Monday schedule and a fixed runner, since nothing else ever ran it (audit 2026-09-07, T-3/C-3) — before this, a performance regression's first signal was a user complaint, not a red build. `timed_export` now also breaks the total down per pipeline step, by draining the same `StepStarted`/`StepFinished` events both shells already consume rather than adding new instrumentation inside the engine. The same job also runs `codepack-security`'s `#[ignore]`-gated `large_file_scan` test (a 300 MiB fixture, proving a huge file is scanned up to the ceiling rather than read whole) — its own module doc already said "run explicitly or in the weekly job" before this workflow existed to be that job (`04-TESTS.txt` adversarial item 10) — and `codepack-archive`'s `#[ignore]`-gated `cancellation_mid_file`, a characterization test for the archive-packing known-debt item below rather than a regression test: it documents that cancelling mid-copy of a single large member does not interrupt it, so a deliberate future fix updates this test and the debt entry together instead of a silent break going uninvestigated (`04-TESTS.txt` item 12). |
 | Packaging | `cargo xtask package` produces an NSIS installer on Windows and `.deb`/`.rpm`/`.AppImage` on Linux, each with a `SHA256SUMS.txt` beside it; a Linux CI job installs the built `.deb` and reads its declared dependencies back out. The `.deb`/`.rpm` also carry `codepack-cli` (`xtask::packaging_assets`, audit 2026-09-07 L-1/L-10): `/usr/bin/codepack`, its man page, and bash/zsh/fish completions, all built and generated by the packaging step itself before `tauri build` runs, since Tauri's `deb.files`/`rpm.files` need the source files already on disk. The AppImage and the NSIS installer do not carry the CLI. Signing, notarisation, auto-update, and a macOS bundle are not done. `.github/workflows/release.yml` (audit 2026-09-07, C-7/S-6, Q48) runs this same command on a `v*` tag push, publishes every artifact to a GitHub Release, and attests each one with `actions/attest-build-provenance` — proof the file was built by this workflow from this commit, which a checksum alone cannot give. GPG-signed Linux packages and a paid Windows certificate remain open (Q48). `codepack-cli` itself is cross-built inside a `debian:12` container in both `package-linux.yml` and `release.yml`, not natively on the `ubuntu-latest` runner (found 2026-09-08, this branch's first real CI push): a native build references `pidfd_spawnp`/`pidfd_getpid` under glibc's own weak-symbol convention, but glibc still refuses to dynamically link the binary at all when the *version* those symbols belong to (`GLIBC_2.39`, Ubuntu 24.04's own glibc) is entirely absent from the runtime's glibc — which Debian 12 (2.36, the oldest distro `install-and-run-linux`'s matrix validates) is. Confirmed by hand against real `debian:12`/`ubuntu:24.04`/`fedora:41` containers (`objdump -T`, then actually running the binary in each) before writing the fix, not assumed; glibc's own backward-compatibility guarantee is what makes building against the oldest supported distro sufficient for all three. `xtask::packaging_assets::ensure_cli_binary` accepts a pre-built binary via `CODEPACK_CLI_PREBUILT` so the CI step's cross-built copy is not silently overwritten by `prepare`'s own native build. Scoped to the CLI only — the Tauri desktop binary keeps the same underlying glibc requirement, recorded below. The container build itself uses `CARGO_TARGET_DIR=/build`, a path inside its own ephemeral filesystem rather than the bind-mounted checkout: a from-scratch build of just the CLI's dependency graph measured over 2 GiB of intermediate output, which — landing on the runner's own disk right before the native build needed to compile much of the same graph a second time for the Tauri desktop app — exhausted a GitHub-hosted runner's ~14 GiB default disk and failed the very next step instantly (found the same day, via the run's per-step API timestamps rather than its sparse public annotation). Only the finished binary crosses out, via `docker cp`. |
 | Activity log (`codepack-engine::LogSink`) | Audit 2026-09-07, G-1: a daily-rotating log file, one more consumer on the existing progress channel rather than a `tracing` dependency, since the pipeline already threads `run=`/`step=` context by hand. `LogLine` is a newtype constructible only through `LogLine::of`, which redacts via `codepack_security::redact_secrets` — the same function the `log`/`log_info` closure in `run_export` now applies *before* sending (S-8: narration used to reach the progress channel, and from there CLI stderr and the desktop webview, unredacted). A chained `panic::set_hook` writes a one-line, redacted entry to a separate non-rotating `codepack-panics.log`, since `strip = "symbols"` plus `windows_subsystem = "windows"` otherwise make a release panic silent. `codepack doctor --collect-logs DIR` copies the log directory out for a bug report, replacing the local home directory with `<home>` first. Both shells wire it in at their earliest startup point; `Config::log_verbose`/`log_max_file_mb`/`log_retention_days`/`log_total_cap_mb` control it, with a desktop settings toggle for verbosity. |
@@ -131,13 +141,16 @@ run id and can be cancelled.
   a project that needs different settings still uses `.codepack.toml`. Whether the two
   should be reconcilable — a project file that can be generated from a shared global one
   — has not been asked.
-- **`codepack-ai-api` is unreachable by a user, and no longer built by the gate.** Roughly
-  eight hundred lines — `keys`, `plan`, `provider`, the Anthropic client and `ask` — have
-  no command and no screen behind them. Moving the crate out of the workspace (Q41,
-  2026-09-06) removed its dependencies from every platform's build, and the cost is that
-  `cargo xtask gate` no longer compiles it: it is preserved, not maintained.
-  `cargo xtask ai-api` formats, lints and tests it on demand, and finishing S13 means
-  giving this path a command and a screen.
+- **No live request to a provider has ever been made.** S13's API path is wired end to
+  end and covered by tests, but the network leg has only been exercised against parsed
+  responses, never against a real provider: doing that needs a real API key, which no
+  session building this has had. The stage has carried this gap honestly since
+  2026-07-27 and still does — it is the one claim about this path nobody should read as
+  verified.
+- **A send cannot be cancelled.** `ureq` exposes no handle to interrupt a request in
+  flight, so neither front end offers a cancel: the CLI blocks and the desktop's card
+  shows "sending" until the provider answers. The same limit the MCP server has, for a
+  different reason.
 - **Settings import and export are implemented and unwired.**
   `codepack_core::config::{import_settings, export_settings}` are public, tested, and
   called by nothing: no CLI command and no screen offers either. Q42.
