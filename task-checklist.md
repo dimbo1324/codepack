@@ -1,167 +1,122 @@
 # Task Checklist
 
-**Task:** Final polish before the project is handed over for use and left alone for about
-six months: remove unused code, collapse remaining duplication into shared entities, make
-the unsafe-looking places predictable, bring every document up to date, clear every
-remote branch but `main`, cut release 2.0.1, refresh the build, and re-run everything.
+**Task:** Finish stage S13's API path — give it a command and a screen. The domain layer
+(`codepack-ai-api`: `ask`, the key store, the plan and its guards, the Anthropic client)
+has been complete and tested since 2026-07-27 and reachable by nobody. This task makes it
+reachable from both front ends.
 
-**Date:** 2026-09-08
-**Branch:** `chore/2.0.1-final-polish` (merged fast-forward into `main`, then deleted)
+**Date:** 2026-09-12
+**Branch:** `feat/s13-api-path-command-and-screen`
 
-Owner instruction, 2026-09-08: plan first, then work through it, and report once done.
+Owner instruction, 2026-09-12: «добей S13 — API-путь получает команду и экран».
 
-## The shape of this task
+## The decision this task rests on
 
-This is not a feature pass. Everything here either **removes** something (dead code,
-duplication, a stale sentence, a branch) or **makes an existing thing more predictable**
-(a recompiled regex, an unhandled failure mode). The one addition is the release itself.
+Finishing S13 requires a workspace member to depend on `codepack-ai-api`, which the
+`network isolation` gate step refuses by design and which invariant I1 forbids outright
+since 2026-09-06 (Q41). That is an invariant change, and the rules put it to the owner.
 
-The bar for touching code: it must be provable by test or by the gate. Nothing is
-"cleaned up" on taste alone — this project is about to sit untouched for months, and a
-refactor nobody will re-verify is a liability, not polish.
+**Owner decision, 2026-09-12: the API path ships in the release build.** The crate returns
+to the workspace, both front ends depend on it, and I1 goes back to its original wording —
+one named exception, only on an explicit user action. Two options were declined: a
+cargo feature off by default (S13 would be finished for nobody who downloads the
+installer) and a separate `codepack-ask` binary (no screen, and process-spawning from the
+webview breaks the two-front-ends-over-one-engine shape).
+
+**What that costs, named before the work starts:** `ureq` and `keyring` return to the
+product, to `Cargo.lock` and to `cargo deny`'s graph; `keyring` is compiled on every
+platform again; the Linux CI and packaging legs need `libsecret-1-dev`. This reverses the
+build-level benefit of Q41 while keeping its code-level one (the transport still lives in
+exactly one crate, and the gate still refuses it to every other).
 
 ## Step 0 — preparation
 
-- [+] Orientation ritual: git state, ROADMAP, overview, previous checklist, open questions
-- [+] Branch `chore/2.0.1-final-polish` off green `main`
-- [+] This checklist committed **before** the work started (commit `c270a90`)
+- [ ] Orientation ritual: git state, ROADMAP, overview, previous checklist, open questions
+- [ ] Previous checklist confirmed closed (2.0.1 polish, every item marked)
+- [ ] Branch off up-to-date `main`
+- [ ] This checklist committed **before** the work starts
 
-## Step 1 — unused and dead code
+## Step 1 — the crate returns to the workspace
 
-- [+] Compiler-proven dead code: `cargo clippy --workspace --all-targets` clean with
-      `-W dead_code -W unused_imports`. The Linux cross-check could **not** run here —
-      `cc` needs `x86_64-linux-gnu-gcc` for the vendored C in git2/rusqlite, which this
-      Windows machine does not have — so Linux-only dead code is proven by CI's own
-      Ubuntu leg instead, which is green
-- [+] Unused dependencies: every member's manifest compared against what its sources
-      actually reference. Four removed: `serde` and `serde_json` (codepack-ai),
-      `walkdir` (codepack-security dev-deps), `thiserror` (codepack-desktop). The
-      workspace still builds and all tests pass, which is the proof they were dead
-- [+] `#[allow(dead_code)]`: one site, `codepack-engine/tests/support/mod.rs`, legitimate
-      for a shared test helper module not every test file uses. Left as is
-- [+] `clean-project` now sweeps `crates/codepack-ai-api/target/` — 770 MB it could not
-      see, because that crate is excluded from the workspace and builds into a target
-      directory of its own. `selftest` green after the change
+- [ ] `workspace.exclude` entry removed from the root `Cargo.toml`
+- [ ] `codepack-ai-api` inherits `version`/`edition`/`rust-version`/`lints` from the
+      workspace instead of spelling them out, and the comment explaining the duplication
+      goes with the duplication
+- [ ] `ureq` and `keyring` declared in `[workspace.dependencies]`, decision comments moved
+      there rather than dropped
+- [ ] `cargo deny check` passes with both back in the graph — licences and advisories
 
-## Step 2 — duplication collapsed into shared entities
+## Step 2 — the gate learns the one exception
 
-- [+] **Regexes recompiled per call.** 16 patterns across six files in `codepack-reports`
-      were built by `fn x_pattern() -> Regex` called from inside the per-file loop.
-      `code_quality.rs` already had the fix *and the reasoning written out*; the rest
-      never got it. All 16 now use the same `static X: LazyLock<Regex>` shape:
-      graph.rs (4), api_surface.rs (5), backend.rs (2), frontend.rs (2), key_files.rs (2),
-      scripts.rs (1). Behaviour identical by construction and proven so by the crate's
-      208 tests plus the golden comparison against the legacy implementation
-- [+] Deliberately left alone: the `Regex::new` calls in codepack-security and
-      codepack-scanner are all inside `#[cfg(test)]`, where they are the independent
-      reference the hand-written scans are checked against
+- [ ] `network_isolation` permits `codepack-ai-api` to declare a client, and **only** it
+- [ ] A member that depends on `codepack-ai-api` is now permitted where it was refused —
+      but the denylist still refuses a client declared anywhere else
+- [ ] Tests rewritten around the new rule, including the negative: any other crate taking
+      `ureq` still fails
+- [ ] The real workspace passes its own check
 
-## Step 3 — unsafe places made predictable
+## Step 3 — retire what existed only because of the exclusion
 
-- [+] Every non-test `unwrap()`/`expect()` re-checked: all carry an adjacent proof they
-      cannot fail, as the project rule requires. Nothing to change
-- [+] Poisoned mutexes: every production `lock()` already recovers with
-      `unwrap_or_else(into_inner)`. The three bare `unwrap()`s found are all in test code
-- [+] Slice indexing: ~45 byte-offset slices in codepack-security, every one derived from
-      `str::find`, a match span, or an ASCII literal's length — read individually and
-      confirmed to be valid boundaries by construction
-- [+] **That confirmation now has a test.** `tests/utf8_boundaries.rs` runs redaction and
-      a full project scan over Cyrillic, CJK, emoji and mixed content in every position
-      around a secret, including pressed directly against it with no separator. Reading
-      proves it today; the test proves it in six months. All three cases pass
-- [-] Arithmetic overflow: no unguarded unsigned subtraction found on user-controlled
-      values, so nothing was changed. Not an exhaustive audit of every numeric path —
-      the search was pattern-based
+- [ ] `cargo xtask ai-api` — the crate is gated like every other member now
+- [ ] The version-drift test in xtask's `ai_api` module — inheritance makes drift impossible
+- [ ] `.github/workflows/ai-api-weekly.yml` — the gate covers the crate on every push
+- [ ] `.ai/project/11-commands.md` and `15-command-reference.md` updated, `AGENTS.md`
+      regenerated, `.ai/CHANGELOG.md` entry
 
-## Step 4 — documentation brought up to date
+## Step 4 — configuration
 
-- [+] `docs/architecture/overview.md`: date and version refreshed, and the header now
-      records that Linux packages are installed and run in real distributions before
-      shipping. (The "packaging is Windows-only" sentence had already been fixed in the
-      audit remediation — the stale copy seen while planning was `main`'s, before that
-      work merged)
-- [+] **`docs/architecture/invariants.md`: all nine invariants now document how they are
-      enforced.** Only I1 and I2 did before. Each addition names the real gate step,
-      boundary type or test, and every referenced path and test name was checked to
-      exist. This is the item that matters most for a project going quiet: it tells
-      whoever opens it next which tests are load-bearing
-- [+] `README.md` current release line moved to 2.0.1
-- [+] `CHANGELOG.md`: a real 2.0.1 entry written for someone using codepack
-- [+] `.ai/` modules and generated `AGENTS.md` verified in sync by the gate
-- [+] Every version-bearing sentence consistent with 2.0.1
+- [ ] `Config` gains the API-path fields (enabled, provider, model, question) with
+      defaults that keep the feature off until the user turns it on
+- [ ] Normalization: an unknown provider or model falls back rather than failing
+- [ ] The key is **not** among them and cannot be: it lives only in the OS store
+- [ ] Round-trip and normalization tests, as every other field has
 
-## Step 5 — CI dependencies (the five Dependabot PRs)
+## Step 5 — the command
 
-- [+] All five applied in one commit, 17 pins across five workflow files, each SHA
-      resolved with `git ls-remote` rather than copied from a PR body: checkout
-      5.1.0→7.0.1, upload-artifact 5.0.0→7.0.1, setup-python 6.3.0→7.0.0,
-      attest-build-provenance 3.0.0→4.2.2, pnpm/action-setup 6.0.10→6.1.0. This also
-      clears CI's standing "Node.js 20 is deprecated" warning
-- [+] All five Dependabot branches deleted; all five PRs closed
-- [+] Dependabot moved from weekly-per-action to **monthly, grouped, limit 3** — its first
-      week under the old config produced five PRs and five branches, which is wrong for a
-      repository read twice a year
+- [ ] `codepack ask <bundle>` — plan, guard, send, save the answer
+- [ ] `codepack key set|status|clear` for the credential store, mirroring `settings`
+- [ ] **The key is read from stdin, never from a flag** — a flag lands in shell history
+      and in `ps` output
+- [ ] `--json` carries `schema_version` and the `command` discriminator, machine output on
+      stdout only
+- [ ] Exit codes honour the published contract; a refusal is distinguishable from a failure
+- [ ] `--dry-run` prints the plan without sending, so the guard can be seen working
+- [ ] Completions and man page regenerate with the new commands
 
-## Step 6 — release 2.0.1
+## Step 6 — the screen
 
-- [+] `Cargo.toml` workspace version → 2.0.1
-- [+] `apps/desktop/ui/package.json` → 2.0.1
-- [+] `crates/codepack-ai-api/Cargo.toml` → 2.0.1 — it spells its version out because an
-      excluded package cannot inherit `version.workspace = true`, and **nothing compared
-      the two until now**. New test in xtask's `ai_api` module asserts they match;
-      verified to fail on a real drift before being kept
-- [+] `CHANGELOG.md` 2.0.1 entry
-- [+] `cargo xtask package` re-run — and this is where the release found a real defect,
-      see the section below
-- [+] Tag `v2.0.1` pushed; `release.yml` publishing the attested GitHub Release
+- [ ] Tauri commands for status, plan, ask, store-key, clear-key
+- [ ] The key crosses the IPC boundary only inbound; nothing ever returns it
+- [ ] The send runs on a background thread and the window does not block
+- [ ] Key, provider, model and the enable toggle on the settings page
+- [ ] An ask card on the result page, next to the existing local-agent handoff card
+- [ ] The plan is shown before sending: files, bytes, estimated tokens, critical findings
+      as "not verified" when the scan did not run
+- [ ] A critical finding refuses, and the override is a separate explicit action
+- [ ] EN and RU strings for everything added
 
-## The defect this release found, which was not in the plan
+## Step 7 — CI and packaging
 
-`cargo xtask package` **published the previous version's installer.** Its own output said
-so: "Finished 1 bundle at `codepack_2.0.1_x64-setup.exe`" followed by "published from
-`codepack_2.0.0_x64-setup.exe`". The file a user would download as 2.0.1 was the 2.0.0
-binary, with `SETUP.txt` declaring 2.0.1 over it.
+- [ ] `libsecret-1-dev` added to the Linux gate leg and the packaging workflows
+- [ ] `install-and-run-linux` still installs and runs on all three distributions
 
-`tauri build` names its output after the version and never removes the previous one, so
-after a bump the directory holds both; `publish` took whichever the filesystem listed
-first. The gate could not see it: it compares `SETUP.txt`'s version against `Cargo.toml`
-(2.0.1 = 2.0.1) and `setup.exe`'s checksum against `SETUP.txt`'s (both taken from the
-same stale file). Both halves agreed with each other while describing the wrong binary —
-a check whose inputs all derive from one mistake cannot detect that mistake.
+## Step 8 — verification
 
-Fixed on both sides: `pick_installer` selects by version-in-filename and fails naming what
-it found instead, and the gate now also checks the recorded `source:` line, which is the
-only field describing the *bytes* rather than the build that copied them. Three tests,
-including the regression proper. `setup.exe` rebuilt and genuinely 2.0.1.
+- [ ] `cargo xtask gate` fully green locally
+- [ ] The new command exercised against a real exported bundle, up to the network boundary
+- [ ] **No live request to a provider.** It needs the owner's API key, which this session
+      does not have and must not handle. The send path is proven by tests and by response
+      parsing, not by an exchange — the same honest limit S13 has carried since 2026-07-27
 
-- [+] Defect found, fixed, tested, and the mechanism that missed it strengthened
+## Step 9 — completion
 
-## Step 7 — verification
-
-- [+] `cargo xtask gate` fully green locally, 12/12 sections
-- [+] CI green on all three OS legs
-- [+] `package (linux)` green, including all three `install-and-run-linux` distro legs
-      (ubuntu:24.04, debian:12, fedora:41)
-- [+] Release workflow run and the published Release verified
-
-## Step 8 — completion
-
-- [+] Fast-forward merge into `main`, pushed
-- [+] Every remote branch but `main` gone: five Dependabot branches and this task's own
-- [+] Final report
-
-## What this task did not do
-
-As named in the plan, and still true:
-
-- **No behaviour changes.** Nothing a user does with codepack works differently. The one
-  user-visible change is that `setup.exe` is now actually the version it claims to be
-- **The open questions stay open.** Q48 steps 2–4 (GPG signing, a Windows certificate),
-  Q51 (the copy-step parallelisation measurement) and P-3's third part all need either
-  the owner's key/money or a measurement run this session was asked not to make
-- **`codepack-desktop`'s glibc floor stays where it is.** The CLI is cross-built against
-  Debian 12; the desktop binary is not, and cross-building the whole webview stack is a
-  real project rather than polish
-- **The Linux dead-code cross-check ran on CI, not here.** No `x86_64-linux-gnu-gcc` on
-  this machine, so `cargo clippy --target x86_64-unknown-linux-gnu` cannot link the
-  vendored C dependencies
+- [ ] `docs/__arch__/ROADMAP.md`: S13 `**Status.**` refreshed, §1 status column updated
+- [ ] `docs/architecture/invariants.md`: I1 rewritten with the restored exception and how
+      it is enforced now
+- [ ] `docs/architecture/overview.md`: the crate's row, the two-front-end section, and the
+      known-debt entries that this closes
+- [ ] `docs/__arch__/open-questions.md`: the owner decision, Q41 amended, Q2 revisited
+- [ ] `README.md`: the new commands, and what turning the feature on means
+- [ ] `CHANGELOG.md`: an entry for users
+- [ ] Checklist filled with `+`/`-`
+- [ ] Final report
