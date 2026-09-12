@@ -383,16 +383,15 @@ fn main() -> ExitCode {
 
     let outcome = match command.as_str() {
         "gate" => gate(&root, has("--quick")),
-        "fmt" => step(&root, "format", "cargo", &["fmt", "--all"])
-            .and_then(|()| {
-                println!("\n=== frontend format ===");
-                if frontend::dependencies_installed(&root) {
-                    frontend::format_write(&root)
-                } else {
-                    frontend::skip_notice();
-                    Ok(())
-                }
-            }),
+        "fmt" => step(&root, "format", "cargo", &["fmt", "--all"]).and_then(|()| {
+            println!("\n=== frontend format ===");
+            if frontend::dependencies_installed(&root) {
+                frontend::format_write(&root)
+            } else {
+                frontend::skip_notice();
+                Ok(())
+            }
+        }),
         "lint" => step(
             &root,
             "clippy",

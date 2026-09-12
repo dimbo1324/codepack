@@ -343,7 +343,10 @@ codepack-ai-api = { workspace = true }
         );
 
         let error = check(&root).unwrap_err();
-        assert!(error.contains("codepack-engine depends on codepack-ai-api"), "{error}");
+        assert!(
+            error.contains("codepack-engine depends on codepack-ai-api"),
+            "{error}"
+        );
         assert!(error.contains("credential store"), "{error}");
         assert!(
             error.contains("codepack-cli and codepack-desktop"),
@@ -492,15 +495,27 @@ windows-sys = "0.61"
     fn only_the_api_crate_may_declare_a_client() {
         let root = scratch_workspace("one-exemption-only");
         write_bare_root_manifest(&root);
-        write_crate(&root, "codepack-ai-api", "[dependencies]
+        write_crate(
+            &root,
+            "codepack-ai-api",
+            "[dependencies]
 ureq = \"3\"
-");
-        write_crate(&root, "codepack-ai", "[dependencies]
+",
+        );
+        write_crate(
+            &root,
+            "codepack-ai",
+            "[dependencies]
 ureq = \"3\"
-");
-        write_crate(&root, "codepack-core", "[dependencies]
+",
+        );
+        write_crate(
+            &root,
+            "codepack-core",
+            "[dependencies]
 serde = \"1\"
-");
+",
+        );
 
         let error = check(&root).unwrap_err();
         assert!(error.contains("codepack-ai depends on ureq"), "{error}");

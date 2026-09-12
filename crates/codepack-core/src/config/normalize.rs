@@ -159,14 +159,14 @@ mod tests {
 
     #[test]
     fn ai_api_provider_passes_through_a_known_provider() {
-        let mut cfg = Config::default();
+        let mut cfg = config();
         cfg.ai_api_provider = "anthropic".to_string();
         assert_eq!(cfg.normalized_ai_api_provider(), "anthropic");
     }
 
     #[test]
     fn ai_api_provider_falls_back_for_an_unknown_one() {
-        let mut cfg = Config::default();
+        let mut cfg = config();
         cfg.ai_api_provider = "a-vendor-that-shipped-later".to_string();
         assert_eq!(cfg.normalized_ai_api_provider(), DEFAULT_AI_API_PROVIDER);
     }
@@ -176,7 +176,7 @@ mod tests {
         // Not a preference. `SendPlan::check` refuses on this field before a bundle is
         // read or a key is touched, so a fresh installation cannot reach the network at
         // all — which is what invariant I1 promises about a default install.
-        assert!(!Config::default().ai_api_enabled);
+        assert!(!config().ai_api_enabled);
     }
 
     #[test]

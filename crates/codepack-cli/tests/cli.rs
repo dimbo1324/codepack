@@ -1879,7 +1879,11 @@ fn ask_reports_an_unscanned_bundle_as_unverified_rather_than_as_clean() {
     assert!(json(&output)["critical_findings"].is_null());
 
     let human = sandbox.run(&["ask", &bundle, "--dry-run"]);
-    assert!(stdout(&human).contains("not verified"), "{}", stdout(&human));
+    assert!(
+        stdout(&human).contains("not verified"),
+        "{}",
+        stdout(&human)
+    );
 }
 
 #[test]

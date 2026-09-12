@@ -43,8 +43,7 @@ use crate::output::{self, Format};
 /// A question a user has not typed yet. General on purpose: a specific default would be
 /// wrong more often than it was right, and this one at least matches why people export
 /// a bundle for a model in the first place.
-const DEFAULT_QUESTION: &str =
-    "Review this project and tell me what matters most: what it does, how it is \
+const DEFAULT_QUESTION: &str = "Review this project and tell me what matters most: what it does, how it is \
      structured, and where the risks are.";
 
 #[derive(Debug, Serialize)]
@@ -314,10 +313,7 @@ mod tests {
 
     #[test]
     fn a_switched_off_integration_is_a_failure_to_do_the_job() {
-        assert_eq!(
-            outcome_for(&Refusal::Disabled).code(),
-            crate::exit::FAILURE
-        );
+        assert_eq!(outcome_for(&Refusal::Disabled).code(), crate::exit::FAILURE);
         assert_eq!(
             outcome_for(&Refusal::EmptyContext).code(),
             crate::exit::FAILURE
@@ -370,7 +366,12 @@ mod tests {
             dry_run: false,
         };
         let json = serde_json::to_value(&report).unwrap();
-        let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         keys.sort_unstable();
         assert_eq!(
             keys,
