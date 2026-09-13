@@ -109,9 +109,25 @@ Fixing that uncovered the real defect, which no test and no review had caught:
 
 - [+] Fast-forward merge into `main`
 - [+] `main` pushed to `origin`: `9a48eb1..72b7afc`
-- [ ] Tag `v2.1.0` moved to the fixed commit and pushed — owner decision, since nothing was
-      ever published under the first one — and `release.yml` watched to a conclusion
-- [ ] CI green on all three OS legs for the merged `main`
+- [+] Tag `v2.1.0` moved to the fixed commit `36d819e` and pushed — owner decision, made
+      after confirming through the API that nothing was ever published under the first
+      one (release lookup: 404). Branch `fix/tls-provider` fast-forwarded into `main`,
+      pushed as `72b7afc..36d819e`
+- [+] `release.yml` watched to a conclusion: **success**. Release `v2.1.0` published
+      2026-09-13T12:04:43Z, not a draft, eight assets — NSIS installer, `.deb`, `.rpm`,
+      AppImage, and four checksum files — with an in-toto build-provenance attestation
+      found for the released installer
+- [+] The released installer and the repository's `setup.exe` are **not byte-identical**
+      (`f4c82195…` against `3f816349…`): two builds of one commit, one by CI and one on
+      this machine, and an NSIS build is not reproducible byte for byte. Checked against
+      history rather than assumed harmless — 2.0.1 diverged the same way (`5d50c90f…`
+      against `907ec79f…`). The attested download is the Release asset; `SETUP.txt`
+      describes only the repository copy
+- [+] CI green on all three OS legs for the merged `main` (`36d819e`)
+- [+] `package (linux)` green on `36d819e` — and it ran at all, which is the point: this is
+      the first push its widened path filter caught. It installs and runs the `.deb`,
+      `.rpm` and AppImage in clean `ubuntu:24.04`, `debian:12` and `fedora:41` containers,
+      so the rustls build without OpenSSL is proven to start on all three
 
 ## Step 5 — leave one branch
 
@@ -122,5 +138,5 @@ Fixing that uncovered the real defect, which no test and no review had caught:
 
 ## Step 6 — completion
 
-- [ ] Checklist filled with `+`/`-`
-- [ ] Final report
+- [+] Checklist filled with `+`/`-`
+- [+] Final report
