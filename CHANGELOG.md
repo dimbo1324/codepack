@@ -5,7 +5,7 @@ Releases of codepack. Newest first. Dates are the day the version was tagged.
 This file is for people who use codepack. The rule-system changelog for the AI assistants
 that build it is a separate file, `.ai/CHANGELOG.md`.
 
-## Unreleased
+## 2.1.0 — 2026-09-13
 
 ### Ask a model about a bundle
 
@@ -61,11 +61,21 @@ allowed to reach the network, only the two front ends may even reach that crate,
 quality gate fails the build if either rule is broken — so no export can carry a request
 underneath itself.
 
-### Not done
+### Not done, and worth knowing before you turn the integration on
 
-No live request to a provider has been made by anyone building this: the network leg is
-covered by tests and response parsing, not by a real exchange. A send in progress cannot
-be cancelled.
+**No live request to a provider has been made by anyone building this.** The network leg
+is covered by tests and by parsing real response shapes, not by an actual exchange — that
+needs a real API key, and none was used. It is the one claim about this release nobody
+should read as verified.
+
+A send in progress cannot be cancelled: the HTTP client offers no handle to interrupt a
+request that is already in flight, so neither the command line nor the window offers a
+cancel button rather than offering one that does nothing.
+
+On the desktop side, `Ctrl 0`, `Ctrl` with the wheel and the status-bar buttons were
+verified by reading the code and by the window's own behaviour, but not by driving them
+with synthetic input — those reached the webview only intermittently. The window fit and
+the `Ctrl +` / `Ctrl -` shortcuts were measured directly against the running window.
 
 ## 2.0.1 — 2026-09-08
 

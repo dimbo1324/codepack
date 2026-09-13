@@ -9,7 +9,7 @@
 > log and in the internal plan; this file answers "what is built and how does it fit
 > together".
 
-**Last revised:** 2026-09-12 · **Version:** 2.0.1
+**Last revised:** 2026-09-13 · **Version:** 2.1.0
 **Target platforms:** Windows 10/11, macOS and Linux. The 2026-07-26 narrowing to
 Windows was reversed on 2026-09-06; `codepack-core::paths` carries all three layouts
 again and CI runs the gate on all three runners. Packaging followed on the same day:

@@ -68,7 +68,7 @@ a manifest describing all of it.
 
 ## Install
 
-**Current release: 2.0.1** (2026-09-08). See [CHANGELOG.md](CHANGELOG.md).
+**Current release: 2.1.0** (2026-09-13). See [CHANGELOG.md](CHANGELOG.md).
 
 **Windows.** Download [setup.exe](setup.exe) — the version and checksum currently
 published under that name are in [SETUP.txt](SETUP.txt) — and run it. It installs for
