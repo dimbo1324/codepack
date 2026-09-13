@@ -159,20 +159,52 @@ codepack-ai-api = { path = "crates/codepack-ai-api" }
 # is blocking and MIT/Apache-2.0. Same reasoning that rejected `directories` in S1 and
 # `tiktoken-rs` in S6.
 #
-# The platform's own TLS (SChannel on Windows) rather than rustls with a bundled root
-# list. Two reasons, and the second is why no rustls variant was taken:
-#   1. A desktop tool runs behind corporate TLS-inspecting proxies whose CA lives in the
-#      OS trust store and in no bundle. The OS stack is the one that works there.
-#   2. Every rustls path here drags in a Mozilla root list — `webpki-roots` or
-#      `webpki-root-certs`, both CDLA-Permissive-2.0, which is outside this project's
-#      allowed licence set. Using the OS trust store avoids widening the licence policy
-#      for what is a certificate list rather than code.
-# No OpenSSL is involved on Windows; `native-tls` binds to SChannel there.
+# ## The two requirements, unchanged since 2026-07-27
+#
+#   1. **Roots come from the OS trust store.** A desktop tool runs behind corporate
+#      TLS-inspecting proxies whose CA lives there and in no bundle.
+#   2. **No Mozilla root list in the graph.** `webpki-roots` and `webpki-root-certs` are
+#      both CDLA-Permissive-2.0, outside this project's allowed licence set, and widening
+#      that policy for a certificate list rather than for code is the wrong trade.
+#
+# ## Why the mechanism changed on 2026-09-13
+#
+# Those requirements were previously met with `native-tls-no-default` — native-TLS
+# without its bundled roots. It does not work, and could never have worked: `ureq` gates
+# provider *selection* on `cfg(feature = "native-tls")`, and that feature pulls
+# `native-tls-webpki-roots` — exactly the list requirement 2 forbids. With only
+# `native-tls-no-default` enabled, every HTTPS request panics with "provider is Rustls
+# but feature is not enabled: rustls". It was latent from 2026-07-27 until 2026-09-13
+# because nobody had ever made a live request; the release that gave S13 a command and a
+# screen is what finally ran one.
+#
+# `rustls-no-provider` + `_ring` meets both requirements instead, with the roots loaded
+# from the OS store by `rustls-native-certs` and handed to `ureq` as
+# `RootCerts::Specific`. Verified by an actual HTTPS round trip in a real `debian:12`
+# container rather than by reading. OpenSSL leaves the graph entirely, which is why the
+# Linux packages need no `libssl3` and the cross-build container no `libssl-dev`.
+#
+# **Not `platform-verifier`**, which is the obvious way to say "use the OS store" and
+# which was tried first: `rustls-platform-verifier` depends on `webpki-root-certs`, so it
+# reintroduces the CDLA list requirement 2 forbids. That was invisible on Linux — where
+# the crate takes a different path — and only `cargo deny`, which reads every target,
+# caught it. Loading the certs directly costs a dozen lines and keeps the licence policy
+# untouched, which is the trade requirement 2 already made once.
+#
+# `_ring` is underscore-prefixed, meaning `ureq` considers it internal. It is taken
+# deliberately: the public `rustls` feature is `rustls-no-provider + _ring +
+# rustls-webpki-roots`, so there is no public route to a crypto provider that does not
+# also drag in the list requirement 2 forbids. `codepack-ai-api`'s own test asserts a
+# real handshake still works, so a rename upstream fails loudly rather than at a user.
 ureq = { version = "3", default-features = false, features = [
-  "native-tls-no-default",
+  "rustls-no-provider",
+  "_ring",
   "json",
   "gzip",
 ] }
+# The OS trust store, read directly. Apache-2.0 OR ISC OR MIT, all already allowed.
+rustls-native-certs = "0.8"
+
 # S13: OS-native credential storage, named by BLUEPRINT §D.4. The API key must never
 # reach a settings file, so this is not optional infrastructure.
 # Default features are the per-platform native stores (Credential Manager, Keychain,

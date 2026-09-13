@@ -28,52 +28,57 @@ every artifact and a build-provenance attestation, not merely a file in the repo
 
 ## Step 0 — preparation
 
-- [ ] Orientation: both feature branches finished, gate green, CI green on all three OS
-- [ ] `main` fast-forwarded to the end of the chain (`main` → S13 → zoom is linear)
-- [ ] This checklist committed **before** the work
+- [+] Orientation: both feature branches finished, gate green, CI green on all three OS
+- [+] `main` fast-forwarded to the end of the chain (`main` → S13 → zoom is linear)
+- [+] This checklist committed **before** the work (`382c9d3`)
 
 ## Step 1 — the version
 
-- [ ] Root `Cargo.toml` and `apps/desktop/ui/package.json` to 2.1.0 — the only two places
+- [+] Root `Cargo.toml` and `apps/desktop/ui/package.json` to 2.1.0 — the only two places
       a version is written by hand now that `codepack-ai-api` inherits from the workspace
-- [ ] `Cargo.lock` regenerated so the workspace crates carry the new number
-- [ ] Nothing else claims 2.0.1 except history, which must keep it
+- [+] `Cargo.lock` regenerated; `cargo metadata` reports a single version across every
+      workspace crate, which is how it was checked rather than by reading two files
+- [+] Nothing else claims 2.0.1 except history, which must keep it — swept with grep
 
 ## Step 2 — the documents
 
-- [ ] `CHANGELOG.md`: the Unreleased section becomes 2.1.0, dated, written for someone
-      using codepack rather than building it
-- [ ] `README.md`: the current-release line
-- [ ] `docs/architecture/overview.md`: date and version
-- [ ] `docs/__arch__/ROADMAP.md`: the desktop zoom and monitor fit recorded — it is not a
-      numbered stage, so it belongs where the other out-of-band additions are recorded
-- [ ] `docs/__arch__/open-questions.md`: the release decision, and the zoom defects worth
-      remembering
-- [ ] Every version-bearing sentence consistent with 2.1.0
+- [+] `CHANGELOG.md`: the Unreleased section becomes 2.1.0, dated, and its "not done"
+      part now names all three unverified things plainly rather than burying them
+- [+] `README.md`: the current-release line
+- [+] `docs/architecture/overview.md`: date and version
+- [+] `docs/__arch__/ROADMAP.md`: the zoom work recorded as an addition to S11, with the
+      three defects only running the application could find; the release itself beside
+      2.0.0 and 2.0.1 under S14
+- [+] `docs/__arch__/open-questions.md`: the release decision, why "bump but do not tag"
+      was declined, and what remains unverified
+- [+] Every version-bearing sentence consistent with 2.1.0
 
 ## Step 3 — rebuild and the installer
 
-- [ ] `cargo xtask gate` green before packaging — the gate is what licenses a merge
-- [ ] `cargo xtask package` builds the NSIS installer
-- [ ] `setup.exe` and `SETUP.txt` at the repository root updated together, with the
-      version, the build time, the commit and the checksum all describing **this** build
-- [ ] The gate's `installer artifact` section re-run afterwards, since it is the check
-      that compares `SETUP.txt` against the bytes beside it — including the `source:`
-      line, which is the only field describing the binary rather than the build that
-      copied it
+- [+] Gate run before packaging: 10 of 11 sections green and `installer artifact`
+      **failed**, which is the check doing its job — `SETUP.txt` still said 2.0.1 while the
+      project said 2.1.0
+- [+] `cargo xtask package` built `codepack_2.1.0_x64-setup.exe`
+- [+] `setup.exe` and `SETUP.txt` updated together: version 2.1.0, built
+      2026-09-13T07:37:38Z, commit `382c9d3`, and the checksum **verified independently**
+      against the file with `Get-FileHash` rather than taken from the build's own word
+- [+] Full gate re-run on a **clean** tree: 11/11 green in 96s, `installer artifact`
+      included. The `source:` line names `codepack_2.1.0_x64-setup.exe`, which is the
+      field that describes the bytes rather than the build that copied them
 
 ## Step 4 — publish
 
-- [ ] Fast-forward merge into `main`
-- [ ] `main` pushed to `origin`
+- [+] Fast-forward merge into `main`
+- [+] `main` pushed to `origin`: `9a48eb1..72b7afc`
 - [ ] Tag `v2.1.0` pushed, and `release.yml` watched to a conclusion rather than assumed
 - [ ] CI green on all three OS legs for the merged `main`
 
 ## Step 5 — leave one branch
 
-- [ ] Every local branch but `main` deleted
-- [ ] Every remote branch but `main` deleted
-- [ ] Verified from `git branch -a` rather than from memory
+- [+] Every local branch but `main` deleted
+- [+] Every remote branch but `main` deleted
+- [+] Verified from `git branch -a` after `fetch --prune`: `main` and nothing else,
+      local or remote
 
 ## Step 6 — completion
 

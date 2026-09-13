@@ -61,12 +61,28 @@ allowed to reach the network, only the two front ends may even reach that crate,
 quality gate fails the build if either rule is broken — so no export can carry a request
 underneath itself.
 
+### The thing that would not have worked at all
+
+While preparing this release, the first real connection anyone had ever attempted found
+that **asking a model could never have worked**. The HTTP client selects its TLS backend
+from a build-time feature, and the feature this project had chosen — picked to keep a
+restrictively-licensed certificate list out of the build — enabled the transport without
+selecting it. Every HTTPS request would have crashed, on every platform, from the day the
+code was written in July.
+
+It is fixed: TLS now uses your operating system's own certificate store, which is what was
+wanted all along and is what works behind a corporate proxy. Nothing needs OpenSSL any
+more, so the Linux packages carry one fewer system dependency. There is now a test that
+opens a real connection to the provider and fails loudly if this ever breaks again — it
+runs weekly rather than on every build, because a build must not need a network.
+
 ### Not done, and worth knowing before you turn the integration on
 
-**No live request to a provider has been made by anyone building this.** The network leg
-is covered by tests and by parsing real response shapes, not by an actual exchange — that
-needs a real API key, and none was used. It is the one claim about this release nobody
-should read as verified.
+**No complete exchange with a provider has been made by anyone building this.** The
+connection itself is now proven — a real handshake with the real endpoint, checked on
+Windows and inside a clean Debian container — but sending a question and reading an answer
+needs a real API key, and none was used. Expect the first real ask to be the first real
+ask.
 
 A send in progress cannot be cancelled: the HTTP client offers no handle to interrupt a
 request that is already in flight, so neither the command line nor the window offers a

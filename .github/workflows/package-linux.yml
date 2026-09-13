@@ -22,6 +22,18 @@ on:
       - "crates/xtask/src/packaging_assets.rs"
       - "crates/xtask/src/installer.rs"
       - ".github/workflows/package-linux.yml"
+      # The dependency graph, added 2026-09-13 after this filter's own assumption proved
+      # false. It assumed only a packaging change can break packaging — and release 2.1.0
+      # broke it with neither: `codepack-cli` gained `codepack-ai-api`, which drags in
+      # OpenSSL on Linux, and the `debian:12` container had no OpenSSL headers. None of
+      # the paths above changed, so this workflow never ran on the branch that broke it
+      # and the failure surfaced for the first time on the release tag, where the cost is
+      # highest. A manifest or lockfile change is exactly the shape of edit that can add a
+      # system dependency to something this workflow packages.
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/*/Cargo.toml"
+      - "apps/desktop/src-tauri/Cargo.toml"
   pull_request:
     paths: *packaging-relevant-paths
   workflow_dispatch:
@@ -131,6 +143,14 @@ jobs:
           docker exec codepack-cli-glibc-baseline bash -c "
             set -euo pipefail
             apt-get -o Acquire::Retries=5 update -qq
+            # No OpenSSL packages here, and that is a decision rather than an omission.
+            # The first v2.1.0 tag failed on this step because `codepack-cli` had just
+            # gained `codepack-ai-api`, whose `ureq` was configured for native-TLS —
+            # OpenSSL on Linux. Chasing that led to the discovery that the TLS provider
+            # was never actually selected and every HTTPS request panicked, so the fix
+            # was not `libssl-dev` but rustls with the OS trust store. OpenSSL is no
+            # longer in the graph on any target; `ca-certificates` is what matters now,
+            # because that is where the roots come from.
             apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
           "
 

@@ -22,6 +22,7 @@ serde_json = { workspace = true }
 # declared in the root manifest, where the reasoning for each lives beside every other
 # dependency decision.
 ureq = { workspace = true }
+rustls-native-certs = { workspace = true }
 keyring = { workspace = true }
 
 [dev-dependencies]

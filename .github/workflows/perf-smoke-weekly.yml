@@ -70,6 +70,22 @@ jobs:
           set -o pipefail
           cargo test -p codepack-archive --release --test cancellation_mid_file -- --ignored --nocapture 2>&1 | tee cancellation-mid-file.log
 
+      # The TLS handshake, added 2026-09-13. It is not a performance test and it is here
+      # only because this is where `#[ignore]`d tests get a schedule — the ones that need
+      # something a gate cannot have, in this case a network. It is the test that would
+      # have caught the defect release 2.1.0 found: `ureq` gates TLS provider selection on
+      # a feature, and the feature chosen to keep a CDLA-licensed root list out of the
+      # graph enabled the transport dependency without selecting it, so every HTTPS
+      # request panicked from 2026-07-27 until somebody finally made one.
+      #
+      # `codepack-ai-api` is outside the gate's network-isolation rule by design — it is
+      # invariant I1's named exception — so a test here that opens a real connection is
+      # the one place that is true of.
+      - name: cargo test -p codepack-ai-api --test tls_handshake -- --ignored --nocapture
+        run: |
+          set -o pipefail
+          cargo test -p codepack-ai-api --release --test tls_handshake -- --ignored --nocapture 2>&1 | tee tls-handshake.log
+
       # One line per run, appended forever: this is the whole "a week-over-week trend"
       # the audit asked for, and it costs nothing more than grepping the log this step
       # already has open.

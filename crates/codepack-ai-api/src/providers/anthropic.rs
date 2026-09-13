@@ -17,11 +17,34 @@
 use std::time::Duration;
 
 use serde::Deserialize;
+use ureq::tls::{Certificate, RootCerts, TlsConfig};
 
 use crate::provider::{AiAnswer, AiProvider, AiRequest, ModelInfo};
+
 use codepack_ai::error::AiError;
 
 const ENDPOINT: &str = "https://api.anthropic.com/v1/messages";
+
+/// The operating system's root certificates, as `ureq` wants them.
+///
+/// Loaded here rather than through `ureq`'s `platform-verifier` feature, which does the
+/// same job but depends on `webpki-root-certs` — the CDLA-Permissive-2.0 Mozilla list
+/// this project's licence policy excludes. A dozen lines is the price of not widening
+/// that policy; the root manifest's `ureq` entry carries the full reasoning.
+///
+/// A store that cannot be read yields an empty list rather than an error, and the
+/// handshake then fails with the transport error the caller already handles. There is
+/// nothing better to do: refusing to build a request because the OS cert store is
+/// unreadable would be a worse message for the same outcome.
+fn platform_roots() -> RootCerts {
+    let loaded = rustls_native_certs::load_native_certs();
+    let certs: Vec<Certificate<'static>> = loaded
+        .certs
+        .iter()
+        .map(|der| Certificate::from_der(der.as_ref()).to_owned())
+        .collect();
+    RootCerts::new_with_certs(&certs)
+}
 
 /// The API version header. Pinned, not tracked: Anthropic versions its API by date and
 /// an unpinned client is one that breaks on somebody else's release schedule.
@@ -80,6 +103,17 @@ impl AiProvider for Anthropic {
         let response = ureq::post(ENDPOINT)
             .config()
             .timeout_global(Some(TIMEOUT))
+            // Roots from the operating system's own trust store, stated explicitly
+            // because `ureq` will not guess. Its default is `RootCerts::WebPki`, which
+            // this build deliberately does not have — the Mozilla list is
+            // CDLA-Permissive-2.0 and outside the allowed licence set — so without this
+            // line every request panics with "WebPki is disabled. You need to explicitly
+            // configure root certs on Agent".
+            //
+            // The OS store is the requirement rather than a fallback: a desktop tool runs
+            // behind corporate TLS-inspecting proxies whose CA lives there and in no
+            // bundle.
+            .tls_config(TlsConfig::builder().root_certs(platform_roots()).build())
             .build()
             .header("x-api-key", key)
             .header("anthropic-version", API_VERSION)

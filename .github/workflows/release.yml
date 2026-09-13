@@ -107,6 +107,14 @@ jobs:
           docker exec codepack-cli-glibc-baseline bash -c "
             set -euo pipefail
             apt-get -o Acquire::Retries=5 update -qq
+            # No OpenSSL packages here, and that is a decision rather than an omission.
+            # The first v2.1.0 tag failed on this step because `codepack-cli` had just
+            # gained `codepack-ai-api`, whose `ureq` was configured for native-TLS —
+            # OpenSSL on Linux. Chasing that led to the discovery that the TLS provider
+            # was never actually selected and every HTTPS request panicked, so the fix
+            # was not `libssl-dev` but rustls with the OS trust store. OpenSSL is no
+            # longer in the graph on any target; `ca-certificates` is what matters now,
+            # because that is where the roots come from.
             apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev
           "
 
