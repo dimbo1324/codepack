@@ -66,11 +66,51 @@ every artifact and a build-provenance attestation, not merely a file in the repo
       included. The `source:` line names `codepack_2.1.0_x64-setup.exe`, which is the
       field that describes the bytes rather than the build that copied them
 
+## What the first release run found — the reason this took two attempts
+
+The first `v2.1.0` tag's `release.yml` failed on the `debian:12` cross-build of
+`codepack-cli`: it had just gained `codepack-ai-api`, whose `ureq` pulled OpenSSL, and the
+container had no headers. **No GitHub Release was published** — `publish release` was
+skipped — and CI for `main` itself was green on all three OS.
+
+Fixing that uncovered the real defect, which no test and no review had caught:
+
+- [+] **S13's API path could never have worked.** `ureq` gates TLS provider selection on
+      `cfg(feature = "native-tls")`; the manifest enabled `native-tls-no-default`, which
+      adds the dependency without selecting it. Every HTTPS request panicked, on every
+      platform, since 2026-07-27. Reproduced in a real `debian:12` container
+- [+] **Owner decision: rustls with roots from the OS trust store.** Both original
+      requirements hold — the platform store (corporate proxies) and no CDLA Mozilla list
+- [+] `platform-verifier` tried first and **rejected**: it depends on `webpki-root-certs`,
+      invisible on Linux and caught only by `cargo deny` reading every target. My report to
+      the owner had claimed that route was CDLA-free; that was wrong and was corrected
+- [+] Roots loaded directly via `rustls-native-certs` (Apache-2.0 OR ISC OR MIT) as
+      `RootCerts::Specific`. `cargo deny` passes with **no new exception**; `openssl-sys`,
+      `webpki-roots` and `webpki-root-certs` are absent on every target
+- [+] **Proven by a real handshake** with `api.anthropic.com` — on Windows, and in
+      `debian:12` three runs in a row (one earlier container run failed once, transiently,
+      before the network warmed up; recorded rather than hidden)
+- [+] `tests/tls_handshake.rs`: the handshake `#[ignore]`d and scheduled in
+      `perf-smoke-weekly.yml`; the trust-store half always on
+- [+] The `libssl-dev` workaround first added to both workflows **removed** again — no
+      OpenSSL in the graph means none is needed
+- [+] `package-linux.yml`'s path filter widened to manifests and the lockfile: the branch
+      that broke packaging touched none of the filtered paths
+- [+] Installer rebuilt from `c41eaa9`, which contains the fix: 6.6 MiB, built
+      2026-09-13T11:49:34Z, checksum verified independently. The gate's installer check
+      had passed against the *pre-fix* installer — version and checksum agreed with each
+      other while describing a binary that could not make a request — so rebuilding was
+      decided by reading the commit, not by the check
+- [-] **A complete exchange with a key** is still unverified. The connection is proven;
+      question-and-answer needs a real API key, which this session does not have and must
+      not handle
+
 ## Step 4 — publish
 
 - [+] Fast-forward merge into `main`
 - [+] `main` pushed to `origin`: `9a48eb1..72b7afc`
-- [ ] Tag `v2.1.0` pushed, and `release.yml` watched to a conclusion rather than assumed
+- [ ] Tag `v2.1.0` moved to the fixed commit and pushed — owner decision, since nothing was
+      ever published under the first one — and `release.yml` watched to a conclusion
 - [ ] CI green on all three OS legs for the merged `main`
 
 ## Step 5 — leave one branch

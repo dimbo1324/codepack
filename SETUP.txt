@@ -3,10 +3,10 @@ codepack setup
 file:      setup.exe
 version:   2.1.0
 platform:  Windows x64 (NSIS, install for the current user)
-built:     2026-09-13T07:37:38Z
-commit:    382c9d3
+built:     2026-09-13T11:49:34Z
+commit:    c41eaa9
 source:    target/release/bundle\nsis\codepack_2.1.0_x64-setup.exe
-sha256:    ff9238361b7e2cf2c3c14cf4d5c1f727698a98d85547e4c40124b27cd8df33f8
+sha256:    3f816349f121b5fb77c6363074ff56d3c2fb7016404d01c3452b1a4f36a73ac4
 
 Verify before running (PowerShell):
     Get-FileHash .\setup.exe -Algorithm SHA256
